@@ -14,9 +14,12 @@ from zlib import crc32
 DEFAULT_PORT = 7003
 DEBUG = True
 
-def _D(*k):
+def _D(p, *k):
     if DEBUG:
-        print "D:", k
+        if not k:
+            print "\nM:", p, "\n"
+        else:
+            print p, k
 
 COMMANDS = {
      1: ("can_do", ["func"]),
@@ -87,7 +90,7 @@ class GearmanConnection(object):
         return len(self.out_buffer) != 0
 
     def readable(self):
-        return True
+        return self.connected
 
     def set_command_handler(self, handler):
         self.command_handler = handler
@@ -106,10 +109,21 @@ class GearmanConnection(object):
 
         self.connected = True
         self.sock.setblocking(0)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
 
     def recv(self):
-        self.in_buffer += self.sock.recv(1024)
-        _D( "%r" % self.in_buffer, len(self.in_buffer) )
+        try:
+            data = self.sock.recv(1024)
+        except socket.error, e:
+            if e.arg[0] != 35: # would block / EAGAIN
+                raise
+        else:
+            if not data:
+                raise self.ConnectionFailed("connection died")
+
+        self.in_buffer += data
+
+        _D( "Rx[%s:%s]:" % self.addr, "%r" % self.in_buffer, len(self.in_buffer) )
         while self.in_buffer:
             magic, typ, data_len = struct.unpack("!4sII", self.in_buffer[:12])
             if len(self.in_buffer) < 12 + data_len:
@@ -129,7 +143,7 @@ class GearmanConnection(object):
         noutbuffer = len(self.out_buffer)
         if noutbuffer == 0:
             return 0
-        _D( "%r" % self.out_buffer, noutbuffer )
+        _D( "Tx[%s:%s]:" % self.addr, "%r" % self.out_buffer, noutbuffer )
         nsent = self.sock.send(self.out_buffer)
         self.out_buffer = (noutbuffer != nsent) and self.out_buffer[nesnt:] or ""
         
@@ -187,7 +201,7 @@ class Task (object):
         self.is_finished = False
         self.result = None
 #        self.handle = None
-        self._hash = crc32(self.func + (self.uniq == '-' and self.arg or self.uniq or ""))
+        self._hash = crc32(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0,999999))))
     
     def __hash__(self):
         return self._hash
@@ -270,12 +284,16 @@ class Gearman(object):
                 handle = args['handle']
                 task = conn.waiting_for_handles.pop()
                 task.handle = handle
-                taskset.handles[handle] = task_hash
+                taskset.handles[handle] = hash( task )
+                if task.background: # Background tasks don't get a work_complete or work_fail response (or maybe they do?)
+                    task.is_finished = True
+                _D( "Assigned H[%r] from S[%s] to T[%s]" % (handle, '%s:%s' % conn.addr, hash(task) ))
             elif cmd == 'error':
                 raise self.CommandError(str(args)) # TODO make better
 
             _D( "HANDLES:", taskset.handles )
 
+        our_connections = list()
         # Assign a server to each task
         for task_hash, task in taskset.iteritems():
             server = self.get_server_from_hash(task_hash)
@@ -285,15 +303,18 @@ class Gearman(object):
                     "submit_job",
                 dict(func=task.func, arg=task.arg, uniq=task.uniq))
             server.set_command_handler(_command_handler)
-            server.waiting_for_handles.append(task)
+            server.waiting_for_handles.insert(0,task)
+            
+            our_connections.append( server )
 
         _D( "Handles Remaining:", taskset.handles )
+        _D( "Using %i server(s) to complete taskset." % len( our_connections ) )
 
         start_time = time.time()
         end_time = timeout and start_time + timeout or 0
         while not timeout or time.time() < end_time:
-            rx_socks = [c for c in self.connections if c.readable()]
-            tx_socks = [c for c in self.connections if c.writable()]
+            rx_socks = [c for c in our_connections if c.readable()]
+            tx_socks = [c for c in our_connections if c.writable()]
             rd, wr = select(
                 rx_socks,
                 tx_socks,
@@ -316,8 +337,17 @@ class Gearman(object):
 
 if __name__ == "__main__":
     import sys
-    hosts = ["207.7.148.210:19000"]
+    hosts = ["207.7.148.210:19000", "75.42.252.242:19000"]
 
     client = Gearman( hosts )
-    d = client.do_task("foo", "bar")
-    print "DUDE:", d
+#    d = client.do_task("foo", "bar")
+#    print "do_task:", d
+    
+    t1 = Task("foo", "bar", on_complete=lambda res:sys.stdout.write("bar: %s\n" % res))
+    t2 = Task("foo", "pie", on_complete=lambda res:sys.stdout.write("pie: %s\n" % res))
+    ts = Taskset( [t1, t2] )
+    
+    client.do_taskset( ts )
+    
+    for t in ts.itervalues():
+        print "DUDE:", t.result
