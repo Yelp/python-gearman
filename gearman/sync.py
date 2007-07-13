@@ -11,6 +11,18 @@ import socket, struct, random, time
 from select import select
 from zlib import crc32
 
+# Compatability with pre 2.5
+try:
+    all
+except NameError:
+    def all(iter):
+        for v in iter:
+            if not v:
+                return False
+        return True
+
+
+
 DEFAULT_PORT = 7003
 DEBUG = True
 
@@ -112,16 +124,17 @@ class GearmanConnection(object):
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
 
     def recv(self):
+        data = ''
         try:
             data = self.sock.recv(1024)
         except socket.error, e:
-            if e.arg[0] != 35: # would block / EAGAIN
+            if e.args[0] != 35: # would block / EAGAIN
                 raise
         else:
             if not data:
                 raise self.ConnectionFailed("connection died")
-
-        self.in_buffer += data
+        finally:
+            self.in_buffer += data
 
         _D( "Rx[%s:%s]:" % self.addr, self.in_buffer, len(self.in_buffer) )
         while self.in_buffer:
@@ -144,7 +157,12 @@ class GearmanConnection(object):
         if noutbuffer == 0:
             return 0
         _D( "Tx[%s:%s]:" % self.addr, self.out_buffer, noutbuffer )
-        nsent = self.sock.send(self.out_buffer)
+
+        try:
+            nsent = self.sock.send(self.out_buffer)
+        except socket.error, e:
+            raise self.ConnectionFailed(str(e))
+
         self.out_buffer = (noutbuffer != nsent) and self.out_buffer[nesnt:] or ""
         
         return len(self.out_buffer)
@@ -320,20 +338,14 @@ class Gearman(object):
                 tx_socks,
                 [], 0.5)[:2] # TODO: timeout
 
-            if not rd:
-                all_finished = True
-                for t in taskset.itervalues():
-                    if not t.is_finished:
-                        all_finished = False
-                        break
-                if all_finished:
-                    break
-
             for conn in rd:
                 conn.recv()
 
             for conn in wr:
                 conn.sent()
+
+            if all(t.is_finished for t in taskset.itervalues()):
+                break
 
 if __name__ == "__main__":
     import sys
