@@ -128,13 +128,14 @@ class GearmanConnection(object):
         try:
             data = self.sock.recv(1024)
         except socket.error, e:
-            if e.args[0] != 35: # would block / EAGAIN
-                raise
+            if e.args[0] == 35: # would block / EAGAIN
+                return
+            raise
         else:
             if not data:
                 raise self.ConnectionFailed("connection died")
-        finally:
-            self.in_buffer += data
+
+        self.in_buffer += data
 
         _D( "Rx[%s:%s]:" % self.addr, self.in_buffer, len(self.in_buffer) )
         while self.in_buffer:
