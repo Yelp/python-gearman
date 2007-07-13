@@ -11,11 +11,12 @@ import socket, struct, random, time
 from select import select
 from zlib import crc32
 
-class s_socket (socket.socket):
-    parent = None
-
 DEFAULT_PORT = 7003
-DEBUG = False
+DEBUG = True
+
+def _D(*k):
+    if DEBUG:
+        print "D:", k
 
 COMMANDS = {
      1: ("can_do", ["func"]),
@@ -76,12 +77,17 @@ class GearmanConnection(object):
         self.timeout = timeout
         self.in_buffer = ""
         self.out_buffer = ""
-        self.handle = None
         self.command_handler = None # TODO: Perhaps make this a weak valued list
+        self.waiting_for_handles = []
 
-    @property
-    def left_to_send(self):
-        return len(self.out_buffer)
+    def fileno(self):
+        return self.sock.fileno()
+
+    def writable(self):
+        return len(self.out_buffer) != 0
+
+    def readable(self):
+        return True
 
     def set_command_handler(self, handler):
         self.command_handler = handler
@@ -90,8 +96,7 @@ class GearmanConnection(object):
         if self.connected:
             return
 
-        self.sock = s_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.parent = self
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout( self.timeout )
         try:
             self.sock.connect( self.addr )
@@ -104,7 +109,7 @@ class GearmanConnection(object):
 
     def recv(self):
         self.in_buffer += self.sock.recv(1024)
-        print "%r" % self.in_buffer, len(self.in_buffer)
+        _D( "%r" % self.in_buffer, len(self.in_buffer) )
         while self.in_buffer:
             magic, typ, data_len = struct.unpack("!4sII", self.in_buffer[:12])
             if len(self.in_buffer) < 12 + data_len:
@@ -113,7 +118,8 @@ class GearmanConnection(object):
             if magic != "\x00RES":
                 raise self.ProtocolError("Malformed Magic")
 
-            self.command_handler(self, self.parse_command(typ, self.in_buffer[12:12 + data_len]))
+            cmd_name, cmd_args = self.parse_command(typ, self.in_buffer[12:12 + data_len])
+            self.command_handler(self, cmd_name, cmd_args)
 
             self.in_buffer = buffer(self.in_buffer, 12 + data_len)
 
@@ -123,29 +129,16 @@ class GearmanConnection(object):
         noutbuffer = len(self.out_buffer)
         if noutbuffer == 0:
             return 0
-        print "%r" % self.out_buffer, noutbuffer
+        _D( "%r" % self.out_buffer, noutbuffer )
         nsent = self.sock.send(self.out_buffer)
         self.out_buffer = (noutbuffer != nsent) and self.out_buffer[nesnt:] or ""
         
         return len(self.out_buffer)
 
-    def send_command(self, name, **kwargs):
+    def send_command(self, name, kwargs):
         pkt = self.pack_command(name, **kwargs)
         self.out_buffer += pkt
         self.send()
-        
-        if not self.handle and name.find('submit_job') > -1:
-            def _handler(conn, cmd):
-                if cmd[0] == 'job_created':
-                    self.handle = cmd[1]['handle']
-            
-            self.command_handler = _handler
-
-            while not self.handle:
-                if select([self.sock],[],[], 5)[0]:
-                    self.recv()
-                
-            return self.handle
 
     def parse_command(self, typ, data):
         """
@@ -211,6 +204,8 @@ class Taskset( dict ):
 
 class Gearman(object):
     class ServerUnavailable(Exception): pass
+    class CommandError(Exception): pass
+    class CommandDupe(Exception): pass
 
     def __init__(self, job_servers, pre_connect = False):
         """
@@ -223,7 +218,7 @@ class Gearman(object):
         """TODO: set job servers, without shutting down dups, and shutting down old ones gracefully"""
         self.connections = []
         for serv in servers:
-            host, port = (serv.find(':') == -1 and "%s:%d" % (serv, DEFAULT_PORT) or serv).split(':')
+            host, port = (':' not in serv and "%s:%d" % (serv, DEFAULT_PORT) or serv).split(':')
             port = int(port)
             connection = GearmanConnection(addr=(host, port))
             if pre_connect:
@@ -248,37 +243,57 @@ class Gearman(object):
             try:
                 server.connect() # Make sure the connection is up (noop is already connected)
             except server.ConnectionFailed:
-                pass
-            finally:
-                return server
+                continue
+            return server
 
         raise ServerUnavailable("Unable to Locate Server")
 
     def do_taskset(self, taskset, timeout=None):
-        def _command_handler(conn, cmd):
-            task = taskset[ taskset.handles[ cmd[1]['handle'] ] ]
-            if cmd[0] == 'work_complete':
+        def _command_handler(conn, cmd, args):
+            _D( "HANDLING:", cmd, args )
+            
+            if cmd != 'job_created':
+                task = taskset.get( taskset.handles.get( args.get('handle', None), None), None)
+                if not task or task.is_finished:
+                    raise self.CommandDupe
+            
+            if cmd == 'work_complete':
                 task.is_finished = True
-                task.result = cmd[1]['result']
-                task.on_complete( cmd[1]['result'] )
+                task.result = args['result']
+                task.on_complete( args['result'] )
+            elif cmd == 'work_fail':
+                task.is_finished = True
+                task.on_fail()
+            elif cmd == 'work_status':
+                task.on_status(int(args['numerator']), int(args['denominator']))
+            elif cmd == 'job_created':
+                handle = args['handle']
+                task = conn.waiting_for_handles.pop()
+                task.handle = handle
+                taskset.handles[handle] = task_hash
+            elif cmd == 'error':
+                raise self.CommandError(str(args)) # TODO make better
+
+            _D( "HANDLES:", taskset.handles )
 
         # Assign a server to each task
         for task_hash, task in taskset.iteritems():
-            server = self.get_server_from_hash( task_hash )
-            handle = server.send_command(
-                (task.background and "submit_job_bg") or (task.high_priority and "submit_job_high") or "submit_job",
-                **dict(func=task.func, arg=task.arg, uniq=task.uniq))
-            taskset.handles[ handle ] = task_hash
-            server.handle = None
+            server = self.get_server_from_hash(task_hash)
+            server.send_command(
+                (task.background and "submit_job_bg") or
+                    (task.high_priority and "submit_job_high") or
+                    "submit_job",
+                dict(func=task.func, arg=task.arg, uniq=task.uniq))
             server.set_command_handler(_command_handler)
+            server.waiting_for_handles.append(task)
 
-        print taskset.handles
+        _D( "Handles Remaining:", taskset.handles )
 
         start_time = time.time()
         end_time = timeout and start_time + timeout or 0
-        rx_socks = [s.sock for s in self.connections]
-        tx_socks = [s.sock for s in self.connections if s.left_to_send > 0]
         while not timeout or time.time() < end_time:
+            rx_socks = [c for c in self.connections if c.readable()]
+            tx_socks = [c for c in self.connections if c.writable()]
             rd, wr = select(
                 rx_socks,
                 tx_socks,
@@ -286,22 +301,23 @@ class Gearman(object):
 
             if not rd:
                 all_finished = True
-                for t in taskset.values():
+                for t in taskset.itervalues():
                     if not t.is_finished:
                         all_finished = False
+                        break
                 if all_finished:
                     break
 
-            for sock in rd:
-                sock.parent.recv()
+            for conn in rd:
+                conn.recv()
 
+            for conn in wr:
+                conn.sent()
 
 if __name__ == "__main__":
     import sys
     hosts = ["207.7.148.210:19000"]
 
     client = Gearman( hosts )
-    d = client.do_task("foo", "bar",
-        on_complete=lambda blah:sys.stdout.write("DONE: %s\n" % blah),
-        on_status=lambda num,den:sys.stdout.write("STATUS: %s/%s\n" % (num, den)))
+    d = client.do_task("foo", "bar")
     print "DUDE:", d
