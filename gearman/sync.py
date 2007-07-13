@@ -19,7 +19,7 @@ def _D(p, *k):
         if not k:
             print "\nM:", p, "\n"
         else:
-            print p, "%r" % k
+            print p, repr(k)
 
 COMMANDS = {
      1: ("can_do", ["func"]),
@@ -123,7 +123,7 @@ class GearmanConnection(object):
 
         self.in_buffer += data
 
-        _D( "Rx[%s:%s]:" % self.addr, "%r" % self.in_buffer, len(self.in_buffer) )
+        _D( "Rx[%s:%s]:" % self.addr, self.in_buffer, len(self.in_buffer) )
         while self.in_buffer:
             magic, typ, data_len = struct.unpack("!4sII", self.in_buffer[:12])
             if len(self.in_buffer) < 12 + data_len:
@@ -143,7 +143,7 @@ class GearmanConnection(object):
         noutbuffer = len(self.out_buffer)
         if noutbuffer == 0:
             return 0
-        _D( "Tx[%s:%s]:" % self.addr, "%r" % self.out_buffer, noutbuffer )
+        _D( "Tx[%s:%s]:" % self.addr, self.out_buffer, noutbuffer )
         nsent = self.sock.send(self.out_buffer)
         self.out_buffer = (noutbuffer != nsent) and self.out_buffer[nesnt:] or ""
         
