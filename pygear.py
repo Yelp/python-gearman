@@ -8,7 +8,7 @@ class MalformedMagic (Exception):
 class Task (object):
   def __init__(self, func, argref, opts = dict()):
 
-    assert type(argref) not in (int, float, str, unicode), "Argref not a scalar"
+    assert type(argref) in (int, float, str, unicode), "Argref not a scalar"
 
     self.func = func
     self.argref = argref
@@ -38,7 +38,7 @@ class Packet (object):
   def data_outstanding(self):
     return self.len - len(self.data)
 
-class mysocket (object):
+class mysocket(object):
   def __init__(self, sock=None):
     # Create socket
     if sock is None:
