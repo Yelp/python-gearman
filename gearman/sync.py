@@ -19,7 +19,7 @@ def _D(p, *k):
         if not k:
             print "\nM:", p, "\n"
         else:
-            print p, k
+            print p, "%r" % k
 
 COMMANDS = {
      1: ("can_do", ["func"]),
