@@ -1,5 +1,4 @@
 import random
-from zlib import crc32
 
 class Task(object):
     hooks = ('on_complete', 'on_fail', 'on_retry', 'on_status', 'on_post')
@@ -19,7 +18,7 @@ class Task(object):
         self.is_finished  = False
         self.handle       = None
         self.result       = None
-        self._hash        = crc32(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0,999999))))
+        self._hash        = hash(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0,999999))))
 
     def __hash__(self):
         return self._hash
