@@ -30,7 +30,7 @@ class GearmanWorker(GearmanBaseClient):
         self._can_do(self.connections, name, timeout)
 
     def register_class(self, clas, name=None):
-        name = name or getattr(clas, 'name', "%s.%s" % (clas.__module__, clas.__name__))
+        name = name or getattr(clas, 'name', clas.__name__)
         for k in clas.__dict__:
             v = getattr(clas, k)
             if callable(v) and k[0] != '_':
