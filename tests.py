@@ -1,6 +1,7 @@
 import unittest, time
 
 from gearman import GearmanClient, GearmanWorker
+from gearman.connection import GearmanConnection
 from gearman.task import Task
 
 job_servers = ["127.0.0.1"]
@@ -15,15 +16,20 @@ def sleep(job):
     time.sleep(float(job.arg))
     return job.arg
 
-# class TestGearmanClient(unittest.TestCase):
-#     def setUp(self):
-#         self.client = GearmanClient(job_servers)
-# 
-#     def tearDown(self):
-#         del self.client
-# 
-#     def testToTask(self):
-#         self.failUnlessEqual(self.client.do_task(Task("foo", "bar")), 'You said: "bar"')
+class TestConnection(unittest.TestCase):
+    def setUp(self):
+        self.connection = GearmanConnection(job_servers[0])
+        self.connection.connect()
+
+    def testNoArgs(self):
+        self.connection.send_command_blocking("echo_req")
+        cmd = self.connection.recv_blocking()
+        self.failUnlessEqual(cmd[0], "echo_res")
+
+    def testWithArgs(self):
+        self.connection.send_command_blocking("submit_job", dict(func="echo", uniq="", arg="tea"))
+        cmd = self.connection.recv_blocking()
+        self.failUnlessEqual(cmd[0], 'job_created')
 
 class TestGearman(unittest.TestCase):
     def setUp(self):
