@@ -29,25 +29,30 @@ class Task(object):
             getattr(self, hook).extend(getattr(task2, hook))
 
     def complete(self, result):
+        """Mark the job as completed and call on_complete hooks."""
         self.result = result
         for func in self.on_complete:
             func(result)
         self._finished()
 
     def fail(self):
+        """Mark the job as failed and call on_fail hooks."""
         for func in self.on_fail:
             func()
         self._finished()
 
     def status(self, numerator, denominator):
+        """Call on_status hooks"""
         for func in self.on_status:
             func(numerator, denominator)
 
     def retrying(self):
+        """Call on_retry hooks"""
         for func in self.on_retry:
             func()
 
     def _finished(self):
+        """Mark the job as finished and call on_port hooks."""
         self.is_finished = True
         for func in self.on_post:
             func()
@@ -58,6 +63,12 @@ class Task(object):
         return "<Task func='%s'>" % self.func
 
 class Taskset(dict):
+    """
+    A Taskset is a group of tasks that are to be run all at once. The
+    benefit of using a Taskset is allowing multiple tasks to run
+    in parallel.
+    """
+
     def __init__(self, tasks=[]):
         super(Taskset, self).__init__((hash(t), t) for t in tasks)
         self.handles = {}
