@@ -56,8 +56,12 @@ class GearmanConnection(object):
             self.sock = sock
             self.connected = True
 
-        port = port or DEFAULT_PORT
-        self.addr     = (host, port)
+        if ':' in host:
+            host, port = (serv.split(':') + [0])[:2]
+            self.addr = (host, int(port) or DEFAULT_PORT)
+        else:
+            port = port or DEFAULT_PORT
+            self.addr = (host, port)
         self.hostspec = "%s:%d" % (host, port)
         self.timeout  = timeout
 

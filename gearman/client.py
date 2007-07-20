@@ -7,18 +7,6 @@ from gearman.compat import *
 from gearman.connection import GearmanConnection
 from gearman.task import Task, Taskset
 
-# DEBUG = False
-# 
-# if DEBUG:
-#     def _D(p, *k):
-#         if not k:
-#             print "\nM:", p, "\n"
-#         else:
-#             print p, repr(k)
-# else:
-#     def _D(*a, **kw):
-#         pass
-
 class GearmanBaseClient(object):
     class ServerUnavailable(Exception): pass
     class CommandError(Exception): pass
@@ -35,13 +23,12 @@ class GearmanBaseClient(object):
         # TODO: don't shut down dups and shut down old ones gracefully
         self.connections = []
         for serv in servers:
-            host, port = (serv.split(':') + [0])[:2]
-            connection = GearmanConnection(host=host, port=int(port))
+            connection = GearmanConnection(serv)
             if pre_connect:
                 try:
                     connection.connect()
                 except connection.ConnectionError:
-                    pass # TODO: should we not add it to the list? it IS marked as dead but perhaps we don't want it at all
+                    pass # TODO: connection IS marked as dead but perhaps we don't want it at all
             self.connections.append( connection )
 
 class GearmanClient(GearmanBaseClient):
