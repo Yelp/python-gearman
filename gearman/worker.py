@@ -21,6 +21,8 @@ class GearmanJob(object):
 class GearmanWorker(GearmanBaseClient):
     def __init__(self, *args, **kwargs):
         kwargs['pre_connect'] = True
+        self.on_exception = 'on_exception' in kwargs and [kwargs.pop('on_exception')] or []
+
         super(GearmanWorker, self).__init__(*args, **kwargs)
         self.abilities = {}
 
@@ -60,6 +62,10 @@ class GearmanWorker(GearmanBaseClient):
 
     def stop(self):
         self.working = False
+
+    def work_exception(self, func, exc):
+        for ef in self.on_exception:
+            ef(func, exc)
 
     def work(self, stop_if_idle=False, one_task=False):
         """
@@ -108,11 +114,8 @@ class GearmanWorker(GearmanBaseClient):
 
                 try:
                     result = func(job)
-                except:
-                    import traceback
-                    traceback.print_exc()
-                    # _D("ERROR: worker failed")
-                    # TODO: log this - traceback..
+                except Exception, e:
+                    self.work_exception(cmd[1]['func'], e)
                     job.fail() # TODO: handle ConnectionError
                 else:
                     job.complete(result) # TODO: handle ConnectionError

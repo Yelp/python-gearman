@@ -6,11 +6,14 @@ from gearman.task import Task
 
 job_servers = ["127.0.0.1"]
 
+class FailedError(Exception):
+    pass
+
 def echo(job):
     return job.arg
 
 def fail(job):
-    raise Exception()
+    raise FailedError()
 
 def sleep(job):
     time.sleep(float(job.arg))
@@ -32,11 +35,15 @@ class TestConnection(unittest.TestCase):
         self.failUnlessEqual(cmd[0], 'job_created')
 
 class TestGearman(unittest.TestCase):
+    def _on_exception(self, func, exc):
+        self.last_exception = (func, exc)
+
     def setUp(self):
-        self.worker = GearmanWorker(job_servers)
+        self.last_exception = (None, None)
+        self.worker = GearmanWorker(job_servers, on_exception=self._on_exception)
         self.worker.register_function("echo", echo)
-        self.worker.register_function("fail", echo)
-        self.worker.register_function("sleep", echo, timeout=1)
+        self.worker.register_function("fail", fail)
+        self.worker.register_function("sleep", sleep, timeout=1)
         import thread
         thread.start_new_thread(self.worker.work, tuple()) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
         self.client = GearmanClient(job_servers)
@@ -49,11 +56,12 @@ class TestGearman(unittest.TestCase):
         self.failUnlessEqual(self.client.do_task(Task("echo", "bar")), 'bar')
 
     def testFail(self):
-        self.failUnlessRaises(Exception, self.client.do_task(Task("fail", "bar")))
+        self.failUnlessRaises(Exception, lambda:self.client.do_task(Task("fail", "bar")))
+        # self.failUnlessEqual(self.last_exception[0], "fail")
 
     def testTimeout(self):
         self.failUnlessEqual(self.client.do_task(Task("sleep", "0.1")), '0.1')
-        self.failUnlessRaises(Exception, self.client.do_task(Task("sleep", "1.5")))
+        self.failUnlessRaises(Exception, lambda:self.client.do_task(Task("sleep", "1.5")))
 
 if __name__ == '__main__':
     unittest.main()

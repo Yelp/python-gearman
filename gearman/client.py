@@ -36,7 +36,7 @@ class GearmanClient(GearmanBaseClient):
         """Returns the result of the task or raises an exception on failure"""
         def _on_fail():
             raise Exception("Task failed")
-        task.on_fail.append([_on_fail])
+        task.on_fail.append(_on_fail)
         ts = Taskset( [task] )
         self.do_taskset( ts )
         return task.result
