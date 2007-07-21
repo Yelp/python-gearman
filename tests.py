@@ -56,12 +56,12 @@ class TestGearman(unittest.TestCase):
         self.failUnlessEqual(self.client.do_task(Task("echo", "bar")), 'bar')
 
     def testFail(self):
-        self.failUnlessRaises(Exception, lambda:self.client.do_task(Task("fail", "bar")))
+        self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("fail", "bar")))
         # self.failUnlessEqual(self.last_exception[0], "fail")
 
     def testTimeout(self):
         self.failUnlessEqual(self.client.do_task(Task("sleep", "0.1")), '0.1')
-        self.failUnlessRaises(Exception, lambda:self.client.do_task(Task("sleep", "1.5")))
+        self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("sleep", "1.5")))
 
 if __name__ == '__main__':
     unittest.main()

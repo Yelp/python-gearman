@@ -32,10 +32,12 @@ class GearmanBaseClient(object):
             self.connections.append( connection )
 
 class GearmanClient(GearmanBaseClient):
+    class TaskFailed(Exception): pass
+
     def do_task(self, task):
         """Returns the result of the task or raises an exception on failure"""
         def _on_fail():
-            raise Exception("Task failed")
+            raise self.TaskFailed("Task failed")
         task.on_fail.append(_on_fail)
         ts = Taskset( [task] )
         self.do_taskset( ts )
