@@ -35,7 +35,7 @@ class GearmanClient(GearmanBaseClient):
     class TaskFailed(Exception): pass
 
     def do_task(self, task):
-        """Returns the result of the task or raises an exception on failure"""
+        """Return the result of the task or raise a TaskFailed exception on failure."""
         def _on_fail():
             raise self.TaskFailed("Task failed")
         task.on_fail.append(_on_fail)
@@ -44,13 +44,14 @@ class GearmanClient(GearmanBaseClient):
         return task.result
 
     def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
+        """Submit a background task and return its handle."""
         task = Task(func, arg, uniq, background=True, high_priority=True)
         ts = Taskset( [task] )
         self.do_taskset( ts )
         return task.handle
 
     def get_server_from_hash(self, hsh):
-        """Returns a live connection for the given hash"""
+        """Return a live connection for the given hash"""
         # TODO: instead of cycling through, should we shuffle the list if the first connection fails or is dead?
         first_idx = hsh % len(self.connections)
         for idx in range(first_idx, len(self.connections)) + range(0, first_idx):
@@ -115,13 +116,10 @@ class GearmanClient(GearmanBaseClient):
         # _D( "HANDLES:", taskset.handles )
 
     def do_taskset(self, taskset, timeout=None):
-        """Execute a taskset. Returns True iff all tasks finished (to success or failure)."""
-        taskset.connections = set()
-        for task in taskset.itervalues():
-            taskset.connections.add(self._submit_task(task))
+        """Execute a Taskset and return True iff all tasks finished before timeout."""
 
-        # DEBUG and _D( "Tasks in set:", taskset.values() )
-        # DEBUG and _D( "Servers used for taskset:", taskset.connections )
+        # set of connections to which jobs were submitted
+        taskset.connections = set(self._submit_task(task) for task in taskset.itervalues())
 
         start_time = time.time()
         end_time = timeout and start_time + timeout or 0
