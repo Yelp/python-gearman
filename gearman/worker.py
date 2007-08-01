@@ -21,7 +21,6 @@ class GearmanJob(object):
 class GearmanWorker(GearmanBaseClient):
     def __init__(self, *args, **kwargs):
         kwargs['pre_connect'] = True
-        self.on_exception = 'on_exception' in kwargs and [kwargs.pop('on_exception')] or []
 
         super(GearmanWorker, self).__init__(*args, **kwargs)
         self.abilities = {}
@@ -63,11 +62,7 @@ class GearmanWorker(GearmanBaseClient):
     def stop(self):
         self.working = False
 
-    def work_exception(self, func, exc):
-        for ef in self.on_exception:
-            ef(func, exc)
-
-    def work(self, stop_if_idle=False, one_task=False):
+    def work(self, stop_if_idle=False, one_task=False, hooks=None):
         """
         if one_task is True then
             return after completing or failing at one task
@@ -112,12 +107,17 @@ class GearmanWorker(GearmanBaseClient):
                     # TODO: log this - received work for unknown func
                     continue
 
+                if hooks:
+                    hooks.start(job)
                 try:
                     result = func(job)
                 except Exception, e:
-                    self.work_exception(cmd[1]['func'], e)
+                    if hooks:
+                        hooks.fail(job, e)
                     job.fail() # TODO: handle ConnectionError
                 else:
+                    if hooks:
+                        hooks.complete(job, result)
                     job.complete(result) # TODO: handle ConnectionError
 
                 if one_task:

@@ -200,9 +200,9 @@ class GearmanConnection(object):
         data = "\x00".join(data)
         return "%s%s" % (struct.pack("!4sII", "\x00REQ", msg[0], len(data)), data)
 
-    def flush(self, timeout=None):
+    def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
-            wr = select([], [self], [], timeout and [timeout] or [])[1]
+            wr = select([], [self], [], timeout and [timeout] or [])[1] # TODO: exc list
             if self in wr:
                 self.send()
 

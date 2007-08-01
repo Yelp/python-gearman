@@ -35,17 +35,24 @@ class TestConnection(unittest.TestCase):
         self.failUnlessEqual(cmd[0], 'job_created')
 
 class TestGearman(unittest.TestCase):
-    def _on_exception(self, func, exc):
-        self.last_exception = (func, exc)
-
     def setUp(self):
         self.last_exception = (None, None)
-        self.worker = GearmanWorker(job_servers, on_exception=self._on_exception)
+        self.worker = GearmanWorker(job_servers)
         self.worker.register_function("echo", echo)
         self.worker.register_function("fail", fail)
         self.worker.register_function("sleep", sleep, timeout=1)
+        class Hooks(object):
+            @staticmethod
+            def start(job):
+                pass
+            @staticmethod
+            def complete(job, res):
+                pass
+            @staticmethod
+            def fail(job, exc):
+                self.last_exception = (job.func, exc)
         import thread
-        thread.start_new_thread(self.worker.work, tuple()) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
+        thread.start_new_thread(self.worker.work, tuple(), dict(hooks=Hooks)) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
         self.client = GearmanClient(job_servers)
 
     def tearDown(self):
