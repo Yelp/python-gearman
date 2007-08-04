@@ -34,6 +34,9 @@ class GearmanBaseClient(object):
 class GearmanClient(GearmanBaseClient):
     class TaskFailed(Exception): pass
 
+    def __call__(self, func, arg, uniq=None, **kwargs):
+        return self.do_task(Task(func, arg, uniq, **kwargs))
+
     def do_task(self, task):
         """Return the result of the task or raise a TaskFailed exception on failure."""
         def _on_fail():
@@ -92,7 +95,7 @@ class GearmanClient(GearmanBaseClient):
             task.complete(args['result'])
         elif cmd == 'work_fail':
             if task.retries_done < task.retry_count:
-                _D("RETRYING", task)
+                # _D("RETRYING", task)
                 task.retries_done += 1
                 task.retrying()
                 task.handle = None
@@ -121,6 +124,8 @@ class GearmanClient(GearmanBaseClient):
         # set of connections to which jobs were submitted
         taskset.connections = set(self._submit_task(task) for task in taskset.itervalues())
 
+        taskset.handles = {}
+
         start_time = time.time()
         end_time = timeout and start_time + timeout or 0
         while not taskset.cancelled and not all(t.is_finished for t in taskset.itervalues()):
@@ -142,5 +147,7 @@ class GearmanClient(GearmanBaseClient):
 
             for conn in wr:
                 conn.send()
+
+        # TODO: should we fail all tasks that didn't finish or leave that up to the caller?
 
         return all(t.is_finished for t in taskset.itervalues())

@@ -72,7 +72,6 @@ class Taskset(dict):
 
     def __init__(self, tasks=[]):
         super(Taskset, self).__init__((hash(t), t) for t in tasks)
-        self.handles = {}
         self.cancelled = False
 
     def add(self, task):

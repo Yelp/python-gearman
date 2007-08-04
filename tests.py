@@ -70,5 +70,8 @@ class TestGearman(unittest.TestCase):
         self.failUnlessEqual(self.client.do_task(Task("sleep", "0.1")), '0.1')
         self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("sleep", "1.5")))
 
+    def testCall(self):
+        self.failUnlessEqual(self.client("echo", "bar"), 'bar')
+
 if __name__ == '__main__':
     unittest.main()
