@@ -200,7 +200,7 @@ class GearmanConnection(object):
 
     def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
-            wr = select([], [self], [], timeout and [timeout] or [])[1] # TODO: exc list
+            wr = select([], [self], [], timeout)[1] # TODO: exc list
             if self in wr:
                 self.send()
 
