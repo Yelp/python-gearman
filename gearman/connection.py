@@ -39,8 +39,6 @@ COMMANDS = {
 # Create a mapping of function name -> id, args
 R_COMMANDS = dict((m[0], (mid, m[1])) for mid,m in COMMANDS.iteritems())
 
-#class
-
 class GearmanConnection(object):
     class ConnectionError(Exception): pass
     class ProtocolError(Exception): pass
@@ -110,7 +108,7 @@ class GearmanConnection(object):
         return locals()
     is_dead = property(**is_dead())
 
-    def recv(self):
+    def recv(self, size=4096):
         """
         Returns a list of commands: [(cmd_name, cmd_args), ...]
         Raises ConnectionError if the connection dies.
@@ -121,7 +119,7 @@ class GearmanConnection(object):
 
         data = ''
         try:
-            data = self.sock.recv(4096)
+            data = self.sock.recv(size)
         except socket.error, e:
             if e.args[0] == 35: # would block / EAGAIN
                 return
