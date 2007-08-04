@@ -13,8 +13,9 @@ class Task(object):
         self.uniq          = uniq
         self.background    = background
         self.high_priority = high_priority
+        self.timeout       = timeout
+        self.retry_count   = retry_count
 
-        self.retry_count  = 0
         self.retries_done = 0
         self.is_finished  = False
         self.handle       = None
