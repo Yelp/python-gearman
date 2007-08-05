@@ -18,6 +18,9 @@ class GearmanJob(object):
     def fail(self):
         self.conn.send_command_blocking("work_fail", dict(handle=self.handle))
 
+    def __repr__(self):
+        return "<GearmanJob func=%s arg=%s handle=%s conn=%s>" % (self.func, self.arg, self.handle, repr(self.conn))
+
 class GearmanWorker(GearmanBaseClient):
     def __init__(self, *args, **kwargs):
         kwargs['pre_connect'] = True
