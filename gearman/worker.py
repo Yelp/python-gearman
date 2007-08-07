@@ -33,11 +33,13 @@ class GearmanWorker(GearmanBaseClient):
         self.abilities[name] = (func, timeout)
         self._can_do(self.connections, name, timeout)
 
-    def register_class(self, clas, name=None):
+    def register_class(self, clas, name=None, decorator=None):
         name = name or getattr(clas, 'name', clas.__name__)
         for k in clas.__dict__:
             v = getattr(clas, k)
             if callable(v) and k[0] != '_':
+                if decorator:
+                    v = decorator(v)
                 self.register_function("%s.%s" % (name,k), v)
 
     def _can_do(self, connections, name, timeout=None):
