@@ -1,4 +1,4 @@
-import random
+import random, sys
 from select import select
 from gearman.client import GearmanBaseClient
 
@@ -34,9 +34,12 @@ class GearmanWorker(GearmanBaseClient):
         self._can_do(self.connections, name, timeout)
 
     def register_class(self, clas, name=None, decorator=None):
+        obj = clas
+        if not isinstance(clas, type):
+            clas = clas.__class__
         name = name or getattr(clas, 'name', clas.__name__)
         for k in clas.__dict__:
-            v = getattr(clas, k)
+            v = getattr(obj, k)
             if callable(v) and k[0] != '_':
                 if decorator:
                     v = decorator(v)
@@ -116,9 +119,9 @@ class GearmanWorker(GearmanBaseClient):
                     hooks.start(job)
                 try:
                     result = func(job)
-                except Exception, e:
+                except Exception:
                     if hooks:
-                        hooks.fail(job, e)
+                        hooks.fail(job, sys.exc_info())
                     job.fail() # TODO: handle ConnectionError
                 else:
                     if hooks:
