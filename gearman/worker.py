@@ -1,6 +1,5 @@
-import random, sys
+import random, sys, select
 from time import time
-from select import select
 from gearman.client import GearmanBaseClient
 
 class GearmanJob(object):
@@ -88,21 +87,19 @@ class GearmanWorker(GearmanBaseClient):
                     continue
 
                 if cmd[0] == 'no_job':
-                    # _D("no_job", conn)
                     continue
 
                 if cmd[0] != "job_assign":
-                    # _D("ERROR: expected no_job or job_assigned", conn, cmd)
                     # TODO: log this, alert someone, SCREAM FOR HELP, AAAHHHHHH
                     # if cmd[0] == "error":
                     #     msg = "Error from server: %d: %s" % (cmd[1]['err_code'], cmd[1]['err_text'])
                     # else:
                     #     msg = "Was expecting job_assigned or no_job, received %s" % cmd[0]
                     conn.close()
+                    continue
 
                 need_sleep = False
 
-                # _D("Working on", cmd, cmd)
                 job = GearmanJob(conn, **cmd[1])
                 try:
                     func = self.abilities[cmd[1]['func']][0]
@@ -130,7 +127,12 @@ class GearmanWorker(GearmanBaseClient):
                 is_idle = True
                 for conn in self.connections:
                     conn.send_command("pre_sleep")
-                rd = select([c for c in self.connections if c.readable()], [], [], 5)[0]
+                try:
+                    rd, wr, ex = select.select([c for c in self.connections if c.readable()], [], self.connections, 10)
+                except select.error, e:
+                    # Ignore interrupted system call, reraise anything else
+                    if e[0] != 4:
+                        raise
                 is_idle = bool(rd)
 
             if stop_if(is_idle, last_job_time):

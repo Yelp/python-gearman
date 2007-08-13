@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-import random, time
-from select import select
+import random, time, select
 
 from gearman.compat import *
 from gearman.connection import GearmanConnection
@@ -136,7 +135,12 @@ class GearmanClient(GearmanBaseClient):
 
             rx_socks = [c for c in taskset.connections if c.readable()]
             tx_socks = [c for c in taskset.connections if c.writable()]
-            rd, wr, ex = select(rx_socks, tx_socks, taskset.connections, timeleft)
+            try:
+                rd, wr, ex = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
+            except select.error, e:
+                # Ignore interrupted system call, reraise anything else
+                if e[0] != 4:
+                    raise
 
             for conn in ex:
                 pass # TODO

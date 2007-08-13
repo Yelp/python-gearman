@@ -1,6 +1,5 @@
-import socket, struct
+import socket, struct, select
 from time import time
-from select import select
 
 DEFAULT_PORT = 7003
 
@@ -200,7 +199,12 @@ class GearmanConnection(object):
 
     def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
-            wr = select([], [self], [], timeout)[1] # TODO: exc list
+            try:
+                wr = select.select([], [self], [], timeout)[1] # TODO: exc list
+            except select.error, e:
+                # Ignore interrupted system call, reraise anything else
+                if e[0] != 4:
+                    raise
             if self in wr:
                 self.send()
 
@@ -219,7 +223,12 @@ class GearmanConnection(object):
             if time_left <= 0:
                 return []
 
-            rd, wr, ex = select([self], self.writable() and [self] or [], [self], time_left)
+            try:
+                rd, wr, ex = select.select([self], self.writable() and [self] or [], [self], time_left)
+            except select.error, e:
+                # Ignore interrupted system call, reraise anything else
+                if e[0] != 4:
+                    raise
 
             for conn in ex:
                 pass # TODO
