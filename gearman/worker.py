@@ -1,4 +1,5 @@
 import random, sys
+from time import time
 from select import select
 from gearman.client import GearmanBaseClient
 
@@ -70,16 +71,10 @@ class GearmanWorker(GearmanBaseClient):
     def stop(self):
         self.working = False
 
-    def work(self, stop_if_idle=False, one_task=False, hooks=None):
-        """
-        if one_task is True then
-            return after completing or failing at one task
-        else if stop_if_idle then
-            return if no server has a task for us
-        else
-            work until stop() is called
-        """
+    def work(self, stop_if=None, hooks=None):
         self.working = True
+        stop_if = stop_if or (lambda *a,**kw:False)
+        last_job_time = time()
         while self.working:
             need_sleep = True
 
@@ -128,17 +123,15 @@ class GearmanWorker(GearmanBaseClient):
                         hooks.complete(job, result)
                     job.complete(result) # TODO: handle ConnectionError
 
-                if one_task:
-                    return
+                last_job_time = time()
 
             is_idle = False
             if need_sleep:
-                # _D("Worker: sleeping")
                 is_idle = True
                 for conn in self.connections:
                     conn.send_command("pre_sleep")
-                rd = select([c for c in self.connections if c.readable()], [], [], 10)[0]
+                rd = select([c for c in self.connections if c.readable()], [], [], 5)[0]
                 is_idle = bool(rd)
 
-            if is_idle and stop_if_idle:
-                break
+            if stop_if(is_idle, last_job_time):
+                self.working = False
