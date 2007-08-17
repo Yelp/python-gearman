@@ -72,10 +72,13 @@ class GearmanClient(GearmanBaseClient):
 
     def _submit_task(self, task):
         server = self.get_server_from_hash(hash(task))
-        server.send_command(
-            (task.background and "submit_job_bg") or
-                (task.high_priority and "submit_job_high") or
-                "submit_job",
+        if task.background:
+            func = "submit_job_bg"
+        elif task.high_priority:
+            func = "submit_job_high"
+        else:
+            func = "submit_job"
+        server.send_command(func,
             dict(func=self.prefix + task.func, arg=task.arg, uniq=task.uniq))
         server.waiting_for_handles.insert(0,task)
         return server
@@ -88,7 +91,7 @@ class GearmanClient(GearmanBaseClient):
         if cmd != 'job_created' and handle:
             task = taskset.get( taskset.handles.get(handle, None), None)
             if not task or task.is_finished:
-                raise self.InvalidResponse()
+                raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd))
 
         if cmd == 'work_complete':
             task.complete(args['result'])

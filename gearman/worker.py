@@ -65,10 +65,51 @@ class GearmanWorker(GearmanBaseClient):
                     continue
                 else:
                     self._set_abilities(conn)
-            yield conn
+            if conn.connected:
+                yield conn
 
     def stop(self):
         self.working = False
+
+    def _work_connection(self, conn, hooks):
+        conn.send_command("grab_job")
+        cmd = ('noop',)
+        while cmd and cmd[0] == 'noop':
+            cmd = conn.recv_blocking(timeout=0.5)
+
+        if not cmd or cmd[0] == 'no_job':
+            return False
+
+        if cmd[0] != "job_assign":
+            # TODO: log this, alert someone, SCREAM FOR HELP, AAAHHHHHH
+            # if cmd[0] == "error":
+            #     msg = "Error from server: %d: %s" % (cmd[1]['err_code'], cmd[1]['err_text'])
+            # else:
+            #     msg = "Was expecting job_assigned or no_job, received %s" % cmd[0]
+            conn.close()
+            return False
+
+        job = GearmanJob(conn, **cmd[1])
+        try:
+            func = self.abilities[cmd[1]['func']][0]
+        except KeyError:
+            # TODO: log this - received work for unknown func
+            return True
+
+        if hooks:
+            hooks.start(job)
+        try:
+            result = func(job)
+        except Exception:
+            if hooks:
+                hooks.fail(job, sys.exc_info())
+            job.fail() # TODO: handle ConnectionError
+        else:
+            if hooks:
+                hooks.complete(job, result)
+            job.complete(result) # TODO: handle ConnectionError
+
+        return True
 
     def work(self, stop_if=None, hooks=None):
         self.working = True
@@ -78,57 +119,23 @@ class GearmanWorker(GearmanBaseClient):
             need_sleep = True
 
             for conn in self._alive_connections():
-                conn.send_command("grab_job")
-                cmd = ('noop',)
-                while cmd and cmd[0] == 'noop':
-                    cmd = conn.recv_blocking(timeout=0.5)
-                if not cmd:
-                    # grab job timed out
-                    continue
-
-                if cmd[0] == 'no_job':
-                    continue
-
-                if cmd[0] != "job_assign":
-                    # TODO: log this, alert someone, SCREAM FOR HELP, AAAHHHHHH
-                    # if cmd[0] == "error":
-                    #     msg = "Error from server: %d: %s" % (cmd[1]['err_code'], cmd[1]['err_text'])
-                    # else:
-                    #     msg = "Was expecting job_assigned or no_job, received %s" % cmd[0]
-                    conn.close()
-                    continue
-
-                need_sleep = False
-
-                job = GearmanJob(conn, **cmd[1])
                 try:
-                    func = self.abilities[cmd[1]['func']][0]
-                except KeyError:
-                    # TODO: log this - received work for unknown func
-                    continue
-
-                if hooks:
-                    hooks.start(job)
-                try:
-                    result = func(job)
-                except Exception:
-                    if hooks:
-                        hooks.fail(job, sys.exc_info())
-                    job.fail() # TODO: handle ConnectionError
+                    worked = self._work_connection(conn, hooks)
+                except conn.ConnectionError:
+                    pass
                 else:
-                    if hooks:
-                        hooks.complete(job, result)
-                    job.complete(result) # TODO: handle ConnectionError
-
-                last_job_time = time()
+                    if worked:
+                        last_job_time = time()
+                        need_sleep = False
 
             is_idle = False
             if need_sleep:
                 is_idle = True
                 for conn in self.connections:
                     conn.send_command("pre_sleep")
+                alive = self._alive_connections()
                 try:
-                    rd, wr, ex = select.select([c for c in self.connections if c.readable()], [], self.connections, 10)
+                    rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
                 except select.error, e:
                     # Ignore interrupted system call, reraise anything else
                     if e[0] != 4:

@@ -100,6 +100,10 @@ class GearmanConnection(object):
         def fget(self):
             if self._is_dead and time() >= self._retry_at:
                 self._is_dead = False
+                # try:
+                #     self.connect()
+                # except self.ConnectionError:
+                #     pass
             return self._is_dead
         def fset(self, value):
             self._is_dead = value
@@ -126,6 +130,7 @@ class GearmanConnection(object):
         else:
             if not data:
                 self.close()
+                self.is_dead = True
                 raise self.ConnectionError("connection died")
 
         self.in_buffer += data
@@ -154,6 +159,7 @@ class GearmanConnection(object):
             nsent = self.sock.send(self.out_buffer)
         except socket.error, e:
             self.close()
+            self.is_dead = True
             raise self.ConnectionError(str(e))
 
         self.out_buffer = buffer(self.out_buffer, nsent)
