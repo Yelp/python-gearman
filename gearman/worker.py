@@ -140,7 +140,7 @@ class GearmanWorker(GearmanBaseClient):
                     # Ignore interrupted system call, reraise anything else
                     if e[0] != 4:
                         raise
-                is_idle = bool(rd)
+                is_idle = not bool(rd)
 
             if stop_if(is_idle, last_job_time):
                 self.working = False
