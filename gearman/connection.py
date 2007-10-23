@@ -55,7 +55,8 @@ class GearmanConnection(object):
 
         if ':' in host:
             host, port = (host.split(':') + [0])[:2]
-            self.addr = (host, int(port) or DEFAULT_PORT)
+            port = int(port) or DEFAULT_PORT
+            self.addr = (host, port)
         else:
             port = port or DEFAULT_PORT
             self.addr = (host, port)
