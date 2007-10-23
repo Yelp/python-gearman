@@ -236,6 +236,7 @@ class GearmanConnection(object):
                 # Ignore interrupted system call, reraise anything else
                 if e[0] != 4:
                     raise
+                rd = wr = ex = []
 
             for conn in ex:
                 pass # TODO
