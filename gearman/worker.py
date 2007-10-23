@@ -37,7 +37,7 @@ class GearmanWorker(GearmanBaseClient):
         obj = clas
         if not isinstance(clas, type):
             clas = clas.__class__
-        name = name or getattr(clas, 'name', clas.__name__)
+        name = name or getattr(obj, 'name', clas.__name__)
         for k in clas.__dict__:
             v = getattr(obj, k)
             if callable(v) and k[0] != '_':

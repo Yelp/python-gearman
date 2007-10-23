@@ -97,7 +97,6 @@ class GearmanClient(GearmanBaseClient):
             task.complete(args['result'])
         elif cmd == 'work_fail':
             if task.retries_done < task.retry_count:
-                # _D("RETRYING", task)
                 task.retries_done += 1
                 task.retrying()
                 task.handle = None
@@ -112,13 +111,10 @@ class GearmanClient(GearmanBaseClient):
             taskset.handles[handle] = hash( task )
             if task.background:
                 task.is_finished = True
-            # _D( "Assigned H[%r] from S[%s] to T[%s]" % (handle, '%s:%s' % conn.addr, hash(task) ))
         elif cmd == 'error':
             raise self.CommandError(str(args)) # TODO make better
         else:
             raise Exception("Unexpected command: %s" % cmd)
-
-        # _D( "HANDLES:", taskset.handles )
 
     def do_taskset(self, taskset, timeout=None):
         """Execute a Taskset and return True iff all tasks finished before timeout."""
