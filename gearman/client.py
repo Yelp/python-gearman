@@ -42,7 +42,8 @@ class GearmanClient(GearmanBaseClient):
             raise self.TaskFailed("Task failed")
         task.on_fail.append(_on_fail)
         ts = Taskset( [task] )
-        self.do_taskset(ts, timeout=task.timeout)
+        if not self.do_taskset(ts, timeout=task.timeout):
+            raise self.TaskFailed("Task timeout")
         return task.result
 
     def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
