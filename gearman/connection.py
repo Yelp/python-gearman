@@ -1,4 +1,4 @@
-import socket, struct, select
+import socket, struct, select, errno
 from time import time
 
 DEFAULT_PORT = 7003
@@ -63,9 +63,12 @@ class GearmanConnection(object):
         self.hostspec = "%s:%d" % (host, port)
         self.timeout  = timeout
 
-        self.in_buffer  = ""
+        self.is_dead = False
+        self._reset_queues()
+
+    def _reset_queues(self):
+        self.in_buffer = ""
         self.out_buffer = ""
-        self.is_dead    = False
         self.waiting_for_handles = []
 
     def fileno(self):
@@ -78,7 +81,7 @@ class GearmanConnection(object):
         return self.connected
 
     def connect(self):
-        """Connect to the server. Raises ConnectionError if connection fails."""
+        """Connect to the server. Raise ConnectionError if connection fails."""
 
         if self.connected:
             return
@@ -92,6 +95,7 @@ class GearmanConnection(object):
             self.is_dead = True
             raise self.ConnectionError(str(e))
 
+        self._reset_queues()
         self.is_dead = False
         self.connected = True
         self.sock.setblocking(0)
@@ -125,7 +129,7 @@ class GearmanConnection(object):
         try:
             data = self.sock.recv(size)
         except socket.error, e:
-            if e.args[0] == 35: # would block / EAGAIN
+            if e.args[0] == errno.EWOULDBLOCK:
                 return
             raise
         else:

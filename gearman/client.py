@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import random, time, select
+import random, time, select, errno
 
 from gearman.compat import *
 from gearman.connection import GearmanConnection
@@ -57,9 +57,12 @@ class GearmanClient(GearmanBaseClient):
         """Return a live connection for the given hash"""
         # TODO: instead of cycling through, should we shuffle the list if the first connection fails or is dead?
         first_idx = hsh % len(self.connections)
+        all_dead = all(conn.is_dead for conn in self.connections)
         for idx in range(first_idx, len(self.connections)) + range(0, first_idx):
             conn = self.connections[idx]
-            if conn.is_dead:
+
+            # if all of the connections are dead we should try reconnecting
+            if conn.is_dead and not all_dead:
                 continue
 
             try:
@@ -91,7 +94,9 @@ class GearmanClient(GearmanBaseClient):
 
         if cmd != 'job_created' and handle:
             task = taskset.get( taskset.handles.get(handle, None), None)
-            if not task or task.is_finished:
+            if not task:
+                return
+            if task.is_finished:
                 raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd))
 
         if cmd == 'work_complete':
@@ -139,7 +144,7 @@ class GearmanClient(GearmanBaseClient):
                 rd, wr, ex = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
             except select.error, e:
                 # Ignore interrupted system call, reraise anything else
-                if e[0] != 4:
+                if e[0] != errno.EINTR:
                     raise
 
             for conn in ex:
