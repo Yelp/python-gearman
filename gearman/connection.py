@@ -1,7 +1,7 @@
 import socket, struct, select, errno
 from time import time
 
-DEFAULT_PORT = 7003
+DEFAULT_PORT = 4730
 
 COMMANDS = {
      1: ("can_do", ["func"]),
