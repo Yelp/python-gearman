@@ -87,9 +87,9 @@ class GearmanConnection(object):
             return
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout( self.timeout )
+        self.sock.settimeout(self.timeout)
         try:
-            self.sock.connect( self.addr )
+            self.sock.connect(self.addr)
         except (socket.error, socket.timeout), e:
             self.sock = None
             self.is_dead = True
@@ -131,12 +131,15 @@ class GearmanConnection(object):
         except socket.error, e:
             if e.args[0] == errno.EWOULDBLOCK:
                 return
-            raise
-        else:
-            if not data:
-                self.close()
-                self.is_dead = True
-                raise self.ConnectionError("connection died")
+            if e.args[0] == errno.ECONNRESET:
+                data = None
+            else:
+                raise
+
+        if not data:
+            self.close()
+            self.is_dead = True
+            raise self.ConnectionError("connection died")
 
         self.in_buffer += data
 
