@@ -19,8 +19,9 @@ class GearmanBaseClient(object):
         self.set_job_servers(job_servers, pre_connect)
 
     def set_job_servers(self, servers, pre_connect = False):
-        # TODO: don't shut down dups and shut down old ones gracefully
+        # TODO: don't shut down dups. shut down old ones gracefully
         self.connections = []
+        self.connections_by_hostport = {}
         for serv in servers:
             connection = GearmanConnection(serv)
             if pre_connect:
@@ -29,6 +30,7 @@ class GearmanBaseClient(object):
                 except connection.ConnectionError:
                     pass # TODO: connection IS marked as dead but perhaps we don't want it at all
             self.connections.append(connection)
+            self.connections_by_hostport[connection.hostspec] = connection
 
 class GearmanClient(GearmanBaseClient):
     class TaskFailed(Exception): pass
@@ -41,7 +43,7 @@ class GearmanClient(GearmanBaseClient):
         def _on_fail():
             raise self.TaskFailed("Task failed")
         task.on_fail.append(_on_fail)
-        ts = Taskset( [task] )
+        ts = Taskset([task])
         if not self.do_taskset(ts, timeout=task.timeout):
             raise self.TaskFailed("Task timeout")
         return task.result
@@ -49,8 +51,8 @@ class GearmanClient(GearmanBaseClient):
     def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
         """Submit a background task and return its handle."""
         task = Task(func, arg, uniq, background=True, high_priority=True)
-        ts = Taskset( [task] )
-        self.do_taskset( ts )
+        ts = Taskset([task])
+        self.do_taskset(ts)
         return task.handle
 
     def get_server_from_hash(self, hsh):
@@ -160,3 +162,11 @@ class GearmanClient(GearmanBaseClient):
         # TODO: should we fail all tasks that didn't finish or leave that up to the caller?
 
         return all(t.is_finished for t in taskset.itervalues())
+
+    def get_status(self, handle):
+        hostport, shandle = handle.split("//")
+
+        server = self.connections_by_hostport[hostport]
+        server.connect() # Make sure the connection is up (noop if already connected)
+        server.send_command("get_status", dict(handle=shandle))
+        return server.recv_blocking()[1]
