@@ -53,7 +53,7 @@ class Task(object):
             func()
 
     def _finished(self):
-        """Mark the job as finished and call on_port hooks."""
+        """Mark the job as finished and call on_post hooks."""
         self.is_finished = True
         for func in self.on_post:
             func()

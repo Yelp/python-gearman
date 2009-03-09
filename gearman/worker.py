@@ -23,15 +23,12 @@ class GearmanJob(object):
 
 class GearmanWorker(GearmanBaseClient):
     def __init__(self, *args, **kwargs):
-        kwargs['pre_connect'] = True
-
         super(GearmanWorker, self).__init__(*args, **kwargs)
         self.abilities = {}
 
     def register_function(self, name, func, timeout=None):
         name = self.prefix + name
         self.abilities[name] = (func, timeout)
-        self._can_do(self.connections, name, timeout)
 
     def register_class(self, clas, name=None, decorator=None):
         obj = clas
@@ -45,20 +42,22 @@ class GearmanWorker(GearmanBaseClient):
                     v = decorator(v)
                 self.register_function("%s.%s" % (name,k), v)
 
-    def _can_do(self, connections, name, timeout=None):
+    def _can_do(self, connection, name, timeout=None):
         cmd_name = (timeout is None) and "can_do" or "can_do_timeout"
         cmd_args = (timeout is None) and dict(func=name) or dict(func=name, timeout=timeout)
-        for conn in connections:
-            conn.send_command(cmd_name, cmd_args)
+        connection.send_command(cmd_name, cmd_args)
 
     def _set_abilities(self, conn):
-        for name, args in self.abilities:
+        for name, args in self.abilities.iteritems():
             self._can_do(conn, name, args[1])
 
-    def _alive_connections(self):
+    @property
+    def alive_connections(self):
         random.shuffle(self.connections)
+        all_dead = all(conn.is_dead for conn in self.connections)
+        alive = []
         for conn in self.connections:
-            if not conn.connected and not conn.is_dead:
+            if not conn.connected and (not conn.is_dead or all_dead):
                 try:
                     conn.connect()
                 except conn.ConnectionError:
@@ -66,7 +65,8 @@ class GearmanWorker(GearmanBaseClient):
                 else:
                     self._set_abilities(conn)
             if conn.connected:
-                yield conn
+                alive.append(conn)
+        return alive
 
     def stop(self):
         self.working = False
@@ -118,7 +118,7 @@ class GearmanWorker(GearmanBaseClient):
         while self.working:
             need_sleep = True
 
-            for conn in self._alive_connections():
+            for conn in self.alive_connections:
                 try:
                     worked = self._work_connection(conn, hooks)
                 except conn.ConnectionError:
@@ -131,9 +131,9 @@ class GearmanWorker(GearmanBaseClient):
             is_idle = False
             if need_sleep:
                 is_idle = True
-                for conn in self.connections:
+                alive = self.alive_connections
+                for conn in alive:
                     conn.send_command("pre_sleep")
-                alive = self._alive_connections()
                 try:
                     rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
                 except select.error, e:

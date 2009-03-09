@@ -28,7 +28,7 @@ class GearmanBaseClient(object):
                     connection.connect()
                 except connection.ConnectionError:
                     pass # TODO: connection IS marked as dead but perhaps we don't want it at all
-            self.connections.append( connection )
+            self.connections.append(connection)
 
 class GearmanClient(GearmanBaseClient):
     class TaskFailed(Exception): pass
