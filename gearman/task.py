@@ -10,7 +10,7 @@ class Task(object):
 
         self.func          = func
         self.arg           = arg
-        self.uniq          = uniq
+        self.uniq          = '-' if uniq == True else uniq 
         self.background    = background
         self.high_priority = high_priority
         self.timeout       = timeout
@@ -20,7 +20,7 @@ class Task(object):
         self.is_finished  = False
         self.handle       = None
         self.result       = None
-        self._hash        = hash(self.func + (self.uniq in ('-', True) and self.arg or self.uniq or str(random.randint(0,999999))))
+        self._hash        = hash(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0,999999))))
 
     def __hash__(self):
         return self._hash
