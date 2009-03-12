@@ -2,6 +2,7 @@ import unittest, time
 
 from gearman import GearmanClient, GearmanWorker
 from gearman.connection import GearmanConnection
+from gearman.manager import GearmanManager
 from gearman.task import Task
 
 job_servers = ["127.0.0.1"]
@@ -72,6 +73,22 @@ class TestGearman(unittest.TestCase):
 
     def testCall(self):
         self.failUnlessEqual(self.client("echo", "bar"), 'bar')
+
+class TestManager(unittest.TestCase):
+    def setUp(self):
+        self.manager = GearmanManager(job_servers[0])
+
+    def testStatus(self):
+        status = self.manager.status()
+        self.failUnless(isinstance(status, dict))
+
+    def testVersion(self):
+        version = self.manager.version()
+        self.failUnless('.' in version)
+
+    def testWorkers(self):
+        workers = self.manager.workers()
+        self.failUnless(isinstance(workers, list))
 
 if __name__ == '__main__':
     unittest.main()
