@@ -34,8 +34,8 @@ Example client::
 """
 
 __author__ = "Samuel Stauffer <samuel@descolada.com> and Kristopher Tate <kris@bbridgetech.com>"
-__version__ = "1.2"
-__license__ = "Python"
+__version__ = "1.2.1"
+__license__ = "MIT"
 
 from gearman.client import GearmanClient
 from gearman.worker import GearmanWorker
