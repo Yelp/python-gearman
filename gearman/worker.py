@@ -1,5 +1,7 @@
 import random, sys, select
 from time import time
+
+from gearman.compat import *
 from gearman.client import GearmanBaseClient
 
 class GearmanJob(object):

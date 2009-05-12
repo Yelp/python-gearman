@@ -18,7 +18,7 @@ class GearmanBaseClient(object):
         self.prefix = prefix and "%s\t" % prefix or ""
         self.set_job_servers(job_servers, pre_connect)
 
-    def set_job_servers(self, servers, pre_connect = False):
+    def set_job_servers(self, servers, pre_connect=False):
         # TODO: don't shut down dups. shut down old ones gracefully
         self.connections = []
         self.connections_by_hostport = {}
