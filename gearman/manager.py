@@ -13,8 +13,7 @@ class GearmanManager(object):
             port = int(port) or DEFAULT_PORT
             self.addr = (host, port)
         else:
-            port = port or DEFAULT_PORT
-            self.addr = (server, port)
+            self.addr = (server, DEFAULT_PORT)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(timeout)
