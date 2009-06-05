@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import random, time, select, errno
+import time, select, errno
 
 from gearman.compat import *
 from gearman.connection import GearmanConnection

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import socket, time
+import socket
 
 from gearman.connection import DEFAULT_PORT, GearmanConnection
 
@@ -19,8 +19,8 @@ class GearmanManager(object):
         self.sock.settimeout(timeout)
         try:
             self.sock.connect(self.addr)
-        except (socket.error, socket.timeout), e:
-            raise ConnectionError(str(e))
+        except (socket.error, socket.timeout), exc:
+            raise ConnectionError(str(exc))
 
     def send_command(self, name, reslist=False):
         self.sock.sendall("%s\n" % name)

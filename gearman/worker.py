@@ -42,7 +42,7 @@ class GearmanWorker(GearmanBaseClient):
             if callable(v) and k[0] != '_':
                 if decorator:
                     v = decorator(v)
-                self.register_function("%s.%s" % (name,k), v)
+                self.register_function("%s.%s" % (name, k), v)
 
     def _can_do(self, connection, name, timeout=None):
         cmd_name = (timeout is None) and "can_do" or "can_do_timeout"
@@ -115,7 +115,7 @@ class GearmanWorker(GearmanBaseClient):
 
     def work(self, stop_if=None, hooks=None):
         self.working = True
-        stop_if = stop_if or (lambda *a,**kw:False)
+        stop_if = stop_if or (lambda *a, **kw:False)
         last_job_time = time()
         while self.working:
             need_sleep = True
@@ -142,7 +142,6 @@ class GearmanWorker(GearmanBaseClient):
                     # Ignore interrupted system call, reraise anything else
                     if e[0] != 4:
                         raise
-                    id_idle = True
                 else:
                     is_idle = not bool(rd)
 

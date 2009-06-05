@@ -20,7 +20,7 @@ class Task(object):
         self.is_finished  = False
         self.handle       = None
         self.result       = None
-        self._hash        = hash(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0,999999))))
+        self._hash        = hash(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0, 999999))))
 
     def __hash__(self):
         return self._hash
@@ -84,9 +84,9 @@ class Taskset(dict):
         self.cancelled = True
 
     def __or__(self, taskset2):
-        for k,v in taskset2.iteritems():
-            if k in self:
-                self[k].merge_hooks(v)
+        for task_hash, task in taskset2.iteritems():
+            if task_hash in self:
+                self[task_hash].merge_hooks(task)
             else:
-                self[k] = v # TODO: should clone the task rather than just making a reference
+                self[task_hash] = task # TODO: should clone the task rather than just making a reference
         return self

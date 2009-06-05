@@ -36,7 +36,7 @@ COMMANDS = {
     24: ("all_yours", []),
 }
 # Create a mapping of function name -> id, args
-R_COMMANDS = dict((m[0], (mid, m[1])) for mid,m in COMMANDS.iteritems())
+R_COMMANDS = dict((m[0], (mid, m[1])) for mid, m in COMMANDS.iteritems())
 
 class GearmanConnection(object):
     class ConnectionError(Exception): pass
