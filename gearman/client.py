@@ -43,14 +43,14 @@ class GearmanClient(GearmanBaseClient):
         def _on_fail():
             raise self.TaskFailed("Task failed")
         task.on_fail.append(_on_fail)
-        ts = Taskset([task])
-        if not self.do_taskset(ts, timeout=task.timeout):
+        taskset = Taskset([task])
+        if not self.do_taskset(taskset, timeout=task.timeout):
             raise self.TaskFailed("Task timeout")
         return task.result
 
     def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
         """Submit a background task and return its handle."""
-        task = Task(func, arg, uniq, background=True, high_priority=True)
+        task = Task(func, arg, uniq, background=True, high_priority=high_priority)
         ts = Taskset([task])
         self.do_taskset(ts)
         return task.handle
@@ -86,7 +86,7 @@ class GearmanClient(GearmanBaseClient):
             func = "submit_job"
         server.send_command(func,
             dict(func=self.prefix + task.func, arg=task.arg, uniq=task.uniq))
-        server.waiting_for_handles.insert(0,task)
+        server.waiting_for_handles.insert(0, task)
         return server
 
     def _command_handler(self, taskset, conn, cmd, args):

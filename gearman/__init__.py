@@ -33,7 +33,7 @@ Example client::
 
 """
 
-__author__ = "Samuel Stauffer <samuel@descolada.com> and Kristopher Tate <kris@bbridgetech.com>"
+__author__ = "Samuel Stauffer <samuel@descolada.com>"
 __version__ = "1.2.2"
 __license__ = "MIT"
 
