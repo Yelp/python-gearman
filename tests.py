@@ -20,6 +20,15 @@ def sleep(job):
     time.sleep(float(job.arg))
     return job.arg
 
+class ObjectWorker(object):
+    def echo(self, job):
+        return job.arg
+
+class ClassWorker(object):
+    @staticmethod
+    def echo(job):
+        return job.arg
+
 class TestConnection(unittest.TestCase):
     def setUp(self):
         self.connection = GearmanConnection(job_servers[0])
@@ -42,6 +51,8 @@ class TestGearman(unittest.TestCase):
         self.worker.register_function("echo", echo)
         self.worker.register_function("fail", fail)
         self.worker.register_function("sleep", sleep, timeout=1)
+        self.worker.register_class(ObjectWorker())
+        self.worker.register_class(ClassWorker())
         class Hooks(object):
             @staticmethod
             def start(job):
@@ -73,6 +84,12 @@ class TestGearman(unittest.TestCase):
 
     def testCall(self):
         self.failUnlessEqual(self.client("echo", "bar"), 'bar')
+
+    def testObjectWorker(self):
+        self.failUnlessEqual(self.client("ObjectWorker.echo", "foo"), "foo")
+
+    def testClassWorker(self):
+        self.failUnlessEqual(self.client("ClassWorker.echo", "foo"), "foo")
 
 class TestManager(unittest.TestCase):
     def setUp(self):
