@@ -38,6 +38,6 @@ __version__ = "1.3.0"
 __license__ = "MIT"
 
 from gearman.client import GearmanClient
-from geamran.server import GearmanServer
+from gearman.server import GearmanServer
 from gearman.task import Task, Taskset
 from gearman.worker import GearmanWorker
