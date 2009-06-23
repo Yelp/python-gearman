@@ -108,6 +108,10 @@ class TestGearman(GearmanTestCase):
         self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("fail", "bar")))
         # self.failUnlessEqual(self.last_exception[0], "fail")
 
+    def testCompleteAfterFail(self):
+        self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("fail", "bar")))
+        self.failUnlessEqual(self.client.do_task(Task("echo", "bar")), 'bar')
+
     def testTimeout(self):
         self.failUnlessEqual(self.client.do_task(Task("sleep", "0.1")), '0.1')
         self.failUnlessRaises(self.client.TaskFailed, lambda:self.client.do_task(Task("sleep", "1.5")))
