@@ -1,14 +1,17 @@
 
-import random
 import logging
-import asyncore, socket
+import random
+import time
+import asyncore
+import socket
 from collections import deque
 from gearman.protocol import DEFAULT_PORT, ProtocolError, parse_command, pack_command
 
 class GearmanServerClient(asyncore.dispatcher):
-    def __init__(self, sock, addr, manager):
+    def __init__(self, sock, addr, server, manager):
         asyncore.dispatcher.__init__(self, sock)
         self.addr = addr
+        self.server = server
         self.manager = manager
         self.in_buffer = ""
         self.out_buffer = ""
@@ -51,10 +54,16 @@ class GearmanServerClient(asyncore.dispatcher):
         elif func == "submit_job":
             handle = self.manager.add_job(self, **args)
             self.send_command("job_created", {'handle': handle})
-        elif func == "can_do":
+        elif func == "submit_job_high":
+            handle = self.manager.add_job(self, high=True, **args)
+            self.send_command("job_created", {'handle': handle})
+        elif func == "submit_job_bg":
+            handle = self.manager.add_job(self, bg=True, **args)
+            self.send_command("job_created", {'handle': handle})
+        elif func in ("can_do", "can_do_timeout"):
             self.manager.can_do(self, **args)
-        elif func == "can_do_timeout":
-            self.manager.can_do(self, **args)
+        elif func == "cant_do":
+            self.manager.cant_do(self, **args)
         elif func == "grab_job":
             job = self.manager.grab_job(self)
             if job:
@@ -93,14 +102,9 @@ class GearmanServerClient(asyncore.dispatcher):
         #     - Function name.
         #     - Optional maximum queue size.
         # 
-        # elif func == "shutdown":
-        # 
-        #     Shutdown the server. If the optional "graceful" argument is used,
-        #     close the listening socket and let all existing connections
-        #     complete.
-        #
-        #     Arguments:
-        #     - Optional "graceful" mode.
+        elif func == "shutdown":
+            # TODO: optional "graceful" argument - close listening socket and let all existing connections complete
+            self.server.stop()
         else:
             logging.error("Unhandled command %s: %s" % (func, args))
 
@@ -157,15 +161,16 @@ class ClientState(object):
 class GearmanTaskManager(object):
     def __init__(self):
         self.max_id = 0
-        self.states = {}    # {client: ClientState}
-        self.jobqueue = {}  # {function, [job]}
-        self.jobs = {}      # {handle: job}
-        self.uniq_jobs = {} # {function: {uniq: job}}
-        self.workers = {}   # {function: [state]}
+        self.states = {}     # {client: ClientState}
+        self.jobqueue = {}   # {function, [job]}
+        self.jobs = {}       # {handle: job}
+        self.uniq_jobs = {}  # {function: {uniq: job}}
+        self.workers = {}    # {function: [state]}
+        self.working = set() # set([job])
 
-    def add_job(self, client, func, arg, uniq=None):
+    def add_job(self, client, func, arg, uniq=None, high=False, bg=False):
         state = self.states[client]
-        job = Job(state, self.new_handle(), func=func, arg=arg, uniq=uniq)
+        job = Job(state, self.new_handle(), func=func, arg=arg, uniq=uniq, high=False, bg=False)
         state.jobs.append(job)
         if func not in self.jobqueue:
             self.jobqueue[func] = deque([job])
@@ -180,7 +185,7 @@ class GearmanTaskManager(object):
 
     def can_do(self, client, func, timeout=None):
         state = self.states[client]
-        state.abilities[func] = timeout
+        state.abilities[func] = int(timeout) if timeout else None
 
         if func not in self.workers:
             self.workers[func] = set((state,))
@@ -190,6 +195,7 @@ class GearmanTaskManager(object):
     def cant_do(self, client, func):
         state = self.states[client]
         state.abilities.pop(func, None)
+        self.workers[func].pop(state, None)
 
     def grab_job(self, client, grab=True):
         state = self.states[client]
@@ -203,7 +209,9 @@ class GearmanTaskManager(object):
 
                 job = jobs.popleft()
                 job.worker = state
-                job.timeout = state.abilities[f]
+                timeout = state.abilities[f]
+                job.timeout = time.time() + timeout if timeout else None
+                self.working.add(job)
                 state.working.append(job)
                 return job
                 
@@ -219,15 +227,18 @@ class GearmanTaskManager(object):
 
     def work_complete(self, client, handle, result):
         job = self.jobs[handle]
-        job.owner.jobs.remove(job)
-        job.worker.working.remove(job)
         job.owner.client.work_complete(handle, result)
+        self._remove_job(job)
 
     def work_fail(self, client, handle):
         job = self.jobs[handle]
+        job.owner.client.work_fail(handle)
+        self._remove_job(job)
+
+    def _remove_job(self, job):
         job.owner.jobs.remove(job)
         job.worker.working.remove(job)
-        job.owner.client.work_fail(handle)
+        self.working.discard(job)
 
     def get_status(self, client):
         funcs = set(self.workers.keys()) | set(self.jobqueue.keys())
@@ -235,9 +246,7 @@ class GearmanTaskManager(object):
         for f in sorted(funcs):
             workers = self.workers.get(f, [])
             num_workers = len(workers)
-            num_working = 0
-            for w in workers:
-                num_working += sum(1 for j in w.working if j.func == f)
+            num_working = len(self.working)
             num_jobs = num_working + len(self.jobs.get(f, []))
             status.append(dict(
                 func = f,
@@ -246,6 +255,15 @@ class GearmanTaskManager(object):
                 num_workers = num_workers,
             ))
         return status
+
+    def check_timeouts(self):
+        now = time.time()
+        to_fail = []
+        for job in self.working:
+            if job.timeout and job.timeout < now:
+                to_fail.append(job.handle)
+        for handle in to_fail:
+            self.work_fail(None, handle)
 
     def register_client(self, client):
         self.states[client] = ClientState(client)
@@ -276,7 +294,13 @@ class GearmanServer(asyncore.dispatcher):
 
     def handle_accept(self):
         sock, addr = self.accept()
-        GearmanServerClient(sock, addr, self.manager)
+        GearmanServerClient(sock, addr, self, self.manager)
 
     def start(self):
-        asyncore.loop()
+        self.running = True
+        while self.running:
+            asyncore.loop(timeout=1, use_poll=False, count=1)
+            self.manager.check_timeouts()
+
+    def stop(self):
+        self.running = False
