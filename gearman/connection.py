@@ -1,46 +1,10 @@
 import socket, struct, select, errno
 from time import time
 
-DEFAULT_PORT = 4730
-
-COMMANDS = {
-     1: ("can_do", ["func"]),
-    23: ("can_do_timeout", ["func", "timeout"]),
-     2: ("cant_do", ["func"]),
-     3: ("reset_abilities", []),
-    22: ("set_client_id", ["client_id"]),
-     4: ("pre_sleep", []),
-
-     6: ("noop", []),
-     7: ("submit_job", ["func", "uniq", "arg"]),
-    21: ("submit_job_high", ["func", "uniq", "arg"]),
-    18: ("submit_job_bg", ["func", "uniq", "arg"]),
-
-     8: ("job_created", ["handle"]),
-     9: ("grab_job", []),
-    10: ("no_job", []),
-    11: ("job_assign", ["handle", "func", "arg"]),
-
-    12: ("work_status", ["handle", "numerator", "denominator"]),
-    13: ("work_complete", ["handle", "result"]),
-    14: ("work_fail", ["handle"]),
-
-    15: ("get_status", ["handle"]),
-    20: ("status_res", ["handle", "known", "running", "numerator", "denominator"]),
-
-    16: ("echo_req", ["text"]),
-    17: ("echo_res", ["text"]),
-
-    19: ("error", ["err_code", "err_text"]),
-
-    24: ("all_yours", []),
-}
-# Create a mapping of function name -> id, args
-R_COMMANDS = dict((m[0], (mid, m[1])) for mid, m in COMMANDS.iteritems())
+from gearman.protocol import DEFAULT_PORT, pack_command, parse_command
 
 class GearmanConnection(object):
     class ConnectionError(Exception): pass
-    class ProtocolError(Exception): pass
 
     def __init__(self, host, port=DEFAULT_PORT, sock=None, timeout=None):
         """
@@ -145,16 +109,13 @@ class GearmanConnection(object):
 
         commands = []
         while len(self.in_buffer) >= 12:
-            magic, typ, data_len = struct.unpack("!4sLL", self.in_buffer[0:12])
-            if len(self.in_buffer) < 12 + data_len:
+            func, args, cmd_len = parse_command(self.in_buffer)
+            if not cmd_len:
                 break
 
-            if magic != "\x00RES":
-                raise self.ProtocolError("Malformed Magic")
+            commands.append((func, args))
 
-            commands.append(self._parse_command(typ, self.in_buffer[12:12 + data_len]))
-
-            self.in_buffer = buffer(self.in_buffer, 12 + data_len)
+            self.in_buffer = buffer(self.in_buffer, cmd_len)
         return commands
 
     def send(self):
@@ -176,40 +137,9 @@ class GearmanConnection(object):
 
     def send_command(self, name, kwargs={}):
         # DEBUG and _D("GearmanConnection.send_command", name, kwargs)
-        pkt = self._pack_command(name, **kwargs)
+        pkt = pack_command(name, **kwargs)
         self.out_buffer += pkt
         self.send()
-
-    def _parse_command(self, typ, data):
-        """
-        Returns: function name, argument dictionary
-        """
-        msg_spec = COMMANDS.get(typ, None)
-
-        if not msg_spec:
-            raise self.ProtocolError("Unknown message received: %d" % typ)
-
-        nargs = len(msg_spec[1])
-        data = (nargs > 0) and data.split('\x00', nargs-1) or []
-        if len(data) != nargs:
-            raise self.ProtocolError("Received wrong number of arguments to %s" % msg_spec[0])
-
-        kwargs = dict(
-            ((msg_spec[1][i], data[i]) for i in range(nargs))
-        )
-
-        return msg_spec[0], kwargs
-
-    def _pack_command(self, name, **kwargs):
-        msg = R_COMMANDS[name]
-        data = []
-        for k in msg[1]:
-            v = kwargs.get(k, "")
-            if v is None:
-                v = ""
-            data.append(str(v))
-        data = "\x00".join(data)
-        return "%s%s" % (struct.pack("!4sII", "\x00REQ", msg[0], len(data)), data)
 
     def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
