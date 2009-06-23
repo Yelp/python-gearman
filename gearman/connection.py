@@ -136,7 +136,6 @@ class GearmanConnection(object):
         return len(self.out_buffer)
 
     def send_command(self, name, kwargs={}):
-        # DEBUG and _D("GearmanConnection.send_command", name, kwargs)
         pkt = pack_command(name, **kwargs)
         self.out_buffer += pkt
         self.send()

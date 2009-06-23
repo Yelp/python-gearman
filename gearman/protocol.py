@@ -1,3 +1,4 @@
+import re
 import struct
 
 DEFAULT_PORT = 4730
@@ -37,6 +38,8 @@ COMMANDS = {
 # Create a mapping of function name -> id, args
 R_COMMANDS = dict((m[0], (mid, m[1])) for mid, m in COMMANDS.iteritems())
 
+txt_command_re = re.compile("^[\w\n\r]+")
+
 class ProtocolError(Exception):
     pass
 
@@ -46,25 +49,32 @@ def parse_command(data):
     """
     data_len = len(data)
 
-    if data_len < 12:
+    if data_len < 4:
         return None, None, 0
 
-    magic, typ, cmd_len = struct.unpack("!4sLL", data[0:12])
-    if data_len < 12 + cmd_len:
+    magic = data[:4]
+    if magic in ("\x00RES", "\x00REQ"):
+        if data_len >= 12:
+            magic, typ, cmd_len = struct.unpack("!4sLL", data[0:12])
+            if data_len < 12 + cmd_len:
+                return None, None, 0
+        else:
+            return None, None, 0
+    elif txt_command_re.match(data):
+        if '\n' in data:
+            cmd, data = data.split('\n', 1)
+            return cmd.strip(), data, len(cmd)+1
         return None, None, 0
-
-    data = data[12:12 + cmd_len]
-
-    if magic != "\x00RES":
+    else:
         raise ProtocolError("Malformed Magic")
 
-    msg_spec = COMMANDS.get(typ, None)
 
+    msg_spec = COMMANDS.get(typ, None)
     if not msg_spec:
         raise ProtocolError("Unknown message received: %d" % typ)
 
     nargs = len(msg_spec[1])
-    data = (nargs > 0) and data.split('\x00', nargs-1) or []
+    data = (nargs > 0) and data[12:12 + cmd_len].split('\x00', nargs-1) or []
     if len(data) != nargs:
         raise ProtocolError("Received wrong number of arguments to %s" % msg_spec[0])
 
