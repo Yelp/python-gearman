@@ -277,7 +277,7 @@ class GearmanTaskManager(object):
 
         for j in state.jobs:
             del self.jobs[j.handle]
-            del self.jobqueue[j.func][j]
+            self.jobqueue[j.func].remove(j)
 
     def new_handle(self):
         self.max_id += 1
