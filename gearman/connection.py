@@ -1,7 +1,9 @@
-import socket, struct, select, errno
+import socket, struct, select, errno, logging
 from time import time
 
 from gearman.protocol import DEFAULT_PORT, pack_command, parse_command
+
+log = logging.getLogger("gearman")
 
 class GearmanConnection(object):
     class ConnectionError(Exception): pass
@@ -101,8 +103,7 @@ class GearmanConnection(object):
                 raise
 
         if not data:
-            self.close()
-            self.is_dead = True
+            self.mark_dead()
             raise self.ConnectionError("connection died")
 
         self.in_buffer += data
@@ -174,15 +175,16 @@ class GearmanConnection(object):
                     raise
                 rd = wr = ex = []
 
-            for conn in ex:
-                pass # TODO
+            if self in ex:
+                self.mark_dead()
+                raise self.ConnectionError("connection died")
 
-            for conn in rd:
-                for cmd in conn.recv():
+            if self in rd:
+                for cmd in self.recv():
                     self._command_queue.insert(0, cmd)
 
-            for conn in wr:
-                conn.send()
+            if self in wr:
+                self.send()
 
         return len(self._command_queue) > 0 and self._command_queue.pop() or None
 
@@ -193,6 +195,10 @@ class GearmanConnection(object):
         except:
             pass
         self.sock = None
+
+    def mark_dead(self):
+        self.close()
+        self.is_dead = True
 
     def __repr__(self):
         return "<GearmanConnection %s:%d connected=%s dead=%s>" % (self.addr[0], self.addr[1], self.connected, self.is_dead)

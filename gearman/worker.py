@@ -1,8 +1,10 @@
-import random, sys, select
+import random, sys, select, logging
 from time import time
 
 from gearman.compat import *
 from gearman.client import GearmanBaseClient
+
+log = logging.getLogger("gearman")
 
 class GearmanJob(object):
     def __init__(self, conn, func, arg, handle):
@@ -29,10 +31,17 @@ class GearmanWorker(GearmanBaseClient):
         self.abilities = {}
 
     def register_function(self, name, func, timeout=None):
+        """Register a function with gearman with am optional default timeout.
+        """
         name = self.prefix + name
         self.abilities[name] = (func, timeout)
 
     def register_class(self, clas, name=None, decorator=None):
+        """Register all the methods of a class or instance object with
+        with gearman.
+        
+        'name' is an optional prefix for function names (name.method_name)
+        """
         obj = clas
         if not isinstance(clas, type):
             clas = clas.__class__
@@ -55,6 +64,8 @@ class GearmanWorker(GearmanBaseClient):
 
     @property
     def alive_connections(self):
+        """Return a shuffled list of connections that are alived,
+        and try to reconnect to dead connections if necessary."""
         random.shuffle(self.connections)
         all_dead = all(conn.is_dead for conn in self.connections)
         alive = []
@@ -73,7 +84,7 @@ class GearmanWorker(GearmanBaseClient):
     def stop(self):
         self.working = False
 
-    def _work_connection(self, conn, hooks):
+    def _work_connection(self, conn, hooks=None):
         conn.send_command("grab_job")
         cmd = ('noop',)
         while cmd and cmd[0] == 'noop':
@@ -83,11 +94,10 @@ class GearmanWorker(GearmanBaseClient):
             return False
 
         if cmd[0] != "job_assign":
-            # TODO: log this, alert someone, SCREAM FOR HELP, AAAHHHHHH
-            # if cmd[0] == "error":
-            #     msg = "Error from server: %d: %s" % (cmd[1]['err_code'], cmd[1]['err_text'])
-            # else:
-            #     msg = "Was expecting job_assigned or no_job, received %s" % cmd[0]
+            if cmd[0] == "error":
+                log.error("Error from server: %s: %s" % (cmd[1]['err_code'], cmd[1]['err_text']))
+            else:
+                log.error("Was expecting job_assigned or no_job, received %s" % cmd[0])
             conn.close()
             return False
 
@@ -95,7 +105,7 @@ class GearmanWorker(GearmanBaseClient):
         try:
             func = self.abilities[cmd[1]['func']][0]
         except KeyError:
-            # TODO: log this - received work for unknown func
+            log.error("Received work for unknown function %s" % cmd[1])
             return True
 
         if hooks:
@@ -105,31 +115,35 @@ class GearmanWorker(GearmanBaseClient):
         except Exception:
             if hooks:
                 hooks.fail(job, sys.exc_info())
-            job.fail() # TODO: handle ConnectionError
+            job.fail()
         else:
             if hooks:
                 hooks.complete(job, result)
-            job.complete(result) # TODO: handle ConnectionError
+            job.complete(result)
 
         return True
 
     def work(self, stop_if=None, hooks=None):
+        """Loop indefinitely working tasks from all connections."""
         self.working = True
         stop_if = stop_if or (lambda *a, **kw:False)
         last_job_time = time()
         while self.working:
             need_sleep = True
 
+            # Try to grab work from all alive connections
             for conn in self.alive_connections:
                 try:
                     worked = self._work_connection(conn, hooks)
                 except conn.ConnectionError:
-                    pass
+                    log.error("ConnectionError on %s" % conn)
                 else:
                     if worked:
                         last_job_time = time()
                         need_sleep = False
 
+            # If no tasks were handled then sleep and wait for the server
+            # to wake us with a 'noop'
             is_idle = False
             if need_sleep:
                 is_idle = True
@@ -144,6 +158,10 @@ class GearmanWorker(GearmanBaseClient):
                         raise
                 else:
                     is_idle = not bool(rd)
+
+                for c in ex:
+                    log.error("Exception on connection %s" % c)
+                    c.mark_dead()
 
             if stop_if(is_idle, last_job_time):
                 self.working = False
