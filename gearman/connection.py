@@ -162,10 +162,9 @@ class GearmanConnection(object):
 
         if timeout:
             end_time = time() + timeout
-        while len(self._command_queue) == 0:
+
+        while not self._command_queue:
             time_left = timeout and end_time - time() or 0.5
-            if time_left <= 0:
-                return []
 
             try:
                 rd, wr, ex = select.select([self], self.writable() and [self] or [], [self], time_left)
@@ -186,7 +185,12 @@ class GearmanConnection(object):
             if self in wr:
                 self.send()
 
-        return len(self._command_queue) > 0 and self._command_queue.pop() or None
+            if time_left <= 0:
+                break
+
+        if self._command_queue:
+            return self._command_queue.pop()
+        return None
 
     def close(self):
         self.connected = False

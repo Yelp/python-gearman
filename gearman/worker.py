@@ -31,7 +31,7 @@ class GearmanWorker(GearmanBaseClient):
         self.abilities = {}
 
     def register_function(self, name, func, timeout=None):
-        """Register a function with gearman with am optional default timeout.
+        """Register a function with gearman with an optional default timeout.
         """
         name = self.prefix + name
         self.abilities[name] = (func, timeout)
@@ -98,7 +98,7 @@ class GearmanWorker(GearmanBaseClient):
                 log.error("Error from server: %s: %s" % (cmd[1]['err_code'], cmd[1]['err_text']))
             else:
                 log.error("Was expecting job_assigned or no_job, received %s" % cmd[0])
-            conn.close()
+            conn.mark_dead()
             return False
 
         job = GearmanJob(conn, **cmd[1])
