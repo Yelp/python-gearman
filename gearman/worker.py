@@ -135,8 +135,8 @@ class GearmanWorker(GearmanBaseClient):
             for conn in self.alive_connections:
                 try:
                     worked = self._work_connection(conn, hooks)
-                except conn.ConnectionError:
-                    log.error("ConnectionError on %s" % conn)
+                except conn.ConnectionError, exc:
+                    log.error("ConnectionError on %s: %s" % (conn, exc))
                 else:
                     if worked:
                         last_job_time = time()

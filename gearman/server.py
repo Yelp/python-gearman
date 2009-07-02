@@ -35,7 +35,7 @@ class GearmanServerClient(asyncore.dispatcher):
         commands = []
         while True:
             try:
-                func, args, cmd_len = parse_command(self.in_buffer)
+                func, args, cmd_len = parse_command(self.in_buffer, response=False)
             except ProtocolError, exc:
                 logging.error("[%s] ProtocolError: %s" % (self.addr, str(exc)))
                 self.close()
@@ -124,7 +124,7 @@ class GearmanServerClient(asyncore.dispatcher):
         self.out_buffer += data
 
     def send_command(self, name, kwargs={}):
-        self.send_buffered(pack_command(name, **kwargs))
+        self.send_buffered(pack_command(name, response=True, **kwargs))
 
     def wakeup(self):
         self.send_command('noop')

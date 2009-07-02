@@ -43,7 +43,7 @@ txt_command_re = re.compile("^[\w\n\r]+")
 class ProtocolError(Exception):
     pass
 
-def parse_command(data):
+def parse_command(data, response=True):
     """Parse data and return (function name, argument dict, command size)
     or (None, None, data) if there's not enough data for a complete command.
     """
@@ -52,8 +52,13 @@ def parse_command(data):
     if data_len < 4:
         return None, None, 0
 
+    if response:
+        expected_magic = "\x00RES"
+    else:
+        expected_magic = "\x00REQ"
+
     magic = data[:4]
-    if magic in ("\x00RES", "\x00REQ"):
+    if magic == expected_magic:
         if data_len >= 12:
             magic, typ, cmd_len = struct.unpack("!4sLL", data[0:12])
             if data_len < 12 + cmd_len:
@@ -84,7 +89,7 @@ def parse_command(data):
 
     return msg_spec[0], kwargs, 12 + cmd_len
 
-def pack_command(name, **kwargs):
+def pack_command(name, response=False, **kwargs):
     msg = R_COMMANDS[name]
     data = []
     for k in msg[1]:
@@ -93,4 +98,8 @@ def pack_command(name, **kwargs):
             v = ""
         data.append(str(v))
     data = "\x00".join(data)
-    return "%s%s" % (struct.pack("!4sII", "\x00REQ", msg[0], len(data)), data)
+    if response:
+        magic = "\x00RES"
+    else:
+        magic = "\x00REQ"
+    return "%s%s" % (struct.pack("!4sII", magic, msg[0], len(data)), data)
