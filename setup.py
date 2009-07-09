@@ -2,9 +2,11 @@
 
 from distutils.core import setup
 
+from gearman import __version__ as version
+
 setup(
     name = 'gearman',
-    version = '1.3.1',
+    version = version,
     description = 'Gearman Library',
     author = 'Samuel Stauffer',
     author_email = 'samuel@descolada.com',
@@ -15,5 +17,6 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
+        'Topic :: Software Development :: Libraries :: Python Modules',
     ],
 )
