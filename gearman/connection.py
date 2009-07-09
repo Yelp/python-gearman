@@ -128,6 +128,8 @@ class GearmanConnection(object):
         try:
             nsent = self.sock.send(self.out_buffer)
         except socket.error, e:
+            if e.args[0] == errno.EWOULDBLOCK:
+                return len(self.out_buffer)
             self.close()
             self.is_dead = True
             raise self.ConnectionError(str(e))
