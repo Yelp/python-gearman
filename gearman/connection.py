@@ -130,8 +130,7 @@ class GearmanConnection(object):
         except socket.error, e:
             if e.args[0] == errno.EWOULDBLOCK:
                 return len(self.out_buffer)
-            self.close()
-            self.is_dead = True
+            self.mark_dead()
             raise self.ConnectionError(str(e))
 
         self.out_buffer = buffer(self.out_buffer, nsent)
