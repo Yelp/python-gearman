@@ -7,9 +7,12 @@ from gearman.connection import GearmanConnection
 from gearman.task import Task, Taskset
 
 class GearmanBaseClient(object):
-    class ServerUnavailable(Exception): pass
-    class CommandError(Exception): pass
-    class InvalidResponse(Exception): pass
+    class ServerUnavailable(Exception):
+        pass
+    class CommandError(Exception):
+        pass
+    class InvalidResponse(Exception):
+        pass
 
     def __init__(self, job_servers, prefix=None, pre_connect=False):
         """
@@ -28,12 +31,13 @@ class GearmanBaseClient(object):
                 try:
                     connection.connect()
                 except connection.ConnectionError:
-                    pass # TODO: connection IS marked as dead but perhaps we don't want it at all
+                    pass
             self.connections.append(connection)
             self.connections_by_hostport[connection.hostspec] = connection
 
 class GearmanClient(GearmanBaseClient):
-    class TaskFailed(Exception): pass
+    class TaskFailed(Exception):
+        pass
 
     def __call__(self, func, arg, uniq=None, **kwargs):
         return self.do_task(Task(func, arg, uniq, **kwargs))
@@ -51,8 +55,8 @@ class GearmanClient(GearmanBaseClient):
     def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
         """Submit a background task and return its handle."""
         task = Task(func, arg, uniq, background=True, high_priority=high_priority)
-        ts = Taskset([task])
-        self.do_taskset(ts)
+        taskset = Taskset([task])
+        self.do_taskset(taskset)
         return task.handle
 
     def get_server_from_hash(self, hsh):
@@ -143,20 +147,21 @@ class GearmanClient(GearmanBaseClient):
             rx_socks = [c for c in taskset.connections if c.readable()]
             tx_socks = [c for c in taskset.connections if c.writable()]
             try:
-                rd, wr, ex = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
-            except select.error, e:
+                rd_list, wr_list, ex_list = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
+            except select.error, exc:
                 # Ignore interrupted system call, reraise anything else
-                if e[0] != errno.EINTR:
+                if exc[0] != errno.EINTR:
                     raise
+                continue
 
-            for conn in ex:
+            for conn in ex_list:
                 pass # TODO
 
-            for conn in rd:
+            for conn in rd_list:
                 for cmd in conn.recv():
                     self._command_handler(taskset, conn, *cmd)
 
-            for conn in wr:
+            for conn in wr_list:
                 conn.send()
 
         # TODO: should we fail all tasks that didn't finish or leave that up to the caller?
