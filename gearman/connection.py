@@ -6,9 +6,10 @@ from gearman.protocol import DEFAULT_PORT, pack_command, parse_command
 log = logging.getLogger("gearman")
 
 class GearmanConnection(object):
-    class ConnectionError(Exception): pass
+    class ConnectionError(Exception):
+        pass
 
-    def __init__(self, host, port=DEFAULT_PORT, sock=None, timeout=None):
+    def __init__(self, host, port=DEFAULT_PORT, sock=None, timeout=None, reconnect_timeout=60*2):
         """
         A connection to a Gearman server.
         """
@@ -28,6 +29,7 @@ class GearmanConnection(object):
             self.addr = (host, port)
         self.hostspec = "%s:%d" % (host, port)
         self.timeout  = timeout
+        self.reconnect_timeout = reconnect_timeout
 
         self.is_dead = False
         self._reset_queues()
@@ -56,10 +58,10 @@ class GearmanConnection(object):
         self.sock.settimeout(self.timeout)
         try:
             self.sock.connect(self.addr)
-        except (socket.error, socket.timeout), e:
+        except (socket.error, socket.timeout), exc:
             self.sock = None
             self.is_dead = True
-            raise self.ConnectionError(str(e))
+            raise self.ConnectionError(str(exc))
 
         self._reset_queues()
         self.is_dead = False
@@ -78,7 +80,7 @@ class GearmanConnection(object):
             return self._is_dead
         def fset(self, value):
             self._is_dead = value
-            self._retry_at = value and time() + 60*2 or None # TODO: should be configurable
+            self._retry_at = value and time() + self.reconnect_timeout or None
         return locals()
     is_dead = property(**is_dead())
 
@@ -94,10 +96,10 @@ class GearmanConnection(object):
         data = ''
         try:
             data = self.sock.recv(size)
-        except socket.error, e:
-            if e.args[0] == errno.EWOULDBLOCK:
+        except socket.error, exc:
+            if exc.args[0] == errno.EWOULDBLOCK:
                 return
-            if e.args[0] == errno.ECONNRESET:
+            if exc.args[0] == errno.ECONNRESET:
                 data = None
             else:
                 raise
@@ -127,11 +129,11 @@ class GearmanConnection(object):
 
         try:
             nsent = self.sock.send(self.out_buffer)
-        except socket.error, e:
-            if e.args[0] == errno.EWOULDBLOCK:
+        except socket.error, exc:
+            if exc.args[0] == errno.EWOULDBLOCK:
                 return len(self.out_buffer)
             self.mark_dead()
-            raise self.ConnectionError(str(e))
+            raise self.ConnectionError(str(exc))
 
         self.out_buffer = buffer(self.out_buffer, nsent)
 
@@ -145,12 +147,12 @@ class GearmanConnection(object):
     def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
             try:
-                wr = select.select([], [self], [], timeout)[1] # TODO: exc list
-            except select.error, e:
+                wr_list = select.select([], [self], [], timeout)[1] # TODO: exc list
+            except select.error, exc:
                 # Ignore interrupted system call, reraise anything else
-                if e[0] != 4:
+                if exc[0] != 4:
                     raise
-            if self in wr:
+            if self in wr_list:
                 self.send()
 
     def send_command_blocking(self, cmd_name, cmd_args={}, timeout=None):
@@ -168,22 +170,22 @@ class GearmanConnection(object):
             time_left = timeout and end_time - time() or 0.5
 
             try:
-                rd, wr, ex = select.select([self], self.writable() and [self] or [], [self], time_left)
-            except select.error, e:
+                rd_list, wr_list, ex_list = select.select([self], self.writable() and [self] or [], [self], time_left)
+            except select.error, exc:
                 # Ignore interrupted system call, reraise anything else
-                if e[0] != 4:
+                if exc[0] != 4:
                     raise
-                rd = wr = ex = []
+                rd_list = wr_list = ex_list = []
 
-            if self in ex:
+            if self in ex_list:
                 self.mark_dead()
                 raise self.ConnectionError("connection died")
 
-            if self in rd:
+            if self in rd_list:
                 for cmd in self.recv():
                     self._command_queue.insert(0, cmd)
 
-            if self in wr:
+            if self in wr_list:
                 self.send()
 
             if time_left <= 0:
@@ -206,4 +208,5 @@ class GearmanConnection(object):
         self.is_dead = True
 
     def __repr__(self):
-        return "<GearmanConnection %s:%d connected=%s dead=%s>" % (self.addr[0], self.addr[1], self.connected, self.is_dead)
+        return ("<GearmanConnection %s:%d connected=%s dead=%s>" %
+            (self.addr[0], self.addr[1], self.connected, self.is_dead))
