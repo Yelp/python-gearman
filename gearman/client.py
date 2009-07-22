@@ -26,7 +26,7 @@ class GearmanBaseClient(object):
         self.connections = []
         self.connections_by_hostport = {}
         for serv in servers:
-            connection = GearmanConnection(serv)
+            connection = GearmanConnection(serv,timeout=2)
             if pre_connect:
                 try:
                     connection.connect()
