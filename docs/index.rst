@@ -27,23 +27,16 @@ Example worker::
     worker.register_function("echo", lambda job:job.arg)
     worker.work()
 
-Example client::
-
-    Single task::
+Example client (single task)::
 
         client = GearmanClient(["127.0.0.1"])
         res = client.do_task(Task("echo", "foo"))
         assert res == "foo"
 
-    Multiple parallel tasks::
+Example client (multiple parallel tasks)::
 
-        client = GearmanClient(["127.0.0.1"])
-        ts = Taskset([Task(func="echo", arg="foo")])
-        client.do_taskset(ts)
-        for task in ts:
-            assert ts.result == "foo"
-    >>> from scrubber import Scrubber
-    >>> scrubber = Scrubber(autolink=True)
-    >>> scrubber.scrub("<script>alert('foo');</script><p>bar, www.google.com</p>")
-    u'<p>bar, <a href="http://www.google.com" rel="nofollow">www.google.com</a></p>'
-    >>>
+    client = GearmanClient(["127.0.0.1"])
+    ts = Taskset([Task(func="echo", arg="foo")])
+    client.do_taskset(ts)
+    for task in ts:
+        assert ts.result == "foo"
