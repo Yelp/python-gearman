@@ -2,7 +2,7 @@
 python-gearman
 ==============
 
-python-gearman is a pure Python Gearman library.
+Pure Python Gearman library.
 
 See http://www.danga.com/gearman/ for more about Gearman.
 
