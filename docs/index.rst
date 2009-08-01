@@ -36,7 +36,10 @@ Example client (single task)::
 Example client (multiple parallel tasks)::
 
     client = GearmanClient(["127.0.0.1"])
-    ts = Taskset([Task(func="echo", arg="foo")])
+    ts = Taskset([
+        Task(func="echo", arg="foo"),
+        Task(func="echo", arg="bar"),
+    ])
     client.do_taskset(ts)
-    for task in ts:
-        assert ts.result == "foo"
+    for task in ts.values():
+        assert task.result == task.arg
