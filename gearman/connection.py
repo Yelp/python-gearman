@@ -167,7 +167,7 @@ class GearmanConnection(object):
             end_time = time() + timeout
 
         while not self._command_queue:
-            time_left = timeout and end_time - time() or 0.5
+            time_left = max(0, timeout and end_time - time() or 0.5)
 
             try:
                 rd_list, wr_list, ex_list = select.select([self], self.writable() and [self] or [], [self], time_left)
