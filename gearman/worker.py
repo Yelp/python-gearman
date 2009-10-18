@@ -64,7 +64,7 @@ class GearmanWorker(GearmanBaseClient):
 
     @property
     def alive_connections(self):
-        """Return a shuffled list of connections that are alived,
+        """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
         random.shuffle(self.connections)
         all_dead = all(conn.is_dead for conn in self.connections)
@@ -76,6 +76,7 @@ class GearmanWorker(GearmanBaseClient):
                 except conn.ConnectionError:
                     continue
                 else:
+                    conn.sleeping = False
                     self._set_abilities(conn)
             if conn.connected:
                 alive.append(conn)
@@ -133,6 +134,9 @@ class GearmanWorker(GearmanBaseClient):
 
             # Try to grab work from all alive connections
             for conn in self.alive_connections:
+                if conn.sleeping:
+                    continue
+
                 try:
                     worked = self._work_connection(conn, hooks)
                 except conn.ConnectionError, exc:
@@ -150,6 +154,7 @@ class GearmanWorker(GearmanBaseClient):
                 alive = self.alive_connections
                 for conn in alive:
                     conn.send_command("pre_sleep")
+                    conn.sleeping = True
                 try:
                     rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
                 except select.error, e:
@@ -159,9 +164,12 @@ class GearmanWorker(GearmanBaseClient):
                 else:
                     is_idle = not bool(rd)
 
-                for c in ex:
-                    log.error("Exception on connection %s" % c)
-                    c.mark_dead()
+                    for c in ex:
+                        log.error("Exception on connection %s" % c)
+                        c.mark_dead()
+
+                    for c in rd:
+                        c.sleeping = False
 
             if stop_if(is_idle, last_job_time):
                 self.working = False
