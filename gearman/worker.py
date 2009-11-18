@@ -153,8 +153,9 @@ class GearmanWorker(GearmanBaseClient):
                 is_idle = True
                 alive = self.alive_connections
                 for conn in alive:
-                    conn.send_command("pre_sleep")
-                    conn.sleeping = True
+                    if not conn.sleeping:
+                        conn.send_command("pre_sleep")
+                        conn.sleeping = True
                 try:
                     rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
                 except select.error, e:

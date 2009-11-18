@@ -3,7 +3,7 @@ Gearman client.
 """
 
 __author__ = "Samuel Stauffer <samuel@descolada.com>"
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 __license__ = "MIT"
 
 from gearman.client import GearmanClient
