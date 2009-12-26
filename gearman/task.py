@@ -1,26 +1,54 @@
 import random
+import uuid
+
+# Constant that indicates to gearmand the task should be interpeted as unique iff the arg matches.
+UNIQ_DATA_CHAR = '-'
 
 class Task(object):
     hooks = ('on_complete', 'on_fail', 'on_retry', 'on_status', 'on_post')
 
     def __init__(self, func, arg, uniq=None, background=False, high_priority=False,
                  timeout=None, retry_count=0, **kwargs):
+        """Build a task
+        
+            Arguments
+                func - (string) Name of the function this task should execute
+                arg - (string) Arguments to the function
+                uniq - How should this Task be collated together on the remote side ?
+                        None - (default) all tasks are unique
+                        True - Task should be treated as unique based on the data
+                        False - All tasks of the same function should be collated together
+                        <string> - All tasks of this name should be collated together
+                      Really only applies to background tasks.
+                background - (bool) Indicates the task should be executed in the background and the client should return right away.
+                high_priority - (bool) Put into high priority queue (only useful if some tasks of this functiona are not)
+                timeout - (integer, seconds) How long should we wait for the task to complete
+                retry_count - (integer) How many times to retry the task after failing.
+        """
         for hook in self.hooks:
             setattr(self, hook, hook in kwargs and [kwargs[hook]] or [])
 
         self.func          = func
         self.arg           = arg
-        self.uniq          = '-' if uniq == True else uniq 
         self.background    = background
         self.high_priority = high_priority
         self.timeout       = timeout
         self.retry_count   = retry_count
 
+        if uniq is None:
+            self.uniq = uuid.uuid1().hex
+        elif uniq is True:
+            self.uniq = UNIQ_DATA_CHAR
+        elif uniq is False:
+            self.uniq = None
+        else:
+            self.uniq = uniq
+
         self.retries_done = 0
         self.is_finished  = False
         self.handle       = None
         self.result       = None
-        self._hash        = hash(self.func + (self.uniq == '-' and self.arg or self.uniq or str(random.randint(0, 999999))))
+        self._hash        = hash(self.func + ((self.uniq == UNIQ_DATA_CHAR and self.arg) or self.uniq or str(random.randint(0, 999999))))
 
     def __hash__(self):
         return self._hash
