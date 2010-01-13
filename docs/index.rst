@@ -15,7 +15,7 @@ Stable releases of python-gearman can be installed using
 Source
 ======
 
-You can find the latest version of scrubber at
+You can find the latest version at
 http://github.com/samuel/python-gearman
 
 Example
