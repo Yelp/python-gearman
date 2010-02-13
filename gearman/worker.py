@@ -3,6 +3,7 @@ from time import time
 
 from gearman.compat import *
 from gearman.client import GearmanBaseClient
+from gearman.protocol import *
 
 log = logging.getLogger("gearman")
 
@@ -14,13 +15,13 @@ class GearmanJob(object):
         self.conn = conn
 
     def status(self, numerator, denominator):
-        self.conn.send_command_blocking("work_status", dict(handle=self.handle, numerator=numerator, denominator=denominator))
+        self.conn.send_command_blocking(GEARMAN_COMMAND_WORK_STATUS, dict(handle=self.handle, numerator=numerator, denominator=denominator))
 
     def complete(self, result):
-        self.conn.send_command_blocking("work_complete", dict(handle=self.handle, result=result))
+        self.conn.send_command_blocking(GEARMAN_COMMAND_WORK_COMPLETE, dict(handle=self.handle, result=result))
 
     def fail(self):
-        self.conn.send_command_blocking("work_fail", dict(handle=self.handle))
+        self.conn.send_command_blocking(GEARMAN_COMMAND_WORK_FAIL, dict(handle=self.handle))
 
     def __repr__(self):
         return "<GearmanJob func=%s arg=%s handle=%s conn=%s>" % (self.func, self.arg, self.handle, repr(self.conn))
@@ -54,9 +55,9 @@ class GearmanWorker(GearmanBaseClient):
                 self.register_function("%s.%s" % (name, k), v)
 
     def _can_do(self, connection, name, timeout=None):
-        cmd_name = (timeout is None) and "can_do" or "can_do_timeout"
+        cmd_type = (timeout is None) and GEARMAN_COMMAND_CAN_DO or GEARMAN_COMMAND_CAN_DO_TIMEOUT
         cmd_args = (timeout is None) and dict(func=name) or dict(func=name, timeout=timeout)
-        connection.send_command(cmd_name, cmd_args)
+        connection.send_command(cmd_type, cmd_args)
 
     def _set_abilities(self, conn):
         for name, args in self.abilities.iteritems():
@@ -86,27 +87,29 @@ class GearmanWorker(GearmanBaseClient):
         self.working = False
 
     def _work_connection(self, conn, hooks=None):
-        conn.send_command("grab_job")
-        cmd = ('noop',)
-        while cmd and cmd[0] == 'noop':
-            cmd = conn.recv_blocking(timeout=0.5)
+        conn.send_command(GEARMAN_COMMAND_GRAB_JOB)
+        cmd_type = GEARMAN_COMMAND_NOOP
+        cmd_args = {}
+        while cmd_type and cmd_type == GEARMAN_COMMAND_NOOP:
+            cmd_type, cmd_args = conn.recv_blocking(timeout=0.5)
 
-        if not cmd or cmd[0] == 'no_job':
+        if not cmd_type or cmd_type == GEARMAN_COMMAND_NO_JOB:
             return False
 
-        if cmd[0] != "job_assign":
-            if cmd[0] == "error":
-                log.error("Error from server: %s: %s" % (cmd[1]['err_code'], cmd[1]['err_text']))
+
+        if cmd_type != GEARMAN_COMMAND_JOB_ASSIGN:
+            if cmd_type == GEARMAN_COMMAND_ERROR:
+                log.error("Error from server: %s: %s" % (cmd_args['err_code'], cmd_args['err_text']))
             else:
-                log.error("Was expecting job_assigned or no_job, received %s" % cmd[0])
+                log.error("Was expecting job_assigned or no_job, received %s" % cmd_type)
             conn.mark_dead()
             return False
 
-        job = GearmanJob(conn, **cmd[1])
+        job = GearmanJob(conn, **cmd_args)
         try:
-            func = self.abilities[cmd[1]['func']][0]
+            func = self.abilities[cmd_args['func']][0]
         except KeyError:
-            log.error("Received work for unknown function %s" % cmd[1])
+            log.error("Received work for unknown function %s" % cmd_args)
             return True
 
         if hooks:
@@ -154,7 +157,7 @@ class GearmanWorker(GearmanBaseClient):
                 alive = self.alive_connections
                 for conn in alive:
                     if not conn.sleeping:
-                        conn.send_command("pre_sleep")
+                        conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
                         conn.sleeping = True
                 try:
                     rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)

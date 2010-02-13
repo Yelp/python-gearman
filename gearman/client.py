@@ -5,6 +5,7 @@ import time, select, errno
 from gearman.compat import *
 from gearman.connection import GearmanConnection
 from gearman.task import Task, Taskset
+from gearman.protocol import *
 
 class GearmanBaseClient(object):
     class ServerUnavailable(Exception):
@@ -83,31 +84,32 @@ class GearmanClient(GearmanBaseClient):
     def _submit_task(self, task):
         server = self.get_server_from_hash(hash(task))
         if task.background:
-            func = "submit_job_bg"
+            func = GEARMAN_COMMAND_SUBMIT_JOB_BG
         elif task.high_priority:
-            func = "submit_job_high"
+            func = GEARMAN_COMMAND_SUBMIT_JOB_HIGH
         else:
-            func = "submit_job"
+            func = GEARMAN_COMMAND_SUBMIT_JOB
         server.send_command(func,
             dict(func=self.prefix + task.func, arg=task.arg, uniq=task.uniq))
         server.waiting_for_handles.insert(0, task)
         return server
 
-    def _command_handler(self, taskset, conn, cmd, args):
-        # DEBUG and _D( "RECEIVED COMMAND:", cmd, args )
+    def _command_handler(self, taskset, conn, cmd_type, cmd_args):
+        # DEBUG and _D( "RECEIVED COMMAND:", cmd_type, args )
 
-        handle = ('handle' in args) and ("%s//%s" % (conn.hostspec, args['handle'])) or None
+        handle = ('handle' in cmd_args) and ("%s//%s" % (conn.hostspec, cmd_args['handle'])) or None
 
-        if cmd != 'job_created' and handle:
+        if cmd_type != GEARMAN_COMMAND_JOB_CREATED and handle:
             task = taskset.get( taskset.handles.get(handle, None), None)
             if not task:
                 return
             if task.is_finished:
-                raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd))
+                raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd_type))
 
-        if cmd == 'work_complete':
-            task.complete(args['result'])
-        elif cmd == 'work_fail':
+        if cmd_type == GEARMAN_COMMAND_WORK_COMPLETE:
+            task.complete(cmd_args['result'])
+
+        elif cmd_type == GEARMAN_COMMAND_WORK_FAIL:
             if task.retries_done < task.retry_count:
                 task.retries_done += 1
                 task.retrying()
@@ -115,16 +117,19 @@ class GearmanClient(GearmanBaseClient):
                 taskset.connections.add(self._submit_task(task))
             else:
                 task.fail()
-        elif cmd == 'work_status':
-            task.status(int(args['numerator']), int(args['denominator']))
-        elif cmd == 'job_created':
+
+        elif cmd_type == GEARMAN_COMMAND_WORK_STATUS:
+            task.status(int(cmd_args['numerator']), int(cmd_args['denominator']))
+
+        elif cmd_type == GEARMAN_COMMAND_JOB_CREATED:
             task = conn.waiting_for_handles.pop()
             task.handle = handle
             taskset.handles[handle] = hash( task )
             if task.background:
                 task.is_finished = True
-        elif cmd == 'error':
-            raise self.CommandError(str(args)) # TODO make better
+
+        elif cmd_type == GEARMAN_COMMAND_ERROR:
+            raise self.CommandError(str(cmd_args)) # TODO make better
         else:
             raise Exception("Unexpected command: %s" % cmd)
 
@@ -173,5 +178,5 @@ class GearmanClient(GearmanBaseClient):
 
         server = self.connections_by_hostport[hostport]
         server.connect() # Make sure the connection is up (noop if already connected)
-        server.send_command("get_status", dict(handle=shandle))
+        server.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=shandle))
         return server.recv_blocking()[1]

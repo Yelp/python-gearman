@@ -2,7 +2,7 @@
 
 import socket
 
-from gearman.connection import DEFAULT_PORT, GearmanConnection
+from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection
 
 ConnectionError = GearmanConnection.ConnectionError
 
@@ -10,10 +10,10 @@ class GearmanManager(object):
     def __init__(self, server, timeout=5):
         if ':' in server:
             host, port = (server.split(':') + [0])[:2]
-            port = int(port) or DEFAULT_PORT
+            port = int(port) or DEFAULT_GEARMAN_PORT
             self.addr = (host, port)
         else:
-            self.addr = (server, DEFAULT_PORT)
+            self.addr = (server, DEFAULT_GEARMAN_PORT)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(timeout)

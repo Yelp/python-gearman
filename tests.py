@@ -6,6 +6,7 @@ from gearman.connection import GearmanConnection
 from gearman.manager import GearmanManager
 from gearman.server import GearmanServer
 from gearman.task import Task
+from gearman.protocol import *
 
 job_servers = ["127.0.0.1"]
 
@@ -62,14 +63,14 @@ class TestConnection(GearmanTestCase):
         self.stop_server()
 
     def testNoArgs(self):
-        self.connection.send_command_blocking("echo_req")
-        cmd = self.connection.recv_blocking()
-        self.failUnlessEqual(cmd[0], "echo_res")
+        self.connection.send_command_blocking(GEARMAN_COMMAND_ECHO_REQ)
+        cmd_type, cmd_args = self.connection.recv_blocking()
+        self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_ECHO_RES)
 
     def testWithArgs(self):
-        self.connection.send_command_blocking("submit_job", dict(func="echo", uniq="", arg="tea"))
-        cmd = self.connection.recv_blocking()
-        self.failUnlessEqual(cmd[0], 'job_created')
+        self.connection.send_command_blocking(GEARMAN_COMMAND_SUBMIT_JOB, dict(func="echo", uniq="", arg="tea"))
+        cmd_type, cmd_args = self.connection.recv_blocking()
+        self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_JOB_CREATED)
 
 class TestGearman(GearmanTestCase):
     def setUp(self):

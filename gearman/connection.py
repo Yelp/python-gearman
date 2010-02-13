@@ -1,7 +1,7 @@
 import socket, struct, select, errno, logging
 from time import time
 
-from gearman.protocol import DEFAULT_PORT, pack_command, parse_command
+from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, pack_command, parse_command
 
 log = logging.getLogger("gearman")
 
@@ -9,7 +9,7 @@ class GearmanConnection(object):
     class ConnectionError(Exception):
         pass
 
-    def __init__(self, host, port=DEFAULT_PORT, sock=None, timeout=None, reconnect_timeout=60*2):
+    def __init__(self, host, port=DEFAULT_GEARMAN_PORT, sock=None, timeout=None, reconnect_timeout=60*2):
         """
         A connection to a Gearman server.
         """
@@ -22,10 +22,10 @@ class GearmanConnection(object):
 
         if ':' in host:
             host, port = (host.split(':') + [0])[:2]
-            port = int(port) or DEFAULT_PORT
+            port = int(port) or DEFAULT_GEARMAN_PORT
             self.addr = (host, port)
         else:
-            port = port or DEFAULT_PORT
+            port = port or DEFAULT_GEARMAN_PORT
             self.addr = (host, port)
         self.hostspec = "%s:%d" % (host, port)
         self.timeout  = timeout
@@ -111,12 +111,12 @@ class GearmanConnection(object):
         self.in_buffer += data
 
         commands = []
-        while len(self.in_buffer) >= 12:
-            func, args, cmd_len = parse_command(self.in_buffer)
+        while len(self.in_buffer) >= COMMAND_HEADER_SIZE:
+            cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer)
             if not cmd_len:
                 break
 
-            commands.append((func, args))
+            commands.append((cmd_type, cmd_args))
 
             self.in_buffer = buffer(self.in_buffer, cmd_len)
         return commands
@@ -182,8 +182,8 @@ class GearmanConnection(object):
                 raise self.ConnectionError("connection died")
 
             if self in rd_list:
-                for cmd in self.recv():
-                    self._command_queue.insert(0, cmd)
+                for cmd_type, cmd_args in self.recv():
+                    self._command_queue.insert(0, (cmd_type, cmd_args))
 
             if self in wr_list:
                 self.send()

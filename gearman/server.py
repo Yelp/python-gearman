@@ -5,7 +5,7 @@ import time
 import asyncore
 import socket
 from collections import deque
-from gearman.protocol import DEFAULT_PORT, ProtocolError, parse_command, pack_command
+from gearman.protocol import *
 
 class GearmanServerClient(asyncore.dispatcher):
     def __init__(self, sock, addr, server, manager):
@@ -35,64 +35,69 @@ class GearmanServerClient(asyncore.dispatcher):
         commands = []
         while True:
             try:
-                func, args, cmd_len = parse_command(self.in_buffer, response=False)
+                cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer, response=False)
             except ProtocolError, exc:
                 logging.error("[%s] ProtocolError: %s" % (self.addr, str(exc)))
                 self.close()
                 return
 
-            if not func:
+            if not cmd_type:
                 break
 
-            self.handle_command(func, args)
+            self.handle_command(cmd_type, cmd_args)
 
             self.in_buffer = buffer(self.in_buffer, cmd_len)
 
-    def handle_command(self, func, args):
-        if func == "echo_req":
-            self.send_command("echo_res", args)
-        elif func == "submit_job":
-            handle = self.manager.add_job(self, **args)
-            self.send_command("job_created", {'handle': handle})
-        elif func == "submit_job_high":
-            handle = self.manager.add_job(self, high=True, **args)
-            self.send_command("job_created", {'handle': handle})
-        elif func == "submit_job_bg":
-            handle = self.manager.add_job(self, bg=True, **args)
-            self.send_command("job_created", {'handle': handle})
-        elif func in ("can_do", "can_do_timeout"):
-            self.manager.can_do(self, **args)
-        elif func == "cant_do":
-            self.manager.cant_do(self, **args)
-        elif func == "grab_job":
+    def handle_command(self, cmd_type, cmd_args):
+        if cmd_type == GEARMAN_COMMAND_ECHO_REQ:
+            self.send_command(GEARMAN_COMMAND_ECHO_RES, cmd_args)
+
+        elif cmd_type == GEARMAN_COMMAND_SUBMIT_JOB:
+            handle = self.manager.add_job(self, **cmd_args)
+            self.send_command(GEARMAN_COMMAND_JOB_CREATED, {'handle': handle})
+
+        elif cmd_type == GEARMAN_COMMAND_SUBMIT_JOB_HIGH:
+            handle = self.manager.add_job(self, high=True, **cmd_args)
+            self.send_command(GEARMAN_COMMAND_JOB_CREATED, {'handle': handle})
+
+        elif cmd_type == GEARMAN_COMMAND_SUBMIT_JOB_BG:
+            handle = self.manager.add_job(self, bg=True, **cmd_args)
+            self.send_command(GEARMAN_COMMAND_JOB_CREATED, {'handle': handle})
+
+        elif cmd_type in (GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_CAN_DO_TIMEOUT):
+            self.manager.can_do(self, **cmd_args)
+        elif cmd_type == GEARMAN_COMMAND_CANT_DO:
+            self.manager.cant_do(self, **cmd_args)
+        elif cmd_type == GEARMAN_COMMAND_GRAB_JOB:
             job = self.manager.grab_job(self)
             if job:
-                self.send_command("job_assign", {'handle':job.handle, 'func':job.func, 'arg':job.arg})
+                self.send_command(GEARMAN_COMMAND_JOB_ASSIGN, {'handle':job.handle, 'func':job.func, 'arg':job.arg})
             else:
-                self.send_command("no_job")
-        elif func == "pre_sleep":
+                self.send_command(GEARMAN_COMMAND_NO_JOB)
+        elif cmd_type == GEARMAN_COMMAND_PRE_SLEEP:
             if not self.manager.sleep(self):
                 self.wakeup()
-        elif func == "work_complete":
-            self.manager.work_complete(self, **args)
-        elif func == "work_fail":
-            self.manager.work_fail(self, **args)
+        elif cmd_type == GEARMAN_COMMAND_WORK_COMPLETE:
+            self.manager.work_complete(self, **cmd_args)
+        elif cmd_type == GEARMAN_COMMAND_WORK_FAIL:
+            self.manager.work_fail(self, **cmd_args)
+
         # Text commands
-        elif func == "status":
+        elif cmd_type == "status":
             status = self.manager.get_status(self)
             for s in status:
                 self.send_buffered("%s\t%d\t%d\t%d\n" % (s['func'], s['num_jobs'], s['num_working'], s['num_workers']))
             self.send_buffered(".\n")
-        elif func == "version":
+        elif cmd_type == "version":
             from gearman import __version__
             self.send_buffered("%s\n" % __version__)
-        elif func == "workers":
+        elif cmd_type == "workers":
             for client, state in self.manager.states.items():
                 # if not state.abilities:
                 #     continue
                 self.send_buffered("%d %s %s : %s\n" % (client.socket.fileno(), client.addr[0], state.client_id, " ".join(state.abilities)))
             self.send_buffered(".\n")
-        # elif func == "maxqueue":
+        # elif cmd_type == "maxqueue":
         # 
         #     This sets the maximum queue size for a function. If no size is
         #     given, the default is used. If the size is negative, then the queue
@@ -102,11 +107,11 @@ class GearmanServerClient(asyncore.dispatcher):
         #     - Function name.
         #     - Optional maximum queue size.
         # 
-        elif func == "shutdown":
+        elif cmd_type == "shutdown":
             # TODO: optional "graceful" argument - close listening socket and let all existing connections complete
             self.server.stop()
         else:
-            logging.error("Unhandled command %s: %s" % (func, args))
+            logging.error("Unhandled command %s: %s" % (func, cmd_args))
 
     def handle_write(self):
         if len(self.out_buffer) == 0:
@@ -127,13 +132,13 @@ class GearmanServerClient(asyncore.dispatcher):
         self.send_buffered(pack_command(name, response=True, **kwargs))
 
     def wakeup(self):
-        self.send_command('noop')
+        self.send_command(GEARMAN_COMMAND_NOOP)
 
     def work_complete(self, handle, result):
-        self.send_command('work_complete', {'handle':handle, 'result':result})
+        self.send_command(GEARMAN_COMMAND_WORK_COMPLETE, {'handle':handle, 'result':result})
 
     def work_fail(self, handle):
-        self.send_command('work_fail', {'handle':handle})
+        self.send_command(GEARMAN_COMMAND_WORK_FAIL, {'handle':handle})
 
 class Job(object):
     def __init__(self, owner, handle, func, arg, bg=False, high=False, uniq=None):
@@ -284,7 +289,7 @@ class GearmanTaskManager(object):
         return str(self.max_id)
 
 class GearmanServer(asyncore.dispatcher):
-    def __init__(self, host="127.0.0.1", port=DEFAULT_PORT):
+    def __init__(self, host="127.0.0.1", port=DEFAULT_GEARMAN_PORT):
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.set_reuse_addr()
