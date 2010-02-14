@@ -13,13 +13,13 @@ job_servers = ["127.0.0.1"]
 class FailedError(Exception):
     pass
 
-def echo(job):
+def echo_fxn(job):
     return job.arg
 
-def fail(job):
+def fail_fxn(job):
     raise FailedError()
 
-def sleep(job):
+def sleep_fxn(job):
     time.sleep(float(job.arg))
     return job.arg
 
@@ -77,9 +77,9 @@ class TestGearman(GearmanTestCase):
         self.start_server()
         self.last_exception = (None, None)
         self.worker = GearmanWorker(job_servers)
-        self.worker.register_function("echo", echo)
-        self.worker.register_function("fail", fail)
-        self.worker.register_function("sleep", sleep, timeout=1)
+        self.worker.register_function("echo", echo_fxn)
+        self.worker.register_function("fail", fail_fxn)
+        self.worker.register_function("sleep", sleep_fxn, timeout=1)
         self.worker.register_class(ObjectWorker())
         self.worker.register_class(ClassWorker())
         class Hooks(object):

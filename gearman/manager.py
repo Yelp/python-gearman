@@ -3,6 +3,7 @@
 import socket
 
 from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection
+from gearman.protocol import *
 
 ConnectionError = GearmanConnection.ConnectionError
 
@@ -34,22 +35,22 @@ class GearmanManager(object):
                 return buf.split('\n')[:-2]
 
     def maxqueue(self, func, max_size):
-        return self.send_command("maxqueue %s %s" % (func, max_size)) == "OK"
+        return self.send_command("%s %s %s" % (GEARMAN_SERVER_COMMAND_MAXQUEUE, func, max_size)) == "OK"
 
     def status(self):
-        status = (s.rsplit('\t', 3) for s in self.send_command("status", True))
+        status = (s.rsplit('\t', 3) for s in self.send_command(GEARMAN_SERVER_COMMAND_STATUS, True))
         return dict(
             (s[0], {'queued':int(s[1]), 'running':int(s[2]), 'workers':int(s[3])})
             for s in status)
 
     def shutdown(self, graceful):
-        return self.send_command(graceful and "shutdown graceful" or "shutdown") == "OK"
+        return self.send_command(graceful and "shutdown graceful" or GEARMAN_SERVER_COMMAND_SHUTDOWN) == "OK"
 
     def version(self):
-        return self.send_command("version")
+        return self.send_command(GEARMAN_SERVER_COMMAND_VERSION)
 
     def workers(self):
-        workers = (w.split(' ') for w in self.send_command("workers", True))
+        workers = (w.split(' ') for w in self.send_command(GEARMAN_SERVER_COMMAND_WORKERS, True))
         return [
             {
                 'fd': int(w[0]),

@@ -2,6 +2,11 @@ import re
 import struct
 
 DEFAULT_GEARMAN_PORT = 4730
+
+NULL_CHAR = "\x00"
+MAGIC_RES_STRING = "%sRES" % NULL_CHAR
+MAGIC_REQ_STRING = "%sREQ" % NULL_CHAR
+
 COMMAND_HEADER_SIZE = 12
 
 GEARMAN_COMMAND_CAN_DO = 1
@@ -35,7 +40,7 @@ GEARMAN_COMMAND_ERROR = 19
 
 GEARMAN_COMMAND_ALL_YOURS = 24
 
-COMMANDS = {
+COMMAND_PARAMS = {
     GEARMAN_COMMAND_CAN_DO: ["func"],
     GEARMAN_COMMAND_CAN_DO_TIMEOUT: ["func", "timeout"],
     GEARMAN_COMMAND_CANT_DO: ["func"],
@@ -68,9 +73,11 @@ COMMANDS = {
     GEARMAN_COMMAND_ALL_YOURS: [],
 }
 
-NULL_CHAR = "\x00"
-MAGIC_RES_STRING = "%sRES" % NULL_CHAR
-MAGIC_REQ_STRING = "%sREQ" % NULL_CHAR
+GEARMAN_SERVER_COMMAND_STATUS = "status"
+GEARMAN_SERVER_COMMAND_VERSION = "version"
+GEARMAN_SERVER_COMMAND_WORKERS = "workers"
+GEARMAN_SERVER_COMMAND_MAXQUEUE = "maxqueue"
+GEARMAN_SERVER_COMMAND_SHUTDOWN = "shutdown"
 
 txt_command_re = re.compile("^[\w\n\r]+")
 
@@ -115,7 +122,7 @@ def parse_command(databuffer, response=True):
     if databuffer_size < expected_packet_size:
         return None, None, 0
 
-    cmd_params = COMMANDS.get(cmd_type, None)
+    cmd_params = COMMAND_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown message received: %d" % cmd_type)
 
@@ -133,7 +140,7 @@ def parse_command(databuffer, response=True):
     return cmd_type, cmd_args, expected_packet_size
 
 def pack_command(cmd_type, response=False, **kwargs):
-    cmd_params = COMMANDS.get(cmd_type, None)
+    cmd_params = COMMAND_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown message received: %s" % cmd_type)
 

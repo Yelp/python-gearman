@@ -1,6 +1,7 @@
 import socket, struct, select, errno, logging
 from time import time
 
+import gearman.util
 from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, pack_command, parse_command
 
 log = logging.getLogger("gearman")
@@ -146,13 +147,8 @@ class GearmanConnection(object):
 
     def flush(self, timeout=None): # TODO: handle connection failures
         while self.writable():
-            try:
-                wr_list = select.select([], [self], [], timeout)[1] # TODO: exc list
-            except select.error, exc:
-                # Ignore interrupted system call, reraise anything else
-                if exc[0] != 4:
-                    raise
-            if self in wr_list:
+            rd_list, wr_list, ex_list = gearman.util.select([], [self], [], timeout=timeout)
+            if wr_list and self in wr_list:
                 self.send()
 
     def send_command_blocking(self, cmd_name, cmd_args={}, timeout=None):
@@ -169,13 +165,13 @@ class GearmanConnection(object):
         while not self._command_queue:
             time_left = max(0, timeout and end_time - time() or 0.5)
 
-            try:
-                rd_list, wr_list, ex_list = select.select([self], self.writable() and [self] or [], [self], time_left)
-            except select.error, exc:
-                # Ignore interrupted system call, reraise anything else
-                if exc[0] != 4:
-                    raise
-                rd_list = wr_list = ex_list = []
+            rd_conn = [self]
+            wr_conn = []
+            ex_conn = [self]
+            if self.writable():
+                wr_conn.append(self)
+
+            rd_list, wr_list, ex_list = gearman.util.select(rd_conn, wr_conn, ex_conn, timeout=time_left)
 
             if self in ex_list:
                 self.mark_dead()

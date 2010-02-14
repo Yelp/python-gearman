@@ -1,6 +1,7 @@
 import random, sys, select, logging
 from time import time
 
+import gearman.util
 from gearman.compat import *
 from gearman.client import GearmanBaseClient
 from gearman.protocol import *
@@ -132,8 +133,9 @@ class GearmanWorker(GearmanBaseClient):
         self.working = True
         stop_if = stop_if or (lambda *a, **kw:False)
         last_job_time = time()
+
         while self.working:
-            need_sleep = True
+            is_sleepy = True
 
             # Try to grab work from all alive connections
             for conn in self.alive_connections:
@@ -147,33 +149,29 @@ class GearmanWorker(GearmanBaseClient):
                 else:
                     if worked:
                         last_job_time = time()
-                        need_sleep = False
+                        is_sleepy = False
 
-            # If no tasks were handled then sleep and wait for the server
-            # to wake us with a 'noop'
-            is_idle = False
-            if need_sleep:
-                is_idle = True
-                alive = self.alive_connections
-                for conn in alive:
-                    if not conn.sleeping:
-                        conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
-                        conn.sleeping = True
-                try:
-                    rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
-                except select.error, e:
-                    # Ignore interrupted system call, reraise anything else
-                    if e[0] != 4:
-                        raise
-                else:
-                    is_idle = not bool(rd)
+            # If we're not sleepy, don't go to sleep 
+            if not is_sleepy:
+                continue
 
-                    for c in ex:
-                        log.error("Exception on connection %s" % c)
-                        c.mark_dead()
+            # If no tasks were handled then sleep and wait for the server to wake us with a 'noop'
+            for conn in self.alive_connections:
+                if not conn.sleeping:
+                    conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
+                    conn.sleeping = True
 
-                    for c in rd:
-                        c.sleeping = False
+            readable_conns = [c for c in self.alive_connections if c.readable()]
+            rd_list, wr_list, ex_list = gearman.util.select(readable_conns, [], self.alive_connections, timeout=10)
 
+            for c in ex_list:
+                log.error("Exception on connection %s" % c)
+                c.mark_dead()
+
+            # If we actually have work to do, don't mark the connection as sleeping
+            for c in rd_list:
+                c.sleeping = False
+
+            is_idle = not bool(rd_list)
             if stop_if(is_idle, last_job_time):
                 self.working = False

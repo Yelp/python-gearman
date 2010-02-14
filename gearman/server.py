@@ -66,38 +66,46 @@ class GearmanServerClient(asyncore.dispatcher):
 
         elif cmd_type in (GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_CAN_DO_TIMEOUT):
             self.manager.can_do(self, **cmd_args)
+
         elif cmd_type == GEARMAN_COMMAND_CANT_DO:
             self.manager.cant_do(self, **cmd_args)
+
         elif cmd_type == GEARMAN_COMMAND_GRAB_JOB:
             job = self.manager.grab_job(self)
             if job:
                 self.send_command(GEARMAN_COMMAND_JOB_ASSIGN, {'handle':job.handle, 'func':job.func, 'arg':job.arg})
             else:
                 self.send_command(GEARMAN_COMMAND_NO_JOB)
+
         elif cmd_type == GEARMAN_COMMAND_PRE_SLEEP:
             if not self.manager.sleep(self):
                 self.wakeup()
+
         elif cmd_type == GEARMAN_COMMAND_WORK_COMPLETE:
             self.manager.work_complete(self, **cmd_args)
+
         elif cmd_type == GEARMAN_COMMAND_WORK_FAIL:
             self.manager.work_fail(self, **cmd_args)
 
-        # Text commands
-        elif cmd_type == "status":
+        # Server commands show up as raw text
+        elif cmd_type == GEARMAN_SERVER_COMMAND_STATUS:
             status = self.manager.get_status(self)
             for s in status:
                 self.send_buffered("%s\t%d\t%d\t%d\n" % (s['func'], s['num_jobs'], s['num_working'], s['num_workers']))
             self.send_buffered(".\n")
-        elif cmd_type == "version":
+
+        elif cmd_type == GEARMAN_SERVER_COMMAND_VERSION:
             from gearman import __version__
             self.send_buffered("%s\n" % __version__)
-        elif cmd_type == "workers":
+
+        elif cmd_type == GEARMAN_SERVER_COMMAND_WORKERS:
             for client, state in self.manager.states.items():
                 # if not state.abilities:
                 #     continue
                 self.send_buffered("%d %s %s : %s\n" % (client.socket.fileno(), client.addr[0], state.client_id, " ".join(state.abilities)))
             self.send_buffered(".\n")
-        # elif cmd_type == "maxqueue":
+
+        # elif cmd_type == GEARMAN_SERVER_COMMAND_MAXQUEUE:
         # 
         #     This sets the maximum queue size for a function. If no size is
         #     given, the default is used. If the size is negative, then the queue
@@ -107,7 +115,7 @@ class GearmanServerClient(asyncore.dispatcher):
         #     - Function name.
         #     - Optional maximum queue size.
         # 
-        elif cmd_type == "shutdown":
+        elif cmd_type == GEARMAN_SERVER_COMMAND_SHUTDOWN:
             # TODO: optional "graceful" argument - close listening socket and let all existing connections complete
             self.server.stop()
         else:

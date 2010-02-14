@@ -2,6 +2,7 @@
 
 import time, select, errno
 
+import gearman.util
 from gearman.compat import *
 from gearman.connection import GearmanConnection
 from gearman.task import Task, Taskset
@@ -95,14 +96,17 @@ class GearmanClient(GearmanBaseClient):
         return server
 
     def _command_handler(self, taskset, conn, cmd_type, cmd_args):
-        # DEBUG and _D( "RECEIVED COMMAND:", cmd_type, args )
+        # DEBUG and _D( "RECEIVED COMMAND:", cmd_type, cmd_args )
+        cmd_handle = cmd_args.get('handle', None)
+        if cmd_handle:
+            cmd_handle = "%s//%s" % (conn.hostspec, cmd_handle)
 
-        handle = ('handle' in cmd_args) and ("%s//%s" % (conn.hostspec, cmd_args['handle'])) or None
-
-        if cmd_type != GEARMAN_COMMAND_JOB_CREATED and handle:
-            task = taskset.get( taskset.handles.get(handle, None), None)
+        if cmd_type != GEARMAN_COMMAND_JOB_CREATED and cmd_handle:
+            existing_handle = taskset.handles.get(cmd_handle, None)
+            task = taskset.get(existing_handle, None)
             if not task:
                 return
+
             if task.is_finished:
                 raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd_type))
 
@@ -123,15 +127,15 @@ class GearmanClient(GearmanBaseClient):
 
         elif cmd_type == GEARMAN_COMMAND_JOB_CREATED:
             task = conn.waiting_for_handles.pop()
-            task.handle = handle
-            taskset.handles[handle] = hash( task )
+            task.handle = cmd_handle
+            taskset.handles[cmd_handle] = hash( task )
             if task.background:
                 task.is_finished = True
 
         elif cmd_type == GEARMAN_COMMAND_ERROR:
             raise self.CommandError(str(cmd_args)) # TODO make better
         else:
-            raise Exception("Unexpected command: %s" % cmd)
+            raise Exception("Unexpected command: %s" % cmd_type)
 
     def do_taskset(self, taskset, timeout=None):
         """Execute a Taskset and return True iff all tasks finished before timeout."""
@@ -151,20 +155,14 @@ class GearmanClient(GearmanBaseClient):
 
             rx_socks = [c for c in taskset.connections if c.readable()]
             tx_socks = [c for c in taskset.connections if c.writable()]
-            try:
-                rd_list, wr_list, ex_list = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
-            except select.error, exc:
-                # Ignore interrupted system call, reraise anything else
-                if exc[0] != errno.EINTR:
-                    raise
-                continue
+            rd_list, wr_list, ex_list = gearman.util.select(rx_socks, tx_socks, taskset.connections, timeout=timeleft)
 
             for conn in ex_list:
                 pass # TODO
 
             for conn in rd_list:
-                for cmd in conn.recv():
-                    self._command_handler(taskset, conn, *cmd)
+                for cmd_type, cmd_args in conn.recv():
+                    self._command_handler(taskset, conn, cmd_type, cmd_args)
 
             for conn in wr_list:
                 conn.send()
@@ -179,4 +177,5 @@ class GearmanClient(GearmanBaseClient):
         server = self.connections_by_hostport[hostport]
         server.connect() # Make sure the connection is up (noop if already connected)
         server.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=shandle))
-        return server.recv_blocking()[1]
+        cmd_type, cmd_args = server.recv_blocking()
+        return cmd_args

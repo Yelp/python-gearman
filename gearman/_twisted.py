@@ -61,8 +61,8 @@ class _ConnectionWrapper(abstract.FileDescriptor):
         self.setState()
 
     def doRead(self):
-        for cmd in self.conn.recv():
-            self.onRead(*cmd)
+        for cmd_type, cmd_args in self.conn.recv():
+            self.onRead(cmd_type, cmd_args)
         self.setState()
 
     def fileno(self):
@@ -87,8 +87,8 @@ class Client(GearmanClient):
         c = self._submit_task(task)
         taskset.connections = set([c])
 
-        def _do_cmd(*args):
-            return self._command_handler(taskset, c, *args)
+        def _do_cmd(cmd_type, cmd_args):
+            return self._command_handler(taskset, c, cmd_type, cmd_args)
 
         with _ConnectionWrapper(c, _do_cmd):
             rtn = yield rtn
