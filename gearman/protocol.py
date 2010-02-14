@@ -139,14 +139,14 @@ def parse_command(databuffer, response=True):
     cmd_args = dict(zip(cmd_params, split_arguments))
     return cmd_type, cmd_args, expected_packet_size
 
-def pack_command(cmd_type, response=False, **kwargs):
+def pack_command(cmd_type, cmd_args, response=False):
     cmd_params = COMMAND_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown message received: %s" % cmd_type)
 
     data_items = []
     for param in cmd_params:
-        raw_value = kwargs.get(param, None)
+        raw_value = cmd_args.get(param, None)
         raw_value = raw_value or ""
 
         data_items.append(str(raw_value))

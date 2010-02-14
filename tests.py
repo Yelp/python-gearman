@@ -1,4 +1,4 @@
-import os, sys, signal
+import os, sys, signal, threading
 import unittest, time, socket
 
 from gearman import GearmanClient, GearmanWorker
@@ -146,5 +146,31 @@ class TestManager(GearmanTestCase):
         workers = self.manager.workers()
         self.failUnless(isinstance(workers, list))
 
+def installThreadExcepthook():
+    """
+    Workaround for sys.excepthook thread bug
+    From
+http://spyced.blogspot.com/2007/06/workaround-for-sysexcepthook-bug.html
+
+(https://sourceforge.net/tracker/?func=detail&atid=105470&aid=1230540&group_id=5470).
+    Call once from __main__ before creating any threads.
+    If using psyco, call psyco.cannotcompile(threading.Thread.run)
+    since this replaces a new-style class method.
+    """
+    init_old = threading.Thread.__init__
+    def init(self, *args, **kwargs):
+        init_old(self, *args, **kwargs)
+        run_old = self.run
+        def run_with_except_hook(*args, **kw):
+            try:
+                run_old(*args, **kw)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                sys.excepthook(*sys.exc_info())
+        self.run = run_with_except_hook
+    threading.Thread.__init__ = init
+
 if __name__ == '__main__':
+    installThreadExcepthook()
     unittest.main()

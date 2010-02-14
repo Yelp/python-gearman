@@ -32,7 +32,6 @@ class GearmanServerClient(asyncore.dispatcher):
 
         self.in_buffer += data
 
-        commands = []
         while True:
             try:
                 cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer, response=False)
@@ -127,17 +126,17 @@ class GearmanServerClient(asyncore.dispatcher):
 
         try:
             nsent = self.send(self.out_buffer)
-        except socket.error, e:
+        except socket.error:
             self.close()
-            return
-
-        self.out_buffer = buffer(self.out_buffer, nsent)
+        else:
+            self.out_buffer = buffer(self.out_buffer, nsent)
 
     def send_buffered(self, data):
         self.out_buffer += data
 
-    def send_command(self, name, kwargs={}):
-        self.send_buffered(pack_command(name, response=True, **kwargs))
+    def send_command(self, cmd_type, cmd_args=None):
+        cmd_args = cmd_args or {}
+        self.send_buffered(pack_command(cmd_type, cmd_args, response=True))
 
     def wakeup(self):
         self.send_command(GEARMAN_COMMAND_NOOP)

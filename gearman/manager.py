@@ -23,12 +23,12 @@ class GearmanManager(object):
         except (socket.error, socket.timeout), exc:
             raise ConnectionError(str(exc))
 
-    def send_command(self, name, expecting_results_list=False):
-        self.sock.sendall("%s\n" % name)
+    def send_command(self, cmd_name, expecting_results_list=False):
+        self.sock.sendall("%s\n" % cmd_name)
         buf = ""
         while True:
             buf += self.sock.recv(4096)
-            if not reslist:
+            if not expecting_results_list:
                 if '\n' in buf:
                     return buf.split('\n')[0]
             elif '\n.\n' in buf:
