@@ -23,7 +23,7 @@ class GearmanManager(object):
         except (socket.error, socket.timeout), exc:
             raise ConnectionError(str(exc))
 
-    def send_command(self, name, reslist=False):
+    def send_command(self, name, expecting_results_list=False):
         self.sock.sendall("%s\n" % name)
         buf = ""
         while True:
@@ -35,22 +35,30 @@ class GearmanManager(object):
                 return buf.split('\n')[:-2]
 
     def maxqueue(self, func, max_size):
-        return self.send_command("%s %s %s" % (GEARMAN_SERVER_COMMAND_MAXQUEUE, func, max_size)) == "OK"
+        cmd_resp = self.send_command("%s %s %s" % (GEARMAN_SERVER_COMMAND_MAXQUEUE, func, max_size))
+        return bool(cmd_resp == "OK")
 
     def status(self):
-        status = (s.rsplit('\t', 3) for s in self.send_command(GEARMAN_SERVER_COMMAND_STATUS, True))
+        cmd_resp = self.send_command(GEARMAN_SERVER_COMMAND_STATUS, expecting_results_list=True)
+        status = (s.rsplit('\t', 3) for s in cmd_resp)
         return dict(
             (s[0], {'queued':int(s[1]), 'running':int(s[2]), 'workers':int(s[3])})
             for s in status)
 
-    def shutdown(self, graceful):
-        return self.send_command(graceful and "shutdown graceful" or GEARMAN_SERVER_COMMAND_SHUTDOWN) == "OK"
+    def shutdown(self, graceful=True):
+        actual_command = GEARMAN_SERVER_COMMAND_SHUTDOWN
+        if graceful:
+            actual_command += " graceful"
+
+        cmd_resp = self.send_command(actual_command)
+        return bool(cmd_resp == "OK")
 
     def version(self):
         return self.send_command(GEARMAN_SERVER_COMMAND_VERSION)
 
     def workers(self):
-        workers = (w.split(' ') for w in self.send_command(GEARMAN_SERVER_COMMAND_WORKERS, True))
+        cmd_resp = self.send_command(GEARMAN_SERVER_COMMAND_WORKERS, expecting_results_list=True)
+        workers = [w.split(' ') for w in cmd_resp]
         return [
             {
                 'fd': int(w[0]),
