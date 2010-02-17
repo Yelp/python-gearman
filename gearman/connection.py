@@ -180,7 +180,11 @@ class GearmanConnection(object):
                 raise self.ConnectionError("connection died")
 
             if self in rd_list:
-                for cmd_type, cmd_args in self.recv():
+                for cmd_tuple in self.recv():
+                    if cmd_tuple is None:
+                        continue
+
+                    cmd_type, cmd_args = cmd_tuple
                     self._command_queue.insert(0, (cmd_type, cmd_args))
 
             if self in wr_list:

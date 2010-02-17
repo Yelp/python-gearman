@@ -61,7 +61,11 @@ class _ConnectionWrapper(abstract.FileDescriptor):
         self.setState()
 
     def doRead(self):
-        for cmd_type, cmd_args in self.conn.recv():
+        for cmd_tuple in self.conn.recv():
+            if cmd_tuple is None:
+                continue
+
+            cmd_type, cmd_args = cmd_tuple
             self.onRead(cmd_type, cmd_args)
         self.setState()
 

@@ -92,11 +92,14 @@ class GearmanWorker(GearmanBaseClient):
         cmd_type = GEARMAN_COMMAND_NOOP
         cmd_args = {}
         while cmd_type and cmd_type == GEARMAN_COMMAND_NOOP:
-            cmd_type, cmd_args = conn.recv_blocking(timeout=0.5)
+            cmd_tuple = conn.recv_blocking(timeout=0.5)
+            if cmd_tuple is None:
+                return False
+                
+            cmd_type, cmd_args = cmd_tuple
 
-        if not cmd_type or cmd_type == GEARMAN_COMMAND_NO_JOB:
+        if cmd_type == GEARMAN_COMMAND_NO_JOB:
             return False
-
 
         if cmd_type != GEARMAN_COMMAND_JOB_ASSIGN:
             if cmd_type == GEARMAN_COMMAND_ERROR:

@@ -161,7 +161,11 @@ class GearmanClient(GearmanBaseClient):
                 pass # TODO
 
             for conn in rd_list:
-                for cmd_type, cmd_args in conn.recv():
+                for cmd_tuple in conn.recv():
+                    if cmd_tuple is None:
+                        continue
+
+                    cmd_type, cmd_args = cmd_tuple
                     self._command_handler(taskset, conn, cmd_type, cmd_args)
 
             for conn in wr_list:
@@ -177,5 +181,9 @@ class GearmanClient(GearmanBaseClient):
         server = self.connections_by_hostport[hostport]
         server.connect() # Make sure the connection is up (noop if already connected)
         server.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=shandle))
-        cmd_type, cmd_args = server.recv_blocking()
+        cmd_tuple = server.recv_blocking()
+        if cmd_tuple is None:
+            return None
+
+        cmd_type, cmd_args = cmd_tuple
         return cmd_args

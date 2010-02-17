@@ -64,12 +64,18 @@ class TestConnection(GearmanTestCase):
 
     def testNoArgs(self):
         self.connection.send_command_blocking(GEARMAN_COMMAND_ECHO_REQ)
-        cmd_type, cmd_args = self.connection.recv_blocking()
+        cmd_tuple = self.connection.recv_blocking()
+        self.failUnless(cmd_tuple)
+
+        cmd_type, cmd_args = cmd_tuple
         self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_ECHO_RES)
 
     def testWithArgs(self):
         self.connection.send_command_blocking(GEARMAN_COMMAND_SUBMIT_JOB, dict(func="echo", uniq="", arg="tea"))
-        cmd_type, cmd_args = self.connection.recv_blocking()
+        cmd_tuple = self.connection.recv_blocking()
+        self.failUnless(cmd_tuple)
+
+        cmd_type, cmd_args = cmd_tuple
         self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_JOB_CREATED)
 
 class TestGearman(GearmanTestCase):
