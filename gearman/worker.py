@@ -56,8 +56,13 @@ class GearmanWorker(GearmanBaseClient):
                 self.register_function("%s.%s" % (name, k), v)
 
     def _can_do(self, connection, name, timeout=None):
-        cmd_type = (timeout is None) and GEARMAN_COMMAND_CAN_DO or GEARMAN_COMMAND_CAN_DO_TIMEOUT
-        cmd_args = (timeout is None) and dict(func=name) or dict(func=name, timeout=timeout)
+        if timeout is None:
+            cmd_type = GEARMAN_COMMAND_CAN_DO
+            cmd_args = dict(func=name)
+        else:
+            cmd_type = GEARMAN_COMMAND_CAN_DO_TIMEOUT
+            cmd_args = dict(func=name, timeout=timeout)
+    
         connection.send_command(cmd_type, cmd_args)
 
     def _set_abilities(self, conn):
