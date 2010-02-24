@@ -9,9 +9,9 @@ from gearman.protocol import *
 log = logging.getLogger("gearman")
 
 class GearmanJob(object):
-    def __init__(self, conn, func, arg, handle):
+    def __init__(self, conn, func, data, handle):
         self.func = func
-        self.arg = arg
+        self.data = data
         self.handle = handle
         self.conn = conn
 
@@ -25,7 +25,7 @@ class GearmanJob(object):
         self.conn.send_command_blocking(GEARMAN_COMMAND_WORK_FAIL, dict(handle=self.handle))
 
     def __repr__(self):
-        return "<GearmanJob func=%s arg=%s handle=%s conn=%s>" % (self.func, self.arg, self.handle, repr(self.conn))
+        return "<GearmanJob func=%s data=%s handle=%s conn=%s>" % (self.func, self.data, self.handle, repr(self.conn))
 
 class GearmanWorker(GearmanBaseClient):
     def __init__(self, *args, **kwargs):

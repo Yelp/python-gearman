@@ -37,33 +37,61 @@ GEARMAN_COMMAND_SUBMIT_JOB_HIGH = 21
 GEARMAN_COMMAND_SET_CLIENT_ID = 22
 GEARMAN_COMMAND_CAN_DO_TIMEOUT = 23
 GEARMAN_COMMAND_ALL_YOURS = 24
+GEARMAN_COMMAND_WORK_EXCEPTION = 25
+GEARMAN_COMMAND_OPTION_REQ = 26
+GEARMAN_COMMAND_OPTION_RES = 27
+GEARMAN_COMMAND_WORK_DATA = 28
+GEARMAN_COMMAND_WORK_WARNING = 29
+
+# Gearman commands 30-39
+GEARMAN_COMMAND_GRAB_JOB_UNIQ = 30
+GEARMAN_COMMAND_JOB_ASSIGN_UNIQ = 31
+GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
+GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
+GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
 
 COMMAND_PARAMS = {
+    # Gearman commands 1-9
     GEARMAN_COMMAND_CAN_DO: ["func"],
     GEARMAN_COMMAND_CANT_DO: ["func"],
     GEARMAN_COMMAND_RESET_ABILITIES: [],
     GEARMAN_COMMAND_PRE_SLEEP: [],
     GEARMAN_COMMAND_NOOP: [],
-    GEARMAN_COMMAND_SUBMIT_JOB: ["func", "uniq", "arg"],
+    GEARMAN_COMMAND_SUBMIT_JOB: ["func", "unique", "data"],
     GEARMAN_COMMAND_JOB_CREATED: ["handle"],
     GEARMAN_COMMAND_GRAB_JOB: [],
 
+    # Gearman commands 10-19
     GEARMAN_COMMAND_NO_JOB: [],
-    GEARMAN_COMMAND_JOB_ASSIGN: ["handle", "func", "arg"],
+    GEARMAN_COMMAND_JOB_ASSIGN: ["handle", "func", "data"],
     GEARMAN_COMMAND_WORK_STATUS: ["handle", "numerator", "denominator"],
     GEARMAN_COMMAND_WORK_COMPLETE: ["handle", "result"],
     GEARMAN_COMMAND_WORK_FAIL: ["handle"],
     GEARMAN_COMMAND_GET_STATUS: ["handle"],
     GEARMAN_COMMAND_ECHO_REQ: ["text"],
     GEARMAN_COMMAND_ECHO_RES: ["text"],
-    GEARMAN_COMMAND_SUBMIT_JOB_BG: ["func", "uniq", "arg"],
+    GEARMAN_COMMAND_SUBMIT_JOB_BG: ["func", "unique", "data"],
     GEARMAN_COMMAND_ERROR: ["err_code", "err_text"],
 
+    # Gearman commands 20-29
     GEARMAN_COMMAND_STATUS_RES: ["handle", "known", "running", "numerator", "denominator"],
-    GEARMAN_COMMAND_SUBMIT_JOB_HIGH: ["func", "uniq", "arg"],
+    GEARMAN_COMMAND_SUBMIT_JOB_HIGH: ["func", "unique", "data"],
     GEARMAN_COMMAND_SET_CLIENT_ID: ["client_id"],
     GEARMAN_COMMAND_CAN_DO_TIMEOUT: ["func", "timeout"],
     GEARMAN_COMMAND_ALL_YOURS: [],
+    GEARMAN_COMMAND_WORK_EXCEPTION: ["handle", "data"],
+    GEARMAN_COMMAND_OPTION_REQ: ["option_name"],
+    GEARMAN_COMMAND_OPTION_RES: ["option_name"],
+    GEARMAN_COMMAND_WORK_DATA: ["handle", "data"],
+    GEARMAN_COMMAND_WORK_WARNING: ["handle", "data"],
+
+    # Gearman commands 30-39
+	GEARMAN_COMMAND_GRAB_JOB_UNIQ: [],
+	GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: ["handle", "func", "unique", "data"],
+	GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ["func", "unique", "data"],
+	GEARMAN_COMMAND_SUBMIT_JOB_LOW: ["func", "unique", "data"],
+	GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ["func", "unique", "data"],
+
 }
 
 GEARMAN_SERVER_COMMAND_STATUS = "status"

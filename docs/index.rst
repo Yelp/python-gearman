@@ -24,7 +24,7 @@ Example
 Example worker::
 
     worker = GearmanWorker(["127.0.0.1"])
-    worker.register_function("echo", lambda job:job.arg)
+    worker.register_function("echo", lambda job:job.data)
     worker.work()
 
 Example client (single task)::
@@ -42,4 +42,4 @@ Example client (multiple parallel tasks)::
     ])
     client.do_taskset(ts)
     for task in ts.values():
-        assert task.result == task.arg
+        assert task.result == task.data

@@ -72,7 +72,7 @@ class GearmanServerClient(asyncore.dispatcher):
         elif cmd_type == GEARMAN_COMMAND_GRAB_JOB:
             job = self.manager.grab_job(self)
             if job:
-                self.send_command(GEARMAN_COMMAND_JOB_ASSIGN, {'handle':job.handle, 'func':job.func, 'arg':job.arg})
+                self.send_command(GEARMAN_COMMAND_JOB_ASSIGN, {'handle':job.handle, 'func':job.func, 'data':job.data})
             else:
                 self.send_command(GEARMAN_COMMAND_NO_JOB)
 
@@ -148,14 +148,14 @@ class GearmanServerClient(asyncore.dispatcher):
         self.send_command(GEARMAN_COMMAND_WORK_FAIL, {'handle':handle})
 
 class Job(object):
-    def __init__(self, owner, handle, func, arg, bg=False, high=False, uniq=None):
+    def __init__(self, owner, handle, func, data, bg=False, high=False, unique=None):
         self.owner = owner
         self.handle = handle
         self.func = func
-        self.arg = arg
+        self.data = data
         self.bg = bg
         self.high = high
-        self.uniq = uniq
+        self.unique = unique
         self.worker = None
         self.timeout = None
 
@@ -180,9 +180,9 @@ class GearmanTaskManager(object):
         self.workers = {}    # {function: [state]}
         self.working = set() # set([job])
 
-    def add_job(self, client, func, arg, uniq=None, high=False, bg=False):
+    def add_job(self, client, func, data, unique=None, high=False, bg=False):
         state = self.states[client]
-        job = Job(state, self.new_handle(), func=func, arg=arg, uniq=uniq, high=False, bg=False)
+        job = Job(state, self.new_handle(), func=func, data=data, unique=unique, high=False, bg=False)
         state.jobs.append(job)
         if func not in self.jobqueue:
             self.jobqueue[func] = deque([job])

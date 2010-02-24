@@ -7,14 +7,14 @@ UNIQ_DATA_CHAR = '-'
 class Task(object):
     hooks = ('on_complete', 'on_fail', 'on_retry', 'on_status', 'on_post')
 
-    def __init__(self, func, arg, uniq=None, background=False, high_priority=False,
+    def __init__(self, func, data, unique=None, background=False, high_priority=False,
                  timeout=None, retry_count=0, **kwargs):
         """Build a task
         
             Arguments
                 func - (string) Name of the function this task should execute
-                arg - (string) Arguments to the function
-                uniq - How should this Task be collated together on the remote side ?
+                data - (string) Arguments to the function
+                unique - How should this Task be collated together on the remote side ?
                         None - (default) all tasks are unique
                         True - Task should be treated as unique based on the data
                         False - All tasks of the same function should be collated together
@@ -29,26 +29,26 @@ class Task(object):
             setattr(self, hook, hook in kwargs and [kwargs[hook]] or [])
 
         self.func          = func
-        self.arg           = arg
+        self.data           = data
         self.background    = background
         self.high_priority = high_priority
         self.timeout       = timeout
         self.retry_count   = retry_count
 
-        if uniq is None:
-            self.uniq = uuid.uuid1().hex
-        elif uniq is True:
-            self.uniq = UNIQ_DATA_CHAR
-        elif uniq is False:
-            self.uniq = None
+        if unique is None:
+            self.unique = uuid.uuid1().hex
+        elif unique is True:
+            self.unique = UNIQ_DATA_CHAR
+        elif unique is False:
+            self.unique = None
         else:
-            self.uniq = uniq
+            self.unique = unique
 
         self.retries_done = 0
         self.is_finished  = False
         self.handle       = None
         self.result       = None
-        self._hash        = hash(self.func + ((self.uniq == UNIQ_DATA_CHAR and self.arg) or self.uniq or str(random.randint(0, 999999))))
+        self._hash        = hash(self.func + ((self.unique == UNIQ_DATA_CHAR and self.data) or self.unique or str(random.randint(0, 999999))))
 
     def __hash__(self):
         return self._hash

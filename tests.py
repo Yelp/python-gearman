@@ -14,23 +14,23 @@ class FailedError(Exception):
     pass
 
 def echo_fxn(job):
-    return job.arg
+    return job.data
 
 def fail_fxn(job):
     raise FailedError()
 
 def sleep_fxn(job):
-    time.sleep(float(job.arg))
-    return job.arg
+    time.sleep(float(job.data))
+    return job.data
 
 class ObjectWorker(object):
     def echo(self, job):
-        return job.arg
+        return job.data
 
 class ClassWorker(object):
     @staticmethod
     def echo(job):
-        return job.arg
+        return job.data
 
 class GearmanTestCase(unittest.TestCase):
     def start_server(self):
@@ -71,7 +71,7 @@ class TestConnection(GearmanTestCase):
         self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_ECHO_RES)
 
     def testWithArgs(self):
-        self.connection.send_command_blocking(GEARMAN_COMMAND_SUBMIT_JOB, dict(func="echo", uniq="", arg="tea"))
+        self.connection.send_command_blocking(GEARMAN_COMMAND_SUBMIT_JOB, dict(func="echo", unique="", data="tea"))
         cmd_tuple = self.connection.recv_blocking()
         self.failUnless(cmd_tuple)
 

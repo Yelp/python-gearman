@@ -41,8 +41,8 @@ class GearmanClient(GearmanBaseClient):
     class TaskFailed(Exception):
         pass
 
-    def __call__(self, func, arg, uniq=None, **kwargs):
-        return self.do_task(Task(func, arg, uniq, **kwargs))
+    def __call__(self, func, data, unique=None, **kwargs):
+        return self.do_task(Task(func, data, unique, **kwargs))
 
     def do_task(self, task):
         """Return the result of the task or raise a TaskFailed exception on failure."""
@@ -54,9 +54,9 @@ class GearmanClient(GearmanBaseClient):
             raise self.TaskFailed("Task timeout")
         return task.result
 
-    def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
+    def dispatch_background_task(self, func, data, unique=None, high_priority=False):
         """Submit a background task and return its handle."""
-        task = Task(func, arg, uniq, background=True, high_priority=high_priority)
+        task = Task(func, data, unique, background=True, high_priority=high_priority)
         taskset = Taskset([task])
         self.do_taskset(taskset)
         return task.handle
@@ -91,7 +91,7 @@ class GearmanClient(GearmanBaseClient):
         else:
             func = GEARMAN_COMMAND_SUBMIT_JOB
         server.send_command(func,
-            dict(func=self.prefix + task.func, arg=task.arg, uniq=task.uniq))
+            dict(func=self.prefix + task.func, data=task.data, unique=task.unique))
         server.waiting_for_handles.insert(0, task)
         return server
 
