@@ -1,4 +1,10 @@
+# Ignore temporary files left behind by TextMate
+._*
+
+# Ignore compiled python files
 *.py[co]
+
+# Misc ignores
 .DS_Store
 MANIFEST
 dist
