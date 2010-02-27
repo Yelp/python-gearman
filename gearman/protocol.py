@@ -65,7 +65,7 @@ COMMAND_PARAMS = {
     GEARMAN_COMMAND_NO_JOB: [],
     GEARMAN_COMMAND_JOB_ASSIGN: ["handle", "func", "data"],
     GEARMAN_COMMAND_WORK_STATUS: ["handle", "numerator", "denominator"],
-    GEARMAN_COMMAND_WORK_COMPLETE: ["handle", "result"],
+    GEARMAN_COMMAND_WORK_COMPLETE: ["handle", "data"],
     GEARMAN_COMMAND_WORK_FAIL: ["handle"],
     GEARMAN_COMMAND_GET_STATUS: ["handle"],
     GEARMAN_COMMAND_ECHO_REQ: ["text"],
@@ -105,7 +105,7 @@ txt_command_re = re.compile("^[\w\n\r]+")
 class ProtocolError(Exception):
     pass
 
-def parse_command(databuffer, response=True):
+def parse_command(databuffer, is_response=True):
     """Parse data and return (function name, argument dict, command size)
     or (None, None, data) if there's not enough data for a complete command.
     """
@@ -119,7 +119,7 @@ def parse_command(databuffer, response=True):
     if databuffer_size == 0:
         return cmd_type, cmd_args, cmd_len
 
-    if response:
+    if is_response:
         expected_magic = MAGIC_RES_STRING
     else:
         expected_magic = MAGIC_REQ_STRING
@@ -160,20 +160,22 @@ def parse_command(databuffer, response=True):
     cmd_args = dict(zip(cmd_params, split_arguments))
     return cmd_type, cmd_args, expected_packet_size
 
-def pack_command(cmd_type, cmd_args, response=False):
-    cmd_params = COMMAND_PARAMS.get(cmd_type, None)
-    if cmd_params is None:
+def pack_command(cmd_type, cmd_args, is_response=False):
+    expected_cmd_params = COMMAND_PARAMS.get(cmd_type, None)
+    if expected_cmd_params is None:
         raise ProtocolError("Unknown message received: %s" % cmd_type)
 
+    assert set(expected_cmd_params) == set(cmd_args.keys()), "Command arguments not equal to expected: %r != %r" % (set(expected_cmd_params), set(cmd_args.keys()))
+
     data_items = []
-    for param in cmd_params:
-        raw_value = cmd_args.get(param, None)
+    for param in expected_cmd_params:
+        raw_value = cmd_args[param]
         raw_value = raw_value or ""
 
         data_items.append(str(raw_value))
 
     raw_binary_data = NULL_CHAR.join(data_items)
-    if response:
+    if is_response:
         magic = MAGIC_RES_STRING
     else:
         magic = MAGIC_REQ_STRING

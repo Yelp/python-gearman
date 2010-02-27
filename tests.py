@@ -34,24 +34,26 @@ class ClassWorker(object):
 
 class GearmanTestCase(unittest.TestCase):
     def start_server(self):
-        self.server_pid = os.fork()
-        if not self.server_pid:
-            server = GearmanServer()
-            server.start()
-            sys.exit()
-        connection = GearmanConnection(job_servers[0])
-        for i in range(10):
-            try:
-                connection.connect()
-            except GearmanConnection.ConnectionError:
-                time.sleep(0.5)
-            else:
-                break
-        connection.close()
+        pass
+        # self.server_pid = os.fork()
+        # if not self.server_pid:
+        #     server = GearmanServer()
+        #     server.start()
+        #     sys.exit()
+        # connection = GearmanConnection(job_servers[0])
+        # for i in range(10):
+        #     try:
+        #         connection.connect()
+        #     except GearmanConnection.ConnectionError:
+        #         time.sleep(0.5)
+        #     else:
+        #         break
+        # connection.close()
 
     def stop_server(self):
-        os.kill(self.server_pid, signal.SIGTERM)
-        os.waitpid(self.server_pid, 0)
+        pass
+        # os.kill(self.server_pid, signal.SIGTERM)
+        # os.waitpid(self.server_pid, 0)
 
 class TestConnection(GearmanTestCase):
     def setUp(self):
@@ -63,7 +65,7 @@ class TestConnection(GearmanTestCase):
         self.stop_server()
 
     def testNoArgs(self):
-        self.connection.send_command_blocking(GEARMAN_COMMAND_ECHO_REQ)
+        self.connection.send_command_blocking(GEARMAN_COMMAND_ECHO_REQ, dict(text=""))
         cmd_tuple = self.connection.recv_blocking()
         self.failUnless(cmd_tuple)
 
@@ -81,26 +83,15 @@ class TestConnection(GearmanTestCase):
 class TestGearman(GearmanTestCase):
     def setUp(self):
         self.start_server()
-        self.last_exception = (None, None)
         self.worker = GearmanWorker(job_servers)
         self.worker.register_function("echo", echo_fxn)
         self.worker.register_function("fail", fail_fxn)
         self.worker.register_function("sleep", sleep_fxn, timeout=1)
         self.worker.register_class(ObjectWorker())
         self.worker.register_class(ClassWorker())
-        class Hooks(object):
-            @staticmethod
-            def start(job):
-                pass
-            @staticmethod
-            def complete(job, res):
-                pass
-            @staticmethod
-            def fail(job, exc):
-                self.last_exception = (job.func, exc)
 
         import thread
-        self.worker_thread = thread.start_new_thread(self.worker.work, tuple(), dict(hooks=Hooks)) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
+        self.worker_thread = thread.start_new_thread(self.worker.work, tuple()) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
         self.client = GearmanClient(job_servers)
 
     def tearDown(self):
@@ -131,6 +122,24 @@ class TestGearman(GearmanTestCase):
 
     def testClassWorker(self):
         self.failUnlessEqual(self.client("ClassWorker.echo", "foo"), "foo")
+
+class TestGearmanInteractiveness(GearmanTestCase):
+    def setUp(self):
+        self.start_server()
+        self.worker = GearmanWorker(job_servers)
+        self.worker.register_function("work_data_test", echo_fxn)
+
+        import thread
+        self.worker_thread = thread.start_new_thread(self.worker.work, tuple()) # TODO: Shouldn't use threads.. but we do for now (also, the thread is never terminated)
+        self.client = GearmanClient(job_servers)
+
+    def tearDown(self):
+        del self.worker
+        del self.client
+        self.stop_server()
+
+    def testWorkData(self):
+        self.failUnlessEqual(self.client.do_task(Task("echo", "bar")), 'bar')
 
 class TestManager(GearmanTestCase):
     def setUp(self):

@@ -140,9 +140,9 @@ class GearmanConnection(object):
 
         return len(self.out_buffer)
 
-    def send_command(self, cmd_type, cmd_args=None):
+    def send_command(self, cmd_type, cmd_args=None, is_response=False):
         cmd_args = cmd_args or {}
-        pkt = pack_command(cmd_type, cmd_args)
+        pkt = pack_command(cmd_type, cmd_args, is_response=is_response)
         self.out_buffer += pkt
         self.send()
 
@@ -152,9 +152,9 @@ class GearmanConnection(object):
             if wr_list and self in wr_list:
                 self.send()
 
-    def send_command_blocking(self, cmd_name, cmd_args=None, timeout=None):
+    def send_command_blocking(self, cmd_name, cmd_args=None, timeout=None, is_response=False):
         cmd_args = cmd_args or {}
-        self.send_command(cmd_name, cmd_args)
+        self.send_command(cmd_name, cmd_args, is_response=is_response)
         self.flush(timeout)
 
     def recv_blocking(self, timeout=None):

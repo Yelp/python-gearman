@@ -34,7 +34,7 @@ class GearmanServerClient(asyncore.dispatcher):
 
         while True:
             try:
-                cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer, response=False)
+                cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer, is_response=False)
             except ProtocolError, exc:
                 logging.error("[%s] ProtocolError: %s" % (self.addr, str(exc)))
                 self.close()
@@ -136,13 +136,13 @@ class GearmanServerClient(asyncore.dispatcher):
 
     def send_command(self, cmd_type, cmd_args=None):
         cmd_args = cmd_args or {}
-        self.send_buffered(pack_command(cmd_type, cmd_args, response=True))
+        self.send_buffered(pack_command(cmd_type, cmd_args, is_response=True))
 
     def wakeup(self):
         self.send_command(GEARMAN_COMMAND_NOOP)
 
-    def work_complete(self, handle, result):
-        self.send_command(GEARMAN_COMMAND_WORK_COMPLETE, {'handle':handle, 'result':result})
+    def work_complete(self, handle, data):
+        self.send_command(GEARMAN_COMMAND_WORK_COMPLETE, {'handle':handle, 'data':data})
 
     def work_fail(self, handle):
         self.send_command(GEARMAN_COMMAND_WORK_FAIL, {'handle':handle})
@@ -237,9 +237,9 @@ class GearmanTaskManager(object):
         state.sleeping = True
         return True
 
-    def work_complete(self, client, handle, result):
+    def work_complete(self, client, handle, data):
         job = self.jobs[handle]
-        job.owner.client.work_complete(handle, result)
+        job.owner.client.work_complete(handle, data)
         self._remove_job(job)
 
     def work_fail(self, client, handle):
