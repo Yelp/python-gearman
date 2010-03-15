@@ -1,214 +1,278 @@
+import collections
 import socket, struct, select, errno, logging
+import StringIO
 from time import time
 
 import gearman.util
-from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, pack_command, parse_command
+from gearman.compat import *
+from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, GEARMAN_COMMAND_TO_NAME, BINARY_COMMANDS, SERVER_COMMANDS, NULL_CHAR, \
+    pack_binary_command, parse_binary_command, parse_server_command, pack_server_command
 
-log = logging.getLogger("gearman")
+gearman_logger = logging.getLogger("gearman.connection")
+
+class GearmanConnectionError(Exception):
+    pass
 
 class GearmanConnection(object):
-    class ConnectionError(Exception):
-        pass
-
-    def __init__(self, host, port=DEFAULT_GEARMAN_PORT, sock=None, timeout=None, reconnect_timeout=60*2):
+    def __init__(self, hostname, port=DEFAULT_GEARMAN_PORT, blocking_timeout=0.0):
         """
         A connection to a Gearman server.
         """
-        if not sock:
-            self.sock = None
-            self.connected = False
-        else:
-            self.sock = sock
-            self.connected = True
+        port = port or DEFAULT_GEARMAN_PORT
+        self.gearman_host = hostname
+        self.gearman_port = port
 
-        if ':' in host:
-            host, port = (host.split(':') + [0])[:2]
-            port = int(port) or DEFAULT_GEARMAN_PORT
-            self.addr = (host, port)
-        else:
-            port = port or DEFAULT_GEARMAN_PORT
-            self.addr = (host, port)
-        self.hostspec = "%s:%d" % (host, port)
-        self.timeout  = timeout
-        self.reconnect_timeout = reconnect_timeout
+        # If blocking_timeout == 0.0, this connection becomes a NON-blocking socket
+        self.blocking_timeout = blocking_timeout
 
-        self.is_dead = False
+        self.client_id = id(self)
+        self.hostspec = "%s:%d" % (self.gearman_host, self.gearman_port)
+
+        self._reset_connection()
+
+    def _reset_connection(self):
+        self.gearman_socket = None
+        self._is_connected = False
+        self._is_server_connection = False
+        self._is_client_connection = False
+
         self._reset_queues()
 
     def _reset_queues(self):
-        self.in_buffer = ""
-        self.out_buffer = ""
-        self.waiting_for_handles = []
+        self._input_buffer = ""
+        self._output_buffer = ""
+
+        self.waiting_for_handles = collections.deque()
 
     def fileno(self):
-        return self.sock.fileno()
+        assert self.gearman_socket, "No socket set"
+        return self.gearman_socket.fileno()
+
+    def get_address(self):
+        return (self.gearman_host, self.gearman_port)
+
+    def get_client_id(self):
+        return self.client_id
 
     def writable(self):
-        return self.connected and len(self.out_buffer) != 0
+        return self._is_connected and self._output_buffer
 
     def readable(self):
-        return self.connected
+        return self._is_connected
 
-    def connect(self):
-        """Connect to the server. Raise ConnectionError if connection fails."""
-
-        if self.connected:
+    def listen(self, backlog=5):
+        if self._is_client_connection:
+            raise TypeError("This connection has been setup as a client side listening socket")
+        elif self._is_connected and self._is_server_connection:
             return
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(self.timeout)
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((self.gearman_host, self.gearman_port))
+        server_socket.listen(backlog)
+
+        self._is_server_connection = True
+        self.bind_socket(server_socket)
+
+    def accept(self):
+        """If we're a server side gearman connection, we'll accept an incoming request and create a server side listening socket from it"""
+        if self._is_client_connection:
+            raise TypeError("This connection has been setup as a client side listening socket")
+        elif not (self._is_connected and self._is_server_connection):
+            raise TypeError("This connection cannot accept if its not connection")
+
+        client_socket, client_addr = self.gearman_socket.accept()
+
+        client_host, client_port = client_addr
+        client_connection = GearmanConnection(client_host, client_port)
+        client_connection._is_server_connection = True
+        client_connection.bind_socket(client_socket)
+        return client_connection
+
+    def connect(self):
+        """Connect to the server. Raise GearmanConnectionError if connection fails."""
+        if self._is_server_connection:
+            raise TypeError("This connection has been setup as a server side listening socket")
+        elif self._is_connected and self._is_client_connection:
+            return
+
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self.sock.connect(self.addr)
+            client_socket.connect((self.gearman_host, self.gearman_port))
         except (socket.error, socket.timeout), exc:
-            self.sock = None
-            self.is_dead = True
-            raise self.ConnectionError(str(exc))
+            self._reset_connection()
+            raise GearmanConnectionError(str(exc))
 
+        self._is_client_connection = True
+        self.bind_socket(client_socket)
+
+    def bind_socket(self, current_socket):
+        if self.blocking_timeout != 0.0:
+            current_socket.setblocking(1)
+        else:
+            current_socket.setblocking(0)
+    
+        current_socket.settimeout(self.blocking_timeout)
+        current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
+        assert bool(self._is_client_connection) ^ bool(self._is_server_connection), "This connection has NOT been set as client/server"
+
+        self._is_connected = True
         self._reset_queues()
-        self.is_dead = False
-        self.connected = True
-        self.sock.setblocking(0)
-        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
+        self.gearman_socket = current_socket
 
-    def is_dead():
-        def fget(self):
-            if self._is_dead and time() >= self._retry_at:
-                self._is_dead = False
-                # try:
-                #     self.connect()
-                # except self.ConnectionError:
-                #     pass
-            return self._is_dead
-        def fset(self, value):
-            self._is_dead = value
-            self._retry_at = value and time() + self.reconnect_timeout or None
-        return locals()
-    is_dead = property(**is_dead())
+    def is_connected(self):
+        return self._is_connected
 
-    def recv(self, size=4096):
+    def set_client_id(self, client_id):
+        self.client_id = client_id
+
+    def recv_command(self, is_response=True):
+        received_commands = self.recv_command_list(is_response=is_response)
+        assert len(received_commands) == 1, "Received multiple commands when only expecting 1: %r" % received_commands
+
+        return received_commands[0]
+
+    def recv_command_list(self, is_response=True):
+        # Trigger a read on the socket
+        self.recv_data_to_buffer()
+
+        given_buffer = self.recv_data_from_buffer()
+        received_commands, bytes_read = self.convert_data_to_commands(given_buffer, is_response=is_response)
+
+        # Pull these bytes off the buffer
+        self.recv_raw_data(bytes_read)
+
+        return received_commands
+
+    def recv_raw_data(self, bytes_to_read=4096):
+        data_read = self._input_buffer[:bytes_to_read]
+        self._input_buffer = self._input_buffer[bytes_to_read:]
+
+        return data_read
+
+    def recv_data_from_buffer(self):
+        """Reads from the buffer but doesn't advance the buffer"""
+        return self._input_buffer
+
+    def recv_data_to_buffer(self, size=4096):
         """
         Returns a list of commands: [(cmd_name, cmd_args), ...]
-        Raises ConnectionError if the connection dies.
+        Raises GearmanConnectionError if the connection dies.
             or ProtocolError if parsing of a command fails.
         """
+        assert self._is_connected, "Cannot receive data if we don't have a connection"
 
-        assert self.connected
-
-        data = ''
+        received_commands = []
+        recv_buffer = ''
         try:
-            data = self.sock.recv(size)
+            recv_buffer = self.gearman_socket.recv(size)
         except socket.error, exc:
             if exc.args[0] == errno.EWOULDBLOCK:
-                return
+                return ''
             if exc.args[0] == errno.ECONNRESET:
-                data = None
+                self.gearman_socket.close()
+                raise GearmanConnectionError("connection reset died")
             else:
                 raise
 
-        if not data:
-            self.mark_dead()
-            raise self.ConnectionError("connection died")
+        self._input_buffer += recv_buffer
+        return len(self._input_buffer)
 
-        self.in_buffer += data
+    def convert_data_to_commands(self, given_buffer, is_response):
+        # Read the input buffer and store all our parsed commands in a queue
+        bytes_read = 0
+        bytes_total = len(given_buffer)
 
-        commands = []
-        while len(self.in_buffer) >= COMMAND_HEADER_SIZE:
-            cmd_type, cmd_args, cmd_len = parse_command(self.in_buffer)
+        received_commands = []
+        while bytes_read < bytes_total:
+            command_buffer = given_buffer[bytes_read:]
+
+            cmd_type, cmd_args, cmd_len = self.parse_command_from_buffer(command_buffer, is_response=is_response)
             if not cmd_len:
                 break
 
-            commands.append((cmd_type, cmd_args))
+            gearman_logger.debug("%s - Recv - %s - %r", hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
 
-            self.in_buffer = buffer(self.in_buffer, cmd_len)
-        return commands
+            bytes_read += cmd_len
+            received_commands.append((cmd_type, cmd_args))
 
-    def send(self):
-        assert self.connected
+        return received_commands, bytes_read
 
-        if len(self.out_buffer) == 0:
+    def parse_command_from_buffer(self, given_buffer, is_response=True):
+        if given_buffer[0] == NULL_CHAR:
+            return parse_binary_command(given_buffer, is_response=is_response)
+        else:
+            return parse_server_command(given_buffer)
+
+    def send_command(self, cmd_type, cmd_args=None, is_response=False):
+        """Buffered method"""
+        cmd_args = cmd_args or {}
+        send_cmd_tuple = (cmd_type, cmd_args, is_response)
+        return self.send_command_list([send_cmd_tuple])
+
+    def send_command_list(self, cmd_list):
+        """Buffered method"""
+        byte_string_to_send = self.convert_commands_to_data(cmd_list)
+        self.send_data_to_buffer(byte_string_to_send)
+
+        self.send_data_from_buffer()
+
+    def send_binary_string(self, given_buffer):
+        """Buffered method"""
+        self.send_data_to_buffer(given_buffer)
+        return self.send_data_from_buffer()
+
+    def send_data_to_buffer(self, given_buffer):
+        self._output_buffer += given_buffer
+
+    def send_data_from_buffer(self):
+        """Try to send out some bytes we have stored in our output buffer
+
+        Returns remaining size of the output buffer
+        """
+        assert self._is_connected
+
+        if not bool(self._output_buffer):
             return 0
 
         try:
-            nsent = self.sock.send(self.out_buffer)
+            bytes_sent = self.gearman_socket.send(self._output_buffer)
         except socket.error, exc:
             if exc.args[0] == errno.EWOULDBLOCK:
-                return len(self.out_buffer)
-            self.mark_dead()
-            raise self.ConnectionError(str(exc))
+                return len(self._output_buffer)
 
-        self.out_buffer = buffer(self.out_buffer, nsent)
+            self.close()
+            raise GearmanConnectionError(str(exc))
 
-        return len(self.out_buffer)
+        self._output_buffer = self._output_buffer[bytes_sent:]
+        return len(self._output_buffer)
 
-    def send_command(self, cmd_type, cmd_args=None, is_response=False):
-        cmd_args = cmd_args or {}
-        pkt = pack_command(cmd_type, cmd_args, is_response=is_response)
-        self.out_buffer += pkt
-        self.send()
+    def convert_commands_to_data(self, cmd_list):
+        """Takes a list of tuples (cmd_type, cmd_args, is_response)"""
+        output_buffer = ''
+        for cmd_type, cmd_args, is_response in cmd_list:
+            output_buffer += self.pack_command_for_buffer(cmd_type, cmd_args, is_response=is_response)
 
-    def flush(self, timeout=None): # TODO: handle connection failures
-        while self.writable():
-            rd_list, wr_list, ex_list = gearman.util.select([], [self], [], timeout=timeout)
-            if wr_list and self in wr_list:
-                self.send()
+            gearman_logger.debug("%s - Send - %s - %r", hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
 
-    def send_command_blocking(self, cmd_name, cmd_args=None, timeout=None, is_response=False):
-        cmd_args = cmd_args or {}
-        self.send_command(cmd_name, cmd_args, is_response=is_response)
-        self.flush(timeout)
+        return output_buffer
 
-    def recv_blocking(self, timeout=None):
-        if not hasattr(self, '_command_queue'):
-            self._command_queue = []
-
-        if timeout:
-            end_time = time() + timeout
-
-        while not self._command_queue:
-            time_left = max(0, timeout and end_time - time() or 0.5)
-
-            rd_conn = [self]
-            wr_conn = []
-            ex_conn = [self]
-            if self.writable():
-                wr_conn.append(self)
-
-            rd_list, wr_list, ex_list = gearman.util.select(rd_conn, wr_conn, ex_conn, timeout=time_left)
-
-            if self in ex_list:
-                self.mark_dead()
-                raise self.ConnectionError("connection died")
-
-            if self in rd_list:
-                for cmd_tuple in self.recv():
-                    if cmd_tuple is None:
-                        continue
-
-                    cmd_type, cmd_args = cmd_tuple
-                    self._command_queue.insert(0, (cmd_type, cmd_args))
-
-            if self in wr_list:
-                self.send()
-
-            if time_left <= 0:
-                break
-
-        if self._command_queue:
-            return self._command_queue.pop()
-        return None
+    def pack_command_for_buffer(self, cmd_type, cmd_args, is_response):
+        if cmd_type in BINARY_COMMANDS:
+            return pack_binary_command(cmd_type, cmd_args, is_response)
+        elif cmd_type in SERVER_COMMANDS:
+            return pack_server_command(cmd_type, cmd_args)
+        else:
+            raise ProtocolError("Unknown command: %r" % cmd_type)
 
     def close(self):
-        self.connected = False
         try:
-            self.sock.close()
+            self.gearman_socket.close()
         except:
             pass
-        self.sock = None
 
-    def mark_dead(self):
-        self.close()
-        self.is_dead = True
+        self._reset_connection()
 
     def __repr__(self):
-        return ("<GearmanConnection %s:%d connected=%s dead=%s>" %
-            (self.addr[0], self.addr[1], self.connected, self.is_dead))
+        return ("<GearmanConnection %s:%d connected=%s>" %
+            (self.gearman_host, self.gearman_port, self._is_connected))

@@ -2,8 +2,8 @@
 Gearman client.
 """
 
-__author__ = "Samuel Stauffer <samuel@descolada.com>"
-__version__ = "1.5.x"
+__author__ = "Matthew Tai <mtai@yelp.com>"
+__version__ = "2.x.x"
 __license__ = "MIT"
 
 from gearman.client import GearmanClient

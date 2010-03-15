@@ -1,227 +1,130 @@
+import collections
 import random, sys, select, logging
-from time import time
+import time
 
 import gearman.util
 from gearman.compat import *
 from gearman.protocol import *
+from gearman.connection import GearmanConnectionError
 from gearman.client import GearmanBaseClient
 from gearman.job import GearmanJob
 
 log = logging.getLogger("gearman")
 
+POLL_INTERVAL_IN_SECONDS = 1.0
+SLEEP_INTERVAL_IN_SECONDS = 10.0
+
 class GearmanWorker(GearmanBaseClient):
+    client_type = "worker"
+
     def __init__(self, *args, **kwargs):
+        # By default we should have non-blocking sockets for a GearmanWorker
+        kwargs.setdefault('blocking_timeout', 2.0)
         super(GearmanWorker, self).__init__(*args, **kwargs)
         self.abilities = {}
 
-        # Gearman talks about jobs primarily using current_jobs
-        # We're going to do the same
-        self.handle_to_job_map = {}
-        self.handle_to_connection_map = {}
+        self.command_handlers = {
+            GEARMAN_COMMAND_NOOP: self.recv_noop,
+            GEARMAN_COMMAND_NO_JOB: self.recv_no_job,
+            GEARMAN_COMMAND_JOB_ASSIGN: self.recv_job_assign,
+            GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: self.recv_job_assign_uniq,
+            GEARMAN_COMMAND_ERROR: self.recv_error,
+        }
 
-    def register_function(self, name, func, timeout=None):
+    def register_function(self, job_name, callback_function):
         """Register a function with gearman with an optional default timeout.
         """
-        name = self.prefix + name
-        self.abilities[name] = (func, timeout)
+        self.abilities[job_name] = callback_function
 
-    def register_class(self, clas, name=None, decorator=None):
-        """Register all the methods of a class or instance object with
-        with gearman.
-        
-        'name' is an optional prefix for function names (name.method_name)
-        """
-        obj = clas
-        if not isinstance(clas, type):
-            clas = clas.__class__
-        name = name or getattr(obj, 'name', clas.__name__)
-        for k in clas.__dict__:
-            v = getattr(obj, k)
-            if callable(v) and k[0] != '_':
-                if decorator:
-                    v = decorator(v)
-                self.register_function("%s.%s" % (name, k), v)
+    def unregister_function(self, job_name):
+        pass
 
     def _set_abilities(self, conn):
         for name, args in self.abilities.iteritems():
-            self.send_can_do(conn, name, args[1])
+            self.send_can_do(conn, name)
+
+    def set_client_id(self, client_id):
+        for conn in self.alive_connections:
+            conn.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, data=client_id)
 
     @property
     def alive_connections(self):
         """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
-        random.shuffle(self.connections)
-        all_dead = all(conn.is_dead for conn in self.connections)
+        random.shuffle(self.connection_list)
+        all_dead = all(not conn.is_connected() for conn in self.connection_list)
         alive = []
-        for conn in self.connections:
-            if not conn.connected and (not conn.is_dead or all_dead):
+        for conn in self.connection_list:
+            if not conn.is_connected() or all_dead:
                 try:
                     conn.connect()
-                except conn.ConnectionError:
+                except GearmanConnectionError:
                     continue
                 else:
-                    conn.sleeping = False
                     self._set_abilities(conn)
-            if conn.connected:
+                    conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
+            if conn.is_connected():
                 alive.append(conn)
         return alive
 
     def stop(self):
         self.working = False
 
-    def check_connection_for_work(self, conn):
-        cmd_actions = {
-            GEARMAN_COMMAND_NOOP: self.on_cmd_noop,
-            GEARMAN_COMMAND_NO_JOB: self.on_cmd_no_job,
-            GEARMAN_COMMAND_JOB_ASSIGN: self.on_cmd_job_assign,
-            GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: self.on_cmd_job_assign,
-            GEARMAN_COMMAND_ERROR: self.on_cmd_error,
-        }
-
-        continue_working = True
-        completed_work = False
-
-        # Kick off our processing loop and request a job
-        conn.send_command(GEARMAN_COMMAND_GRAB_JOB)
-        while continue_working:
-            completed_work = False
-            cmd_tuple = conn.recv_blocking(timeout=0.5)
-            if cmd_tuple is None:
-                continue
-
-            cmd_type, cmd_args = cmd_tuple
-            cmd_callback = cmd_actions.get(cmd_type, None)
-            if cmd_callback is None:
-                log.error("Was expecting job_assigned or no_job, received %s" % cmd_type)
-                return completed_work
-
-            continue_working, completed_work = cmd_callback(conn, cmd_type, cmd_args)
- 
-        return completed_work
-
-    def work(self, stop_if=None):
+    def work(self, stop_if=None, poll_interval=POLL_INTERVAL_IN_SECONDS, sleep_interval=SLEEP_INTERVAL_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
-        self.working = True
+        self.working = continue_working = True
         stop_if = stop_if or (lambda *a, **kw:False)
-        last_job_time = time()
+        last_job_time = time.time()
 
-        while self.working:
-            is_sleepy = True
+        while self.working and continue_working:
+            had_connection_activity = self.poll_connections(self.alive_connections, timeout=10.0)
 
-            # Try to grab work from all alive connections
-            for conn in self.alive_connections:
-                if conn.sleeping:
-                    continue
+            is_idle = not had_connection_activity
+            continue_working = not bool(stop_if(is_idle, last_job_time))
 
-                try:
-                    completed_work = self.check_connection_for_work(conn)
-                except conn.ConnectionError, exc:
-                    log.error("ConnectionError on %s: %s" % (conn, exc))
-                else:
-                    if completed_work:
-                        last_job_time = time()
-                        is_sleepy = False
+        for current_connection in self.alive_connections:
+            current_connection.close()
 
-            # If we're not sleepy, don't go to sleep 
-            if not is_sleepy:
-                continue
-
-            # If no tasks were handled then sleep and wait for the server to wake us with a 'noop'
-            for conn in self.alive_connections:
-                if not conn.sleeping:
-                    conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
-                    conn.sleeping = True
-
-            readable_conns = [c for c in self.alive_connections if c.readable()]
-            rd_list, wr_list, ex_list = gearman.util.select(readable_conns, [], self.alive_connections, timeout=10)
-
-            for c in ex_list:
-                log.error("Exception on connection %s" % c)
-                c.mark_dead()
-
-            # If we actually have work to do, don't mark the connection as sleeping
-            for c in rd_list:
-                c.sleeping = False
-
-            is_idle = not bool(rd_list)
-            if stop_if(is_idle, last_job_time):
-                self.working = False
-
-    def register_job(self, current_job, conn):
-        # Add this job to the list of jobs we're currently managing
-		handle = current_job.handle
-        self.handle_to_job_map[current_job.handle] = current_job
-        self.handle_to_connection_map[current_job.handle] = conn
-
-    def unregister_job(self, current_job):
-		handle = current_job.handle
-	    del self.handle_to_job_map[handle]
-        del self.handle_to_connection_map[handle]
-    
-    # Gearman worker callbacks when we have job stuff
-    def on_job_execute(self, current_job, function_callback):
-        try:
-            job_result = function_callback(current_job)
-        except Exception, caught_exception:
-	        self.send_job_failure(current_job)
-        else:
-	        self.send_job_complete(current_job, job_result)
-
-    # Gearman worker callbacks when we receive a command from the server
-    def on_cmd_noop(self, conn, cmd_type, cmd_args):
+    def handle_read(self, conn):
+        """For our worker, we'll want to do blocking calls on processing out commands"""
         continue_working = True
-        completed_work = False
-        return continue_working, completed_work
 
-    def on_cmd_no_job(self, conn, cmd_type, cmd_args):
-        continue_working = False
-        completed_work = False
-        return continue_working, completed_work
+        conn.awaiting_job_assignment = False
+        cmd_list = conn.recv_command_list()
+        for cmd_tuple in cmd_list:
+            completed_work = self.handle_incoming_command(conn, cmd_tuple)
+            if completed_work is False:
+                break
 
-    def on_cmd_error(self, conn, cmd_type, cmd_args):
-        log.error("Error from server: %s: %s" % (cmd_args['err_code'], cmd_args['err_text']))
-        conn.mark_dead()
-
-        continue_working = False
-        completed_work = False
-        return continue_working, completed_work
-
-    def on_cmd_job_assign(self, conn, cmd_type, cmd_args):
-        continue_working = False
-        completed_work = False
-
-        handle = cmd_args['handle']
-        function_name = cmd_args['func']
-        unique = cmd_args.get('unique', None)
-        data = cmd_args['data']
-
-        current_job = GearmanJob(handle, function_name, unique, data, gearman_worker=self)
-        self.register_job(current_job, conn)
-
-        function_name = current_job.func
+        del conn.awaiting_job_assignment
+    
+    def on_job_execute(self, current_job):
+        """Override this function if you'd like different exception handling behavior"""
         try:
-            function_callback = self.abilities[function_name][0]
-        except KeyError:
-            log.error("Received work for unknown function %s" % cmd_args)
-            completed_work = False
-            return continue_working, completed_work
+            job_result = self.run_job(current_job)
+        except Exception:
+            self.send_job_failure(current_job)
+            return False
 
-		self.on_job_execute(current_job, function_callback)
+        self.send_job_complete(current_job, job_result)
+        return True
 
-        # Don't forget to remove this job
-        self.unregister_job(current_job)
-        completed_work = True
-        return continue_working, completed_work
+    def run_job(self, current_job):
+        function_callback = self.abilities[current_job.func]
+        return function_callback(self, current_job)
 
-	def send_can_do(self, conn, function_name, timeout=None):
-	    if timeout is None:
-	        cmd_type = GEARMAN_COMMAND_CAN_DO
-	        cmd_args = dict(func=function_name)
-	    else:
-	        cmd_type = GEARMAN_COMMAND_CAN_DO_TIMEOUT
-	        cmd_args = dict(func=function_name, timeout=timeout)
+    ##################################################################
+    ##### Worker callbacks when we send a command from the server ####
+    ##################################################################
+    def send_can_do(self, conn, function_name, timeout=None):
+        if timeout is None:
+            cmd_type = GEARMAN_COMMAND_CAN_DO
+            cmd_args = dict(func=function_name)
+        else:
+            cmd_type = GEARMAN_COMMAND_CAN_DO_TIMEOUT
+            cmd_args = dict(func=function_name, timeout=timeout)
 
-	    conn.send_command(cmd_type, cmd_args)
+        conn.send_command(cmd_type, cmd_args)
 
     # Send Gearman commands related to jobs
     def send_job_status(self, current_job, numerator, denominator):
@@ -249,11 +152,53 @@ class GearmanWorker(GearmanBaseClient):
         self.send_command_for_job(current_job, GEARMAN_COMMAND_WORK_WARNING, data=data)
 
     def send_command_for_job(self, current_job, cmd_type, **partial_cmd_args):
-		handle = current_job.handle
-        assert handle in self.handle_to_connection_map, "Could not find job for this worker: %r" % handle
-        current_connection = self.handle_to_connection_map[handle]
+        handle = current_job.handle
+        current_connection = current_job.conn
+        assert bool(current_connection) and current_connection.is_connected(), "Could not find a valid connection for this job: %r" % handle
 
-        assert bool(current_connection) and not current_connection.is_dead, "Could not find a valid connection for this job: %r" % handle
         full_cmd_args = partial_cmd_args.copy()
         full_cmd_args['handle'] = handle
-        current_connection.send_command_blocking(cmd_type, full_cmd_args)
+        current_connection.send_command(cmd_type, full_cmd_args)
+
+    ###########################################################
+    ### Callbacks when we receive a command from the server ###
+    ###########################################################
+    def request_job(self, conn):
+        if not conn.awaiting_job_assignment:
+            conn.send_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
+            conn.awaiting_job_assignment = True
+
+    def recv_noop(self, conn, cmd_type, cmd_args):
+        # If were explicitly woken up to do some jobs, we better get some work to do
+        self.request_job(conn)
+
+        return True
+
+    def recv_no_job(self, conn, cmd_type, cmd_args):
+        conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
+        conn.awaiting_job_assignment = False
+        return False
+
+    def recv_error(self, conn, cmd_type, cmd_args):
+        log.error("Error from server: %s: %s" % (cmd_args['err_code'], cmd_args['err_text']))
+        conn.close()
+        return False
+
+    def recv_job_assign(self, conn, cmd_type, cmd_args):
+        handle = cmd_args['handle']
+        function_name = cmd_args['func']
+        unique = cmd_args.get('unique', None)
+        data = cmd_args['data']
+
+        assert function_name in self.abilities, "%s not found in %r" % (function_name, self.abilities.keys())
+
+        # Create a new job
+        current_job = GearmanJob(conn, handle, function_name, unique, data)
+
+        self.on_job_execute(current_job)
+
+        self.request_job(conn)
+        return False
+
+    def recv_job_assign_uniq(self, conn, cmd_type, cmd_args):
+        return self.recv_job_assign(conn, cmd_args, cmd_args)

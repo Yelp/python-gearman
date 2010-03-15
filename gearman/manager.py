@@ -2,10 +2,8 @@
 
 import socket
 
-from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection
+from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection, GearmanConnectionError
 from gearman.protocol import *
-
-ConnectionError = GearmanConnection.ConnectionError
 
 class GearmanManager(object):
     def __init__(self, server, timeout=5):
@@ -21,7 +19,7 @@ class GearmanManager(object):
         try:
             self.sock.connect(self.addr)
         except (socket.error, socket.timeout), exc:
-            raise ConnectionError(str(exc))
+            raise GearmanConnectionError(str(exc))
 
     def send_command(self, cmd_name, expecting_results_list=False):
         self.sock.sendall("%s\n" % cmd_name)

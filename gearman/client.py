@@ -1,12 +1,27 @@
 #!/usr/bin/env python
-
-import time, select, errno
+import collections
+import errno
+import select
+import time
+import uuid
+import random
+import logging
 
 import gearman.util
 from gearman.compat import *
-from gearman.connection import GearmanConnection
+from gearman.connection import GearmanConnection, GearmanConnectionError
 from gearman.task import Task, Taskset
 from gearman.protocol import *
+from gearman.job import *
+
+FOREGROUND_JOB = False
+BACKGROUND_JOB = True
+
+NO_PRIORITY = None
+LOW_PRIORITY = "low"
+HIGH_PRIORITY = "high"
+
+gearman_logger = logging.getLogger("gearman._client")
 
 class GearmanBaseClient(object):
     class ServerUnavailable(Exception):
@@ -16,174 +31,311 @@ class GearmanBaseClient(object):
     class InvalidResponse(Exception):
         pass
 
-    def __init__(self, job_servers, prefix=None, pre_connect=False):
-        """
-        job_servers = ['host:post', 'host', ...]
-        """
-        self.prefix = prefix and "%s\t" % prefix or ""
-        self.set_job_servers(job_servers, pre_connect)
+    client_type = None
 
-    def set_job_servers(self, servers, pre_connect=False):
-        # TODO: don't shut down dups. shut down old ones gracefully
-        self.connections = []
-        self.connections_by_hostport = {}
-        for serv in servers:
-            connection = GearmanConnection(serv,timeout=2)
-            if pre_connect:
-                try:
-                    connection.connect()
-                except connection.ConnectionError:
-                    pass
-            self.connections.append(connection)
-            self.connections_by_hostport[connection.hostspec] = connection
+    def __init__(self, host_list, blocking_timeout=0.0):
+        self.command_handlers = {}
+        self.connection_list = []
+
+        for hostport_tuple in host_list:
+            gearman_host, gearman_port = self.disambiguate_server_parameter(hostport_tuple)
+            client_connection = GearmanConnection(gearman_host, gearman_port, blocking_timeout=blocking_timeout)
+            self.connection_list.append(client_connection)
+
+    def disambiguate_server_parameter(self, hostport_tuple):
+        if type(hostport_tuple) is tuple:
+            gearman_host, gearman_port = hostport_tuple
+        else:
+            gearman_host = hostport_tuple
+            gearman_port = DEFAULT_GEARMAN_PORT
+
+        return gearman_host, gearman_port
+
+    def poll_connections(self, connections, timeout=None):
+        """Returns True if we did any activity, False if not"""
+        all_conns = set(connections)
+        dead_conns = set()
+        select_conns = all_conns
+
+        rd_list = []
+        wr_list = []
+        ex_list = []
+
+        successful_select = False
+        while not successful_select and select_conns:
+            select_conns = all_conns - dead_conns
+            rx_conns = [c for c in select_conns if c.readable()]
+            tx_conns = [c for c in select_conns if c.writable()]
+    
+            try:
+                rd_list, wr_list, ex_list = gearman.util.select(rx_conns, tx_conns, select_conns, timeout=timeout)
+                successful_select = True
+            except:
+                # Fish for the bad connections
+                for conn_to_test in select_conns:
+                    try:
+                        _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
+                    except:
+                        dead_conns.add(conn_to_test)
+
+        for conn in rd_list:
+            self.handle_read(conn)
+
+        for conn in wr_list:
+            self.handle_write(conn)
+
+        for conn in ex_list:
+            self.handle_error(conn)
+
+        for conn in dead_conns:
+            self.handle_error(conn)
+
+        return any([rd_list, wr_list, ex_list])
+
+    def handle_read(self, conn):
+        """Read behavior MUST be specified by the inheriting class
+
+        It is ambiguous whether or not we want to do blocking reads"""
+        raise NotImplementedError
+
+    def handle_incoming_command(self, conn, cmd_tuple):
+        completed_work = None
+        if cmd_tuple is None:
+            return completed_work
+
+        cmd_type, cmd_args = cmd_tuple
+        if cmd_type not in self.command_handlers:
+            raise KeyError("Received an unexpected cmd_type: %r not in %r" % (GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), self.command_handlers.keys()))
+
+        cmd_callback = self.command_handlers[cmd_type]
+        completed_work = cmd_callback(conn, cmd_type, cmd_args)
+        return completed_work
+
+    def handle_write(self, conn):
+        while conn.writable():
+            conn.send_data_from_buffer()
+
+    def handle_error(self, conn):
+        gearman_logger.error("Exception on connection %s" % c)
+        conn.close()
 
 class GearmanClient(GearmanBaseClient):
-    class TaskFailed(Exception):
-        pass
+    client_type = "client"
 
-    def __call__(self, func, data, unique=None, **kwargs):
-        return self.do_task(Task(func, data, unique, **kwargs))
+    def __init__(self, *args, **kwargs):
+        # By default we should have non-blocking sockets for a GearmanClient
+        kwargs.setdefault('blocking_timeout', 0.0)
+        super(GearmanClient, self).__init__(*args, **kwargs)
 
-    def do_task(self, task):
-        """Return the result of the task or raise a TaskFailed exception on failure."""
-        def _on_fail():
-            raise self.TaskFailed("Task failed")
-        task.on_fail.append(_on_fail)
-        taskset = Taskset([task])
-        if not self.do_taskset(taskset, timeout=task.timeout):
-            raise self.TaskFailed("Task timeout")
-        return task.result
+        # Support lookups of keys to requests
+        self.key_to_request_map = {}
+        self.connection_handle_to_key_map = {}
+        
+        self.command_handlers = {
+            GEARMAN_COMMAND_JOB_CREATED: self.recv_job_created,
+            GEARMAN_COMMAND_WORK_COMPLETE: self.recv_work_complete,
+            GEARMAN_COMMAND_WORK_FAIL: self.recv_work_fail,
+            GEARMAN_COMMAND_WORK_EXCEPTION: self.recv_work_exception,
+            GEARMAN_COMMAND_WORK_STATUS: self.recv_work_status,
+            GEARMAN_COMMAND_WORK_DATA: self.recv_work_data,
+            GEARMAN_COMMAND_WORK_WARNING: self.recv_work_warning,
+            GEARMAN_COMMAND_ERROR: self.recv_error
+        }
 
-    def dispatch_background_task(self, func, data, unique=None, high_priority=False):
-        """Submit a background task and return its handle."""
-        task = Task(func, data, unique, background=True, high_priority=high_priority)
-        taskset = Taskset([task])
-        self.do_taskset(taskset)
-        return task.handle
-
-    def get_server_from_hash(self, hsh):
+    def choose_server_for_hash(self, hsh):
         """Return a live connection for the given hash"""
         # TODO: instead of cycling through, should we shuffle the list if the first connection fails or is dead?
-        first_idx = hsh % len(self.connections)
-        all_dead = all(conn.is_dead for conn in self.connections)
-        for idx in range(first_idx, len(self.connections)) + range(0, first_idx):
-            conn = self.connections[idx]
+        first_idx = hsh % len(self.connection_list)
+        all_dead = all(not conn.is_connected() for conn in self.connection_list)
+        for idx in range(first_idx, len(self.connection_list)) + range(0, first_idx):
+            conn = self.connection_list[idx]
 
             # if all of the connections are dead we should try reconnecting
-            if conn.is_dead and not all_dead:
+            if not conn.is_connected() and not all_dead:
                 continue
 
             try:
                 conn.connect() # Make sure the connection is up (noop if already connected)
-            except conn.ConnectionError:
+            except GearmanConnectionError:
                 pass
             else:
                 return conn
 
         raise self.ServerUnavailable("Unable to Locate Server")
 
-    def _submit_task(self, task):
-        server = self.get_server_from_hash(hash(task))
-        if task.background:
-            func = GEARMAN_COMMAND_SUBMIT_JOB_BG
-        elif task.high_priority:
-            func = GEARMAN_COMMAND_SUBMIT_JOB_HIGH
-        else:
-            func = GEARMAN_COMMAND_SUBMIT_JOB
-        server.send_command(func,
-            dict(func=self.prefix + task.func, data=task.data, unique=task.unique))
-        server.waiting_for_handles.insert(0, task)
-        return server
-
-    def _command_handler(self, taskset, conn, cmd_type, cmd_args):
-        # DEBUG and _D( "RECEIVED COMMAND:", cmd_type, cmd_args )
-        cmd_handle = cmd_args.get('handle', None)
-        if cmd_handle:
-            cmd_handle = "%s//%s" % (conn.hostspec, cmd_handle)
-
-        if cmd_type != GEARMAN_COMMAND_JOB_CREATED and cmd_handle:
-            existing_handle = taskset.handles.get(cmd_handle, None)
-            task = taskset.get(existing_handle, None)
-            if not task:
-                return
-
-            if task.is_finished:
-                raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd_type))
-
-        if cmd_type == GEARMAN_COMMAND_WORK_COMPLETE:
-            task.complete(cmd_args['result'])
-
-        elif cmd_type == GEARMAN_COMMAND_WORK_FAIL:
-            if task.retries_done < task.retry_count:
-                task.retries_done += 1
-                task.retrying()
-                task.handle = None
-                taskset.connections.add(self._submit_task(task))
-            else:
-                task.fail()
-
-        elif cmd_type == GEARMAN_COMMAND_WORK_STATUS:
-            task.status(int(cmd_args['numerator']), int(cmd_args['denominator']))
-
-        elif cmd_type == GEARMAN_COMMAND_JOB_CREATED:
-            task = conn.waiting_for_handles.pop()
-            task.handle = cmd_handle
-            taskset.handles[cmd_handle] = hash( task )
-            if task.background:
-                task.is_finished = True
-
-        elif cmd_type == GEARMAN_COMMAND_ERROR:
-            raise self.CommandError(str(cmd_args)) # TODO make better
-        else:
-            raise Exception("Unexpected command: %s" % cmd_type)
-
-    def do_taskset(self, taskset, timeout=None):
-        """Execute a Taskset and return True iff all tasks finished before timeout."""
-
-        # set of connections to which jobs were submitted
-        taskset.connections = set(self._submit_task(task) for task in taskset.itervalues())
-
-        taskset.handles = {}
-
-        start_time = time.time()
-        end_time = timeout and start_time + timeout or 0
-        while not taskset.cancelled and not all(t.is_finished for t in taskset.itervalues()):
-            timeleft = timeout and end_time - time.time() or 0.5
-            if timeleft <= 0:
-                taskset.cancel()
+    ######################## BEGIN NEW CODE ######################## 
+    def handle_read(self, conn):
+        """For our worker, we'll want to do blocking calls on processing out commands"""
+        # Do a single NON blocking read
+        cmd_list = conn.recv_command_list()
+        for cmd_tuple in cmd_list:
+            completed_work = self.handle_incoming_command(conn, cmd_tuple)
+            if completed_work is False:
                 break
 
-            rx_socks = [c for c in taskset.connections if c.readable()]
-            tx_socks = [c for c in taskset.connections if c.writable()]
-            rd_list, wr_list, ex_list = gearman.util.select(rx_socks, tx_socks, taskset.connections, timeout=timeleft)
+    def submit_job(self, function_name, data, unique=None, background=FOREGROUND_JOB, priority=NO_PRIORITY, timeout=None):
+        job_info = dict(function_name=function_name, data=data, unique=unique)
+        completed_job_list = self.submit_job_list([job_info], background=background, priority=priority, timeout=timeout)
+        return completed_job_list[0]
 
-            for conn in ex_list:
-                pass # TODO
+    def submit_job_list(self, jobs_to_submit, background=FOREGROUND_JOB, priority=NO_PRIORITY, timeout=None):
+        """Takes a list of jobs_to_submit with dicts of
+        
+        {'function_name': function_name, 'unique': unique, 'data': data}
+        """
+        cmd_type_lookup = {
+            (BACKGROUND_JOB, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_BG,
+            (BACKGROUND_JOB, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
+            (BACKGROUND_JOB, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
+            (FOREGROUND_JOB, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB,
+            (FOREGROUND_JOB, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
+            (FOREGROUND_JOB, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH            
+        }
+        lookup_tuple = (background, priority)
+        cmd_type = cmd_type_lookup[lookup_tuple]
 
-            for conn in rd_list:
-                for cmd_tuple in conn.recv():
-                    if cmd_tuple is None:
-                        continue
+        submitted_job_requests = []
+        for job_info in jobs_to_submit:
 
-                    cmd_type, cmd_args = cmd_tuple
-                    self._command_handler(taskset, conn, cmd_type, cmd_args)
+            # Make sure we have a unique identifier for ALL our tasks
+            job_unique = job_info.get('unique')
+            job_unique = job_unique or uuid.uuid4().hex
 
-            for conn in wr_list:
-                conn.send()
+            current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
+            current_request = GearmanJobRequest(current_job, submit_cmd=cmd_type, initial_priority=priority, is_background=background)
 
-        # TODO: should we fail all tasks that didn't finish or leave that up to the caller?
+            submitted_job_requests.append(current_request)
 
-        return all(t.is_finished for t in taskset.itervalues())
+            request_key = current_request.unique_key()
+            self.key_to_request_map[request_key] = current_request
+            self._submit_job_request(current_request)
 
-    def get_status(self, handle):
-        hostport, shandle = handle.split("//")
+        return self._wait_for_job_completions(submitted_job_requests, timeout=timeout)
 
-        server = self.connections_by_hostport[hostport]
-        server.connect() # Make sure the connection is up (noop if already connected)
-        server.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=shandle))
-        cmd_tuple = server.recv_blocking()
-        if cmd_tuple is None:
-            return None
+    def _submit_job_request(self, given_job_request):
+        conn = self.choose_server_for_hash(hash(given_job_request))
+        given_job_request.bind_connection(conn)
 
-        cmd_type, cmd_args = cmd_tuple
-        return cmd_args
+        gearman_job = given_job_request.get_job()
+        cmd_args = dict(func=gearman_job.func, data=gearman_job.data, unique=gearman_job.unique)
+
+        # Do non-blocking sends of this command
+        conn.send_command(given_job_request.submit_cmd, cmd_args)
+        conn.waiting_for_handles.append(given_job_request.unique_key())
+
+    def _wait_for_job_completions(self, submitted_job_requests, timeout=None):
+        submitted_job_connections = set(current_job.get_connection() for current_job in submitted_job_requests)
+        submitted_job_connections -= set([None])
+        
+        continue_working = True
+        while continue_working:
+            # time_remaining = time.time() - time_started
+
+            any_activity = self.poll_connections(submitted_job_connections, timeout=None)
+
+            jobs_complete = all(job_request.is_complete() for job_request in submitted_job_requests)
+            # have_time_remaining = bool(time_remaining > 0)
+            have_time_remaining = True
+            continue_working = all([not jobs_complete, have_time_remaining, any_activity])
+
+        return submitted_job_requests
+    # 
+    # def get_status(self, handle):
+    #     current_request = self.fetch_job_request(conn, cmd_args['handle'])
+    #     current_connection = current_request.get_connection()
+    # 
+    #     current_connection.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=shandle))
+    #     cmd_tuple = current_connection.recv_command()
+    #     if cmd_tuple is None:
+    #         return None
+    # 
+    #     cmd_type, cmd_args = cmd_tuple
+    #     return cmd_args
+
+    def fetch_job_request(self, conn, handle):
+        connection_handle_key = (conn.hostspec, handle)
+        request_key = self.connection_handle_to_key_map[connection_handle_key]
+        return self.key_to_request_map[request_key]
+
+    # Gearman worker callbacks when we receive a command from the server
+    def recv_job_created(self, conn, cmd_type, cmd_args):
+        handle = cmd_args['handle']
+        request_key = conn.waiting_for_handles.popleft()
+
+        current_request = self.key_to_request_map[request_key]
+        current_request.bind_handle(handle)
+        current_request.state = GEARMAN_JOB_STATE_QUEUED
+        
+        # Now we have a connection tied to this guy
+        conn_handle = current_request.connection_handle()
+        self.connection_handle_to_key_map[conn_handle] = request_key
+        return True
+
+    def recv_work_data(self, conn, cmd_type, cmd_args):
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+        current_request.data_updates.append(cmd_args['data'])
+
+        return True
+
+    def recv_work_warning(self, conn, cmd_type, cmd_args):
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+        current_request.warning_updates.append(cmd_args['data'])
+        
+        return True
+
+    def recv_work_status(self, conn, cmd_type, cmd_args):
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+
+        status_tuple = (cmd_args['numerator'], cmd_args['denominator'])
+        current_request.status_updates.append(status_tuple)
+        return True
+
+    def recv_work_complete(self, conn, cmd_type, cmd_args):
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+        current_request.result = cmd_args['data']
+        current_request.state = GEARMAN_JOB_STATE_COMPLETE
+
+        conn_handle = current_request.connection_handle()
+        del self.connection_handle_to_key_map[conn_handle]
+
+        current_request.bind_connection(None)
+
+        return True
+
+    def recv_work_fail(self, conn, cmd_type, cmd_args):
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+        if current_request.retries_attempted < current_request.retries_max:
+            self.on_job_request_retry(current_request)
+        else:
+            self.on_job_request_failed(current_request)
+        
+        return True
+
+    def recv_work_exception(self, conn, cmd_type, cmd_args):
+        # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
+        # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
+        #
+        current_request = self.fetch_job_request(conn, cmd_args['handle'])
+        current_request.exception = cmd_args['data']
+
+        return True
+
+    def recv_error(self, conn, cmd_type, cmd_args):
+        gearman_logger.error("Error from server: %s: %s" % (cmd_args['err_code'], cmd_args['err_text']))
+        conn.close()
+
+        return False
+
+    # Gearman worker callbacks when we receive a command from the server
+    def on_job_request_retry(self, current_request):
+        # conn_handle = current_request.connection_handle()
+        # del self.connection_handle_to_key_map[conn_handle]
+        # self._submit_job_request(current_request)
+        raise NotImplementedError
+
+        del self.connection_handle_to_key_map[conn_handle]
+        return True
+
+    def on_job_request_failed(self, current_request):
+        current_request.state = GEARMAN_JOB_STATE_FAILED
+        return True
