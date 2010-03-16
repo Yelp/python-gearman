@@ -4,12 +4,13 @@ import os, sys, signal, threading
 import unittest, time, socket
 
 from gearman import GearmanClient, GearmanWorker
-from gearman.connection import GearmanConnection, GearmanConnectionError
+from gearman.connection import GearmanConnection
+from gearman.errors import ConnectionError
 from gearman.manager import GearmanManager
 from gearman.server import GearmanServer
 from gearman.task import Task
 from gearman.protocol import *
-from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
+from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE, GEARMAN_JOB_STATE_TIMEOUT
 
 job_servers = ["127.0.0.1"]
 
@@ -97,6 +98,15 @@ class TestGearman(GearmanTestCase):
         completed_job = self.client.submit_job("fail", "bar")
         self.failUnlessEqual(completed_job.state, GEARMAN_JOB_STATE_FAILED)
 
+    def testWorkTimeout(self):
+        completed_job = self.client.submit_job("sleep", "0.1", timeout=1.0)
+        self.failUnlessEqual(completed_job.state, GEARMAN_JOB_STATE_COMPLETE)
+        self.failUnlessEqual(completed_job.result, "0.1")
+
+        completed_job = self.client.submit_job("sleep", "1.5", timeout=1.0)
+        self.failUnlessEqual(completed_job.state, GEARMAN_JOB_STATE_TIMEOUT)
+        self.failUnlessEqual(completed_job.result, None)
+
     def testCompleteAfterFail(self):
         failed_job = self.client.submit_job("fail", "bar")
         self.failUnlessEqual(failed_job.state, GEARMAN_JOB_STATE_FAILED)
@@ -175,7 +185,7 @@ def start_server():
     for i in range(10):
         try:
             connection.connect()
-        except GearmanConnectionError:
+        except ConnectionError:
             time.sleep(0.5)
         else:
             break

@@ -1,9 +1,10 @@
 import re
 import struct
 import sys
+from gearman.constants import *
+from gearman.errors import ProtocolError
 
-DEFAULT_GEARMAN_PORT = 4730
-
+# Protocol specific constants
 NULL_CHAR = "\x00"
 MAGIC_RES_STRING = "%sRES" % NULL_CHAR
 MAGIC_REQ_STRING = "%sREQ" % NULL_CHAR
@@ -51,52 +52,7 @@ GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
 GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
 GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
 
-# Fake command that'll print the text as given in cmd_args
-GEARMAN_COMMAND__SEND_RAW_TEXT__ = sys.maxint
-
-GEARMAN_COMMAND_TO_NAME = {
-    1: "GEARMAN_COMMAND_CAN_DO",
-    2: "GEARMAN_COMMAND_CANT_DO",
-    3: "GEARMAN_COMMAND_RESET_ABILITIES",
-    4: "GEARMAN_COMMAND_PRE_SLEEP",
-    6: "GEARMAN_COMMAND_NOOP",
-    7: "GEARMAN_COMMAND_SUBMIT_JOB",
-    8: "GEARMAN_COMMAND_JOB_CREATED",
-    9: "GEARMAN_COMMAND_GRAB_JOB",
-
-    # Gearman commands 10-19
-    10: "GEARMAN_COMMAND_NO_JOB",
-    11: "GEARMAN_COMMAND_JOB_ASSIGN",
-    12: "GEARMAN_COMMAND_WORK_STATUS",
-    13: "GEARMAN_COMMAND_WORK_COMPLETE",
-    14: "GEARMAN_COMMAND_WORK_FAIL",
-    15: "GEARMAN_COMMAND_GET_STATUS",
-    16: "GEARMAN_COMMAND_ECHO_REQ",
-    17: "GEARMAN_COMMAND_ECHO_RES",
-    18: "GEARMAN_COMMAND_SUBMIT_JOB_BG",
-    19: "GEARMAN_COMMAND_ERROR",
-
-    # Gearman commands 20-29
-    20: "GEARMAN_COMMAND_STATUS_RES",
-    21: "GEARMAN_COMMAND_SUBMIT_JOB_HIGH",
-    22: "GEARMAN_COMMAND_SET_CLIENT_ID",
-    23: "GEARMAN_COMMAND_CAN_DO_TIMEOUT",
-    24: "GEARMAN_COMMAND_ALL_YOURS",
-    25: "GEARMAN_COMMAND_WORK_EXCEPTION",
-    26: "GEARMAN_COMMAND_OPTION_REQ",
-    27: "GEARMAN_COMMAND_OPTION_RES",
-    28: "GEARMAN_COMMAND_WORK_DATA",
-    29: "GEARMAN_COMMAND_WORK_WARNING",
-
-    # Gearman commands 30-39
-    30: "GEARMAN_COMMAND_GRAB_JOB_UNIQ",
-    31: "GEARMAN_COMMAND_JOB_ASSIGN_UNIQ",
-    32: "GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG",
-    33: "GEARMAN_COMMAND_SUBMIT_JOB_LOW",
-    34: "GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG"
-}
-
-BINARY_COMMANDS = {
+BINARY_COMMAND_TO_PARAMS = {
     # Gearman commands 1-9
     GEARMAN_COMMAND_CAN_DO: ["func"],
     GEARMAN_COMMAND_CANT_DO: ["func"],
@@ -145,7 +101,7 @@ GEARMAN_SERVER_COMMAND_WORKERS = "workers"
 GEARMAN_SERVER_COMMAND_MAXQUEUE = "maxqueue"
 GEARMAN_SERVER_COMMAND_SHUTDOWN = "shutdown"
 
-SERVER_COMMANDS = {
+SERVER_COMMAND_TO_PARAMS = {
     GEARMAN_SERVER_COMMAND_STATUS: [],
     GEARMAN_SERVER_COMMAND_VERSION: [],
     GEARMAN_SERVER_COMMAND_WORKERS: [],
@@ -153,9 +109,47 @@ SERVER_COMMANDS = {
     GEARMAN_SERVER_COMMAND_SHUTDOWN: ["graceful"]
 }
 
+GEARMAN_COMMAND_TO_NAME = {
+    1: "GEARMAN_COMMAND_CAN_DO",
+    2: "GEARMAN_COMMAND_CANT_DO",
+    3: "GEARMAN_COMMAND_RESET_ABILITIES",
+    4: "GEARMAN_COMMAND_PRE_SLEEP",
+    6: "GEARMAN_COMMAND_NOOP",
+    7: "GEARMAN_COMMAND_SUBMIT_JOB",
+    8: "GEARMAN_COMMAND_JOB_CREATED",
+    9: "GEARMAN_COMMAND_GRAB_JOB",
 
-class ProtocolError(Exception):
-    pass
+    # Gearman commands 10-19
+    10: "GEARMAN_COMMAND_NO_JOB",
+    11: "GEARMAN_COMMAND_JOB_ASSIGN",
+    12: "GEARMAN_COMMAND_WORK_STATUS",
+    13: "GEARMAN_COMMAND_WORK_COMPLETE",
+    14: "GEARMAN_COMMAND_WORK_FAIL",
+    15: "GEARMAN_COMMAND_GET_STATUS",
+    16: "GEARMAN_COMMAND_ECHO_REQ",
+    17: "GEARMAN_COMMAND_ECHO_RES",
+    18: "GEARMAN_COMMAND_SUBMIT_JOB_BG",
+    19: "GEARMAN_COMMAND_ERROR",
+
+    # Gearman commands 20-29
+    20: "GEARMAN_COMMAND_STATUS_RES",
+    21: "GEARMAN_COMMAND_SUBMIT_JOB_HIGH",
+    22: "GEARMAN_COMMAND_SET_CLIENT_ID",
+    23: "GEARMAN_COMMAND_CAN_DO_TIMEOUT",
+    24: "GEARMAN_COMMAND_ALL_YOURS",
+    25: "GEARMAN_COMMAND_WORK_EXCEPTION",
+    26: "GEARMAN_COMMAND_OPTION_REQ",
+    27: "GEARMAN_COMMAND_OPTION_RES",
+    28: "GEARMAN_COMMAND_WORK_DATA",
+    29: "GEARMAN_COMMAND_WORK_WARNING",
+
+    # Gearman commands 30-39
+    30: "GEARMAN_COMMAND_GRAB_JOB_UNIQ",
+    31: "GEARMAN_COMMAND_JOB_ASSIGN_UNIQ",
+    32: "GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG",
+    33: "GEARMAN_COMMAND_SUBMIT_JOB_LOW",
+    34: "GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG"
+}
 
 def parse_binary_command(in_buffer, is_response=True):
     """Parse data and return (function name, argument dict, command size)
@@ -187,7 +181,7 @@ def parse_binary_command(in_buffer, is_response=True):
     if in_buffer_size < expected_packet_size:
         return None, None, 0
 
-    cmd_params = BINARY_COMMANDS.get(cmd_type, None)
+    cmd_params = BINARY_COMMAND_TO_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown binary message received: %s" % cmd_type)
 
@@ -205,7 +199,7 @@ def parse_binary_command(in_buffer, is_response=True):
     return cmd_type, cmd_args, expected_packet_size
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
-    expected_cmd_params = BINARY_COMMANDS.get(cmd_type, None)
+    expected_cmd_params = BINARY_COMMAND_TO_PARAMS.get(cmd_type, None)
     if expected_cmd_params is None:
         raise ProtocolError("Unknown binary message received: %s" % cmd_type)
 
@@ -245,7 +239,7 @@ def parse_server_command(in_buffer):
     cmd_type = cmd_pieces[0]
     split_arguments = cmd_pieces[1:]
 
-    cmd_params = SERVER_COMMANDS.get(cmd_type, None)
+    cmd_params = SERVER_COMMAND_TO_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown cmd_type: %s" % cmd_type)
 
@@ -263,7 +257,7 @@ def parse_server_command(in_buffer):
     return cmd_type, cmd_args, cmd_len
 
 def pack_server_command(cmd_type, cmd_args):
-    cmd_params = SERVER_COMMANDS.get(cmd_type, None)
+    cmd_params = SERVER_COMMAND_TO_PARAMS.get(cmd_type, None)
     if cmd_params is None:
         raise ProtocolError("Unknown server message received: %s" % cmd_type)
 

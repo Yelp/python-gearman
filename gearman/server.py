@@ -1,12 +1,18 @@
+# TODO: Write client_get_status
+# TODO: Catch client failures and purge all foreground jobs from the queue
+
 import logging
 import random
 import time
 import socket
 import collections
 
+import gearman.util
 from gearman.protocol import *
-from gearman.client import GearmanBaseClient
-from gearman.connection import GearmanConnection, GearmanConnectionError
+from gearman.constants import DEFAULT_GEARMAN_PORT
+from gearman._client_base import GearmanClientBase
+from gearman.connection import GearmanConnection
+from gearman.errors import ConnectionError
 from gearman.job import GearmanJob, GearmanJobRequest
 
 FOREGROUND_JOB = False
@@ -19,7 +25,11 @@ HIGH_PRIORITY = "high"
 gearman_logger = logging.getLogger("gearman.server")
 
 class GearmanJobManager(object):
-    """NOTE:  This server was build for TEST-only purposes.  This should NOT be used in production as it hasn't been thoroughly tested"""
+    """NOTE:  This server was built for TEST-only purposes.
+
+    This should NOT be used in production as it hasn't been thoroughly tested
+    MANY of the server behaviors here may NOT match the reference gearmand implementation written in C
+    """
     def __init__(self):
         self.task_to_request_queue_map = collections.defaultdict(collections.deque)
 
@@ -33,6 +43,7 @@ class GearmanJobManager(object):
         self.task_to_handles_in_progress = collections.defaultdict(set)
 
         # Keep track of which clients and workers know about this
+        self.handle_to_client_map = {}
         self.handle_to_worker_map = {}
         self.handle_counter = 0
 
@@ -57,7 +68,7 @@ class GearmanJobManager(object):
             worker_status['fd'] = worker_conn.fileno()
             gearman_host, gearman_port = worker_conn.get_address()
             worker_status['host'] = gearman_host
-            worker_status['client_id'] = worker_conn.get_client_id()
+            worker_status['client_id'] = None
             worker_status['abilities'] = function_set
             worker_list.append(worker_status)
 
@@ -158,6 +169,8 @@ class GearmanJobManager(object):
         return cmds_to_forward
 
     def unregister_connection(self, any_conn):
+        # TODO: Gracefully handle a dead client connection, all this code is for dead worker connections
+
         # We don't know if we're dealing with a worker connection so lets clean this up as if it were
         possibled_tasks = self.worker_to_task_map[any_conn]
         for task_name in possibled_tasks:
@@ -180,36 +193,57 @@ class GearmanJobManager(object):
             if not current_request:
                 continue
 
-            current_job = current_request.get_job()
-            function_name = current_job.func
-
-            # This job is no longer in progress nor is it tied to a particular worker
-            self.task_to_handles_in_progress[function_name].discard(job_handle)
-            self.handle_to_worker_map.pop(job_handle, None)
-
-            # If this is a background job, see if we should try this job
-            if current_request.is_background:
-                if current_request.retries_attempted >= current_request.retries_max:
-                    gearman_logger.error("Discarding job %r due to too many job failures, max %d", current_job, current_request.retries_max)
-                else:
-                    current_request.retries_attempted += 1
-
-                    # Requeue this handle to the front of the queue
-                    self.task_to_request_queue_map[function_name].appendleft(current_request)
-
-            # If this is a foreground job, we need to forward the work failure along
-            elif current_job and current_job.conn:
-                output_commands.append((current_job.conn, GEARMAN_COMMAND_WORK_FAIL, dict(handle=job_handle)))
+            self._unregister_request_for_client(current_request)
+            self._unregister_request_for_worker(current_request)
 
         return output_commands
+
+    def _unregister_request_for_client(self, current_request):
+        current_job = current_request.get_job()
+        job_handle = current_job.handle
+        function_name = current_job.func
+
+        if not current_request.background:
+            task_queue = self.task_to_request_queue_map[function_name]
+            task_queue.remove(current_request)
+
+        # At the very last moment, update our client map and remove this handle from the queue
+        self.handle_to_client_map.pop(job_handle, None)
+
+    def _unregister_request_for_worker(self, current_request):
+        current_job = current_request.get_job()
+        job_handle = current_job.handle
+        function_name = current_job.func
+
+        # This job is no longer in progress nor is it tied to a particular worker
+        self.task_to_handles_in_progress[function_name].discard(job_handle)
+
+        # If this is a background job, see if we should try this job
+        if current_request.is_background:
+            if current_request.retries_attempted >= current_request.retries_max:
+                gearman_logger.error("Discarding job %r due to too many job failures, max %d", current_job, current_request.retries_max)
+            else:
+                current_request.retries_attempted += 1
+
+                # Requeue this handle to the front of the queue
+                self.task_to_request_queue_map[function_name].appendleft(current_request)
+
+        # If this is a foreground job, we need to forward the work failure along
+        elif current_job and current_job.conn:
+            output_commands.append((current_job.conn, GEARMAN_COMMAND_WORK_FAIL, dict(handle=job_handle)))
+
+        # At the very last moment, update our worker map and remove this handle from the queue
+        self.handle_to_worker_map.pop(job_handle, None)
 
     def _add_job(self, gearman_job, priority=None, background=None):
         job_handle = self.generate_handle()
         
-        current_request = GearmanJobRequest(gearman_job, submit_cmd=None, initial_priority=priority, is_background=background)
+        current_request = GearmanJobRequest(gearman_job, initial_priority=priority, is_background=background)
         current_request.bind_handle(job_handle)
 
         self.handle_to_request_map[job_handle] = current_request
+        if background:
+            self.handle_to_client_map[job_handle] = gearman_job.conn
 
         task_name = gearman_job.func
         task_queue = self.task_to_request_queue_map[task_name]
@@ -238,8 +272,9 @@ class GearmanJobManager(object):
         gearman_job = current_request.get_job()
 
         # This job may not have a client if it were backgrounded
+        self.handle_to_client_map.pop(job_handle, None)
         self.handle_to_worker_map[job_handle]
-        
+
         self.task_to_handles_in_progress[gearman_job.func].discard(job_handle)
 
         del self.handle_to_request_map[job_handle]
@@ -259,7 +294,7 @@ class GearmanJobManager(object):
         else:
             return []
 
-class GearmanServer(GearmanBaseClient):
+class GearmanServer(GearmanClientBase):
     client_type = "server"
     
     def __init__(self, hostport_tuple):
@@ -267,7 +302,7 @@ class GearmanServer(GearmanBaseClient):
         self.setup_command_handlers()
         self.manager = GearmanJobManager()
 
-        gearman_host, gearman_port = self.disambiguate_server_parameter(hostport_tuple)
+        gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
 
         server_connection = GearmanConnection(gearman_host, gearman_port, blocking_timeout=0.0)
         server_connection.listen(5)
@@ -340,7 +375,7 @@ class GearmanServer(GearmanBaseClient):
     def handle_write(self, conn):
         try:
             cmd_list = conn.recv_command_list(is_response=False)
-        except GearmanConnectionError:
+        except ConnectionError:
             self.handle_gearman_connection_error(conn)
             return
 
@@ -373,7 +408,7 @@ class GearmanServer(GearmanBaseClient):
 
         self.running = True
         while self.running:
-            self.poll_connections(self.connection_list, timeout=1.0)
+            self.poll_connections_once(self.connection_list, timeout=1.0)
 
             cmds_to_send = self.manager.check_queues()
             self._conditional_send_commands(cmds_to_send)

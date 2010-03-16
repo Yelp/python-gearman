@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+# TODO: Update the GearmanMananger to use GearmanConnection
 
 import socket
 
-from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection, GearmanConnectionError
+from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection
+from gearman.errors import ConnectionError
 from gearman.protocol import *
 
 class GearmanManager(object):
@@ -19,7 +21,7 @@ class GearmanManager(object):
         try:
             self.sock.connect(self.addr)
         except (socket.error, socket.timeout), exc:
-            raise GearmanConnectionError(str(exc))
+            raise ConnectionError(str(exc))
 
     def send_command(self, cmd_name, expecting_results_list=False):
         self.sock.sendall("%s\n" % cmd_name)

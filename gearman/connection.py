@@ -1,3 +1,6 @@
+# TODO: Remove .hostspec in favor of .get_address()
+# TODO: Add reconnect feature
+
 import collections
 import socket, struct, select, errno, logging
 import StringIO
@@ -5,19 +8,24 @@ from time import time
 
 import gearman.util
 from gearman.compat import *
-from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, GEARMAN_COMMAND_TO_NAME, BINARY_COMMANDS, SERVER_COMMANDS, NULL_CHAR, \
+from gearman.errors import ConnectionError
+from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, GEARMAN_COMMAND_TO_NAME, BINARY_COMMAND_TO_PARAMS, SERVER_COMMAND_TO_PARAMS, NULL_CHAR, \
     pack_binary_command, parse_binary_command, parse_server_command, pack_server_command
 
 gearman_logger = logging.getLogger("gearman.connection")
 
-class GearmanConnectionError(Exception):
-    pass
-
 class GearmanConnection(object):
+    """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
+    
+    Wraps a socket and provides the following functionality:
+       Full read/write methods for Gearman BINARY commands and responses
+       Read and Write for Gearman SERVER commands
+       No read/write convenience methods for Gearmn SERVER responses, use 
+    
+    Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
+    """ 
+    
     def __init__(self, hostname, port=DEFAULT_GEARMAN_PORT, blocking_timeout=0.0):
-        """
-        A connection to a Gearman server.
-        """
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = hostname
         self.gearman_port = port
@@ -25,7 +33,6 @@ class GearmanConnection(object):
         # If blocking_timeout == 0.0, this connection becomes a NON-blocking socket
         self.blocking_timeout = blocking_timeout
 
-        self.client_id = id(self)
         self.hostspec = "%s:%d" % (self.gearman_host, self.gearman_port)
 
         self._reset_connection()
@@ -42,17 +49,14 @@ class GearmanConnection(object):
         self._input_buffer = ""
         self._output_buffer = ""
 
-        self.waiting_for_handles = collections.deque()
-
     def fileno(self):
+        """Implements fileno() for use with select.select()"""
         assert self.gearman_socket, "No socket set"
         return self.gearman_socket.fileno()
 
     def get_address(self):
+        """Returns the host and port"""
         return (self.gearman_host, self.gearman_port)
-
-    def get_client_id(self):
-        return self.client_id
 
     def writable(self):
         return self._is_connected and self._output_buffer
@@ -90,7 +94,7 @@ class GearmanConnection(object):
         return client_connection
 
     def connect(self):
-        """Connect to the server. Raise GearmanConnectionError if connection fails."""
+        """Connect to the server. Raise ConnectionError if connection fails."""
         if self._is_server_connection:
             raise TypeError("This connection has been setup as a server side listening socket")
         elif self._is_connected and self._is_client_connection:
@@ -101,7 +105,7 @@ class GearmanConnection(object):
             client_socket.connect((self.gearman_host, self.gearman_port))
         except (socket.error, socket.timeout), exc:
             self._reset_connection()
-            raise GearmanConnectionError(str(exc))
+            raise ConnectionError(str(exc))
 
         self._is_client_connection = True
         self.bind_socket(client_socket)
@@ -123,9 +127,6 @@ class GearmanConnection(object):
     def is_connected(self):
         return self._is_connected
 
-    def set_client_id(self, client_id):
-        self.client_id = client_id
-
     def recv_command(self, is_response=True):
         received_commands = self.recv_command_list(is_response=is_response)
         assert len(received_commands) == 1, "Received multiple commands when only expecting 1: %r" % received_commands
@@ -140,11 +141,12 @@ class GearmanConnection(object):
         received_commands, bytes_read = self.convert_data_to_commands(given_buffer, is_response=is_response)
 
         # Pull these bytes off the buffer
-        self.recv_raw_data(bytes_read)
+        self.recv_binary_string(bytes_to_read=bytes_read)
 
         return received_commands
 
-    def recv_raw_data(self, bytes_to_read=4096):
+    def recv_binary_string(self, bytes_to_read=4096):
+        """Returns AND removes the read content from the input buffer"""
         data_read = self._input_buffer[:bytes_to_read]
         self._input_buffer = self._input_buffer[bytes_to_read:]
 
@@ -157,10 +159,10 @@ class GearmanConnection(object):
     def recv_data_to_buffer(self, size=4096):
         """
         Returns a list of commands: [(cmd_name, cmd_args), ...]
-        Raises GearmanConnectionError if the connection dies.
+        Raises ConnectionError if the connection dies.
             or ProtocolError if parsing of a command fails.
         """
-        assert self._is_connected, "Cannot receive data if we don't have a connection"
+        assert self._is_connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
 
         received_commands = []
         recv_buffer = ''
@@ -171,7 +173,7 @@ class GearmanConnection(object):
                 return ''
             if exc.args[0] == errno.ECONNRESET:
                 self.gearman_socket.close()
-                raise GearmanConnectionError("connection reset died")
+                raise ConnectionError("connection reset died")
             else:
                 raise
 
@@ -179,11 +181,17 @@ class GearmanConnection(object):
         return len(self._input_buffer)
 
     def convert_data_to_commands(self, given_buffer, is_response):
+        """Takes a binary string and converts it into a list of commands we read.
+
+        is_response=True/False sets the expected magic type (\x00REQ or \x00RES)
+        """
         # Read the input buffer and store all our parsed commands in a queue
         bytes_read = 0
         bytes_total = len(given_buffer)
 
         received_commands = []
+
+        # While we still have bytes to read...
         while bytes_read < bytes_total:
             command_buffer = given_buffer[bytes_read:]
 
@@ -199,30 +207,32 @@ class GearmanConnection(object):
         return received_commands, bytes_read
 
     def parse_command_from_buffer(self, given_buffer, is_response=True):
+        """Conditionally parse a binary command or a text based server command"""
         if given_buffer[0] == NULL_CHAR:
             return parse_binary_command(given_buffer, is_response=is_response)
         else:
             return parse_server_command(given_buffer)
 
     def send_command(self, cmd_type, cmd_args=None, is_response=False):
-        """Buffered method"""
+        """Buffered method, queues and sends a single Gearman command"""
         cmd_args = cmd_args or {}
         send_cmd_tuple = (cmd_type, cmd_args, is_response)
         return self.send_command_list([send_cmd_tuple])
 
     def send_command_list(self, cmd_list):
-        """Buffered method"""
+        """Buffered method, queues and sends a list of Gearman commands"""
         byte_string_to_send = self.convert_commands_to_data(cmd_list)
         self.send_data_to_buffer(byte_string_to_send)
 
         self.send_data_from_buffer()
 
     def send_binary_string(self, given_buffer):
-        """Buffered method"""
+        """Buffered method, queues and sends a binary string"""
         self.send_data_to_buffer(given_buffer)
         return self.send_data_from_buffer()
 
     def send_data_to_buffer(self, given_buffer):
+        """Adds data to the outgoing buffer, use self.send_data_from_buffer to write to the socket"""
         self._output_buffer += given_buffer
 
     def send_data_from_buffer(self):
@@ -230,7 +240,7 @@ class GearmanConnection(object):
 
         Returns remaining size of the output buffer
         """
-        assert self._is_connected
+        assert self._is_connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
 
         if not bool(self._output_buffer):
             return 0
@@ -242,13 +252,13 @@ class GearmanConnection(object):
                 return len(self._output_buffer)
 
             self.close()
-            raise GearmanConnectionError(str(exc))
+            raise ConnectionError(str(exc))
 
         self._output_buffer = self._output_buffer[bytes_sent:]
         return len(self._output_buffer)
 
     def convert_commands_to_data(self, cmd_list):
-        """Takes a list of tuples (cmd_type, cmd_args, is_response)"""
+        """Takes a list of tuples (cmd_type, cmd_args, is_response) and converts these commands to a binary string"""
         output_buffer = ''
         for cmd_type, cmd_args, is_response in cmd_list:
             output_buffer += self.pack_command_for_buffer(cmd_type, cmd_args, is_response=is_response)
@@ -258,14 +268,16 @@ class GearmanConnection(object):
         return output_buffer
 
     def pack_command_for_buffer(self, cmd_type, cmd_args, is_response):
-        if cmd_type in BINARY_COMMANDS:
+        """Converts a requested gearman command to its raw binary packet"""
+        if cmd_type in BINARY_COMMAND_TO_PARAMS:
             return pack_binary_command(cmd_type, cmd_args, is_response)
-        elif cmd_type in SERVER_COMMANDS:
+        elif cmd_type in SERVER_COMMAND_TO_PARAMS:
             return pack_server_command(cmd_type, cmd_args)
         else:
             raise ProtocolError("Unknown command: %r" % cmd_type)
 
     def close(self):
+        """Shutdown our existing socket and reset all of our connection data"""
         try:
             self.gearman_socket.close()
         except:

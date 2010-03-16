@@ -1,3 +1,5 @@
+# TODO: Update self.alive_connections to NOT be a property function
+
 import collections
 import random, sys, select, logging
 import time
@@ -5,8 +7,8 @@ import time
 import gearman.util
 from gearman.compat import *
 from gearman.protocol import *
-from gearman.connection import GearmanConnectionError
-from gearman.client import GearmanBaseClient
+from gearman.errors import ConnectionError
+from gearman._client_base import GearmanClientBase
 from gearman.job import GearmanJob
 
 log = logging.getLogger("gearman")
@@ -14,7 +16,7 @@ log = logging.getLogger("gearman")
 POLL_INTERVAL_IN_SECONDS = 1.0
 SLEEP_INTERVAL_IN_SECONDS = 10.0
 
-class GearmanWorker(GearmanBaseClient):
+class GearmanWorker(GearmanClientBase):
     client_type = "worker"
 
     def __init__(self, *args, **kwargs):
@@ -58,7 +60,7 @@ class GearmanWorker(GearmanBaseClient):
             if not conn.is_connected() or all_dead:
                 try:
                     conn.connect()
-                except GearmanConnectionError:
+                except ConnectionError:
                     continue
                 else:
                     self._set_abilities(conn)
@@ -77,7 +79,7 @@ class GearmanWorker(GearmanBaseClient):
         last_job_time = time.time()
 
         while self.working and continue_working:
-            had_connection_activity = self.poll_connections(self.alive_connections, timeout=10.0)
+            had_connection_activity = self.poll_connections_once(self.alive_connections, timeout=10.0)
 
             is_idle = not had_connection_activity
             continue_working = not bool(stop_if(is_idle, last_job_time))
