@@ -1,5 +1,3 @@
-# TODO: Update self.alive_connections to NOT be a property function
-
 import collections
 import random, sys, select, logging
 import time
@@ -24,6 +22,7 @@ class GearmanWorker(GearmanClientBase):
         kwargs.setdefault('blocking_timeout', 2.0)
         super(GearmanWorker, self).__init__(*args, **kwargs)
         self.abilities = {}
+        self.conns_awaiting_job_assignment = set()
 
         self.command_handlers = {
             GEARMAN_COMMAND_NOOP: self.recv_noop,
@@ -34,8 +33,7 @@ class GearmanWorker(GearmanClientBase):
         }
 
     def register_function(self, job_name, callback_function):
-        """Register a function with gearman with an optional default timeout.
-        """
+        """Register a function with gearman"""
         self.abilities[job_name] = callback_function
 
     def unregister_function(self, job_name):
@@ -46,18 +44,17 @@ class GearmanWorker(GearmanClientBase):
             self.send_can_do(conn, name)
 
     def set_client_id(self, client_id):
-        for conn in self.alive_connections:
+        for conn in self.get_alive_connections():
             conn.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, data=client_id)
 
-    @property
-    def alive_connections(self):
+    def get_alive_connections(self):
         """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
         random.shuffle(self.connection_list)
-        all_dead = all(not conn.is_connected() for conn in self.connection_list)
+
         alive = []
         for conn in self.connection_list:
-            if not conn.is_connected() or all_dead:
+            if not conn.is_connected():
                 try:
                     conn.connect()
                 except ConnectionError:
@@ -65,8 +62,10 @@ class GearmanWorker(GearmanClientBase):
                 else:
                     self._set_abilities(conn)
                     conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
+
             if conn.is_connected():
                 alive.append(conn)
+
         return alive
 
     def stop(self):
@@ -79,27 +78,27 @@ class GearmanWorker(GearmanClientBase):
         last_job_time = time.time()
 
         while self.working and continue_working:
-            had_connection_activity = self.poll_connections_once(self.alive_connections, timeout=10.0)
+            had_connection_activity = self.poll_connections_once(self.get_alive_connections(), timeout=poll_interval)
 
             is_idle = not had_connection_activity
             continue_working = not bool(stop_if(is_idle, last_job_time))
 
-        for current_connection in self.alive_connections:
+        # If we were kicked out of the worker loop, we should shutdown all our connections
+        for current_connection in self.get_alive_connections():
             current_connection.close()
 
     def handle_read(self, conn):
         """For our worker, we'll want to do blocking calls on processing out commands"""
-        continue_working = True
-
-        conn.awaiting_job_assignment = False
+        self.conns_awaiting_job_assignment.discard(conn)
+        
         cmd_list = conn.recv_command_list()
         for cmd_tuple in cmd_list:
             completed_work = self.handle_incoming_command(conn, cmd_tuple)
             if completed_work is False:
                 break
 
-        del conn.awaiting_job_assignment
-    
+        self.conns_awaiting_job_assignment.discard(conn)
+
     def on_job_execute(self, current_job):
         """Override this function if you'd like different exception handling behavior"""
         try:
@@ -130,6 +129,8 @@ class GearmanWorker(GearmanClientBase):
 
     # Send Gearman commands related to jobs
     def send_job_status(self, current_job, numerator, denominator):
+        assert type(numerator) in (int, float), "Numerator must be a numeric value"
+        assert type(denominator) in (int, float), "Denominator must be a numeric value"
         self.send_command_for_job(current_job, GEARMAN_COMMAND_WORK_STATUS, numerator=numerator, denominator=denominator)
 
     def send_job_complete(self, current_job, data):
@@ -166,9 +167,9 @@ class GearmanWorker(GearmanClientBase):
     ### Callbacks when we receive a command from the server ###
     ###########################################################
     def request_job(self, conn):
-        if not conn.awaiting_job_assignment:
+        if conn not in self.conns_awaiting_job_assignment:
             conn.send_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
-            conn.awaiting_job_assignment = True
+            self.conns_awaiting_job_assignment.add(conn)
 
     def recv_noop(self, conn, cmd_type, cmd_args):
         # If were explicitly woken up to do some jobs, we better get some work to do
@@ -178,7 +179,8 @@ class GearmanWorker(GearmanClientBase):
 
     def recv_no_job(self, conn, cmd_type, cmd_args):
         conn.send_command(GEARMAN_COMMAND_PRE_SLEEP)
-        conn.awaiting_job_assignment = False
+        self.conns_awaiting_job_assignment.discard(conn)
+
         return False
 
     def recv_error(self, conn, cmd_type, cmd_args):

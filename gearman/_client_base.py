@@ -73,7 +73,8 @@ class GearmanClientBase(object):
 
         return any([rd_list, wr_list, ex_list])
 
-    def poll_connections_until_stopped(self, submitted_connections, stopping_function, timeout=None):
+    def poll_connections_until_stopped(self, submitted_connections, polling_callback_fxn, timeout=None):
+        "Continue to poll our connections until we receive a stopping condition"
         stop_time = time.time() + (timeout or 0.0)
 
         continue_working = True
@@ -84,8 +85,7 @@ class GearmanClientBase(object):
             # Keep polling our connections until we find that our request states have all been updated
             any_activity = self.poll_connections_once(submitted_connections, timeout=polling_timeout)
 
-            should_stop = stopping_function(self)
-            continue_working = bool(not should_stop) and bool(any_activity)
+            continue_working = polling_callback_fxn(self, any_activity)
 
     def handle_read(self, conn):
         """By default, we'll handle reads by processing out command list and calling the appropriate command handlers"""

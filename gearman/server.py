@@ -47,7 +47,7 @@ class GearmanJobManager(object):
         self.handle_to_worker_map = {}
         self.handle_counter = 0
 
-    def get_status(self):
+    def get_server_status(self):
         status_list = []
         for function_name, workers in self.task_to_worker_map.iteritems():
             queued_jobs = len(self.task_to_request_queue_map[function_name])
@@ -61,7 +61,7 @@ class GearmanJobManager(object):
 
         return status_list
 
-    def get_workers(self):
+    def get_server_workers(self):
         worker_list = []
         for worker_conn, function_set in self.worker_to_task_map.iteritems():
             worker_status = {}
@@ -358,7 +358,7 @@ class GearmanServer(GearmanClientBase):
             new_client_conn = conn.accept()
             self.connection_list.append(new_client_conn)
 
-            gearman_logger.debug("Accepted connection from %s" % new_client_conn.hostspec)
+            gearman_logger.debug("Accepted connection from %r", new_client_conn.get_address())
             return
 
         # If this connection died midflight, we need to unregister this connection
@@ -404,7 +404,7 @@ class GearmanServer(GearmanClientBase):
     def start(self):
         assert self.server_connection, "Not listening on any socket"
 
-        gearman_logger.debug("Listening for connections on %s" % self.server_connection.hostspec)
+        gearman_logger.debug("Listening for connections on %r", self.server_connection.get_address())
 
         self.running = True
         while self.running:
@@ -516,7 +516,7 @@ class GearmanServer(GearmanClientBase):
 
     # Raw server responses
     def recv_server_status(self, conn, cmd_typ, cmd_args):
-        all_status = self.manager.get_status()
+        all_status = self.manager.get_server_status()
         for status_line in all_status:
             conn.send_binary_string("%s\t%d\t%d\t%d\n" % (status_line['func'], status_line['num_jobs'], status_line['num_working'], status_line['num_workers']))
 
@@ -527,7 +527,7 @@ class GearmanServer(GearmanClientBase):
         conn.send_binary_string("%s\n" % __version__)
 
     def recv_server_workers(self, conn, cmd_type, cmd_args):
-        worker_status = self.manager.get_workers()
+        worker_status = self.manager.get_server_workers()
         for status_line in worker_status:
             conn.send_binary_string("%d %s %s : %s\n" % (status_line['fd'], status_line['host'], status_line['client_id'], " ".join(status_line['abilities'])))
 

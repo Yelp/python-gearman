@@ -1,6 +1,3 @@
-# TODO: Remove .hostspec in favor of .get_address()
-# TODO: Add reconnect feature
-
 import collections
 import socket, struct, select, errno, logging
 import StringIO
@@ -32,8 +29,6 @@ class GearmanConnection(object):
 
         # If blocking_timeout == 0.0, this connection becomes a NON-blocking socket
         self.blocking_timeout = blocking_timeout
-
-        self.hostspec = "%s:%d" % (self.gearman_host, self.gearman_port)
 
         self._reset_connection()
 

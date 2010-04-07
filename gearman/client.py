@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # TODO: Implement retry behavior
 # TODO: Test rotating servers
-# TODO: Implement/Test GET_STATUS command
 
 import collections
 import time
@@ -16,14 +15,7 @@ from gearman.compat import *
 from gearman.connection import GearmanConnection
 from gearman.protocol import *
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE, GEARMAN_JOB_STATE_TIMEOUT
-
-# Job submission parameters
-FOREGROUND_JOB = False
-BACKGROUND_JOB = True
-
-NO_PRIORITY = None
-LOW_PRIORITY = "low"
-HIGH_PRIORITY = "high"
+from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
 
 gearman_logger = logging.getLogger("gearman.client")
 
@@ -55,7 +47,8 @@ class GearmanClient(GearmanClientBase):
             GEARMAN_COMMAND_WORK_STATUS: self.recv_work_status,
             GEARMAN_COMMAND_WORK_DATA: self.recv_work_data,
             GEARMAN_COMMAND_WORK_WARNING: self.recv_work_warning,
-            GEARMAN_COMMAND_ERROR: self.recv_error
+            GEARMAN_COMMAND_ERROR: self.recv_error,
+            GEARMAN_COMMAND_STATUS_RES: self.recv_status_res
         }
 
     def bind_connection_to_request(self, current_request):
@@ -150,12 +143,13 @@ class GearmanClient(GearmanClientBase):
     def _wait_for_jobs(self, submitted_job_requests, timeout=None):
         """Keep polling on our connection until our job requests are complete"""
         submitted_job_connections = set(current_request.get_connection() for current_request in submitted_job_requests)
-        submitted_job_connections -= set([None])
+        submitted_job_connections.discard(None)
 
-        def stop_on_job_completion(self):
-            return all(job_request.is_complete() for job_request in submitted_job_requests)
+        # Stop polling when all our jobs are complete
+        def callback_on_possible_job_completion(self, any_activity):
+            return not all(job_request.is_complete() for job_request in submitted_job_requests)
 
-        self.poll_connections_until_stopped(submitted_job_connections, stop_on_job_completion, timeout=timeout)
+        self.poll_connections_until_stopped(submitted_job_connections, callback_on_possible_job_completion, timeout=timeout)
 
         # Mark any job still in the queued state to timeout
         for current_request in submitted_job_requests:
@@ -165,27 +159,25 @@ class GearmanClient(GearmanClientBase):
         return submitted_job_requests
 
     def get_status(self, current_request, timeout=None):
+        "Blocking get_status request"
         current_connection = current_request.get_connection()
         current_handle = current_request.get_handle()
 
         current_connection.send_command(GEARMAN_COMMAND_GET_STATUS, dict(handle=current_handle))
 
-        self._awaiting_get_status_response = True
+        # Set an instance variable tracking saying we're waiting for a status response
+        self._returned_status_response = {}
 
-        def stop_on_status_response(self):
-            return not self._awaiting_get_status_response
+        # Stop polling when we're no longer waiting on our status response
+        def callback_on_possible_status_response(self, any_activity):
+            return not bool(self._returned_status_response)
 
-        self.poll_connections_until_stopped([current_connection], stop_on_status_response, timeout=timeout)
+        self.poll_connections_until_stopped([current_connection], callback_on_possible_status_response, timeout=timeout)
+        
+        received_response = self._returned_status_response
+        del self._returned_status_response
 
-        while self._awaiting_get_status_response:
-            self.polling_timeout
-
-        cmd_tuple = current_connection.recv_command()
-        if cmd_tuple is None:
-            return None
-    
-        cmd_type, cmd_args = cmd_tuple
-        return cmd_args
+        return received_response
 
     # Gearman worker callbacks when we need to retry a job request
     def on_job_request_retry(self, current_request):
@@ -231,7 +223,7 @@ class GearmanClient(GearmanClientBase):
     def recv_work_status(self, conn, cmd_type, cmd_args):
         current_request = self.conn_handle_to_request_map[conn][cmd_args['handle']]
 
-        status_tuple = (cmd_args['numerator'], cmd_args['denominator'])
+        status_tuple = (float(cmd_args['numerator']), float(cmd_args['denominator']))
         current_request.status_updates.append(status_tuple)
         return True
 
@@ -267,3 +259,17 @@ class GearmanClient(GearmanClientBase):
         conn.close()
 
         return False
+
+    def recv_status_res(self, conn, cmd_type, cmd_args):
+        transformed_status = {
+            'handle': cmd_args['handle'],
+            'known': bool(cmd_args['known'] == '1'),
+            'running': bool(cmd_args['running'] == '1'),
+            'numerator': float(cmd_args['numerator']),
+            'denominator': float(cmd_args['denominator'])
+        }
+
+        # Return a status request
+        self._returned_status_response = transformed_status
+
+        return True
