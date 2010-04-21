@@ -35,11 +35,19 @@ class GearmanJobRequest(object):
         self.initialize_request()
 
     def initialize_request(self):
+        # Holds WORK_COMPLETE responses
         self.result = None
+
+        # Holds WORK_EXCEPTION responses
         self.exception = None
+
+        # Queues to hold WORK_WARNING, WORK_DATA, WORK_STATUS responses
         self.warning_updates = collections.deque()
         self.data_updates = collections.deque()
         self.status_updates = collections.deque()
+
+        # Holds STATUS_REQ responses
+        self.server_status = {}
 
         self.state = GEARMAN_JOB_STATE_PENDING
 
@@ -49,6 +57,9 @@ class GearmanJobRequest(object):
         self.bind_handle(None)
 
     def bind_connection(self, conn):
+        if self.gearman_job.conn is not None:
+            raise ConnectionError("Request has already been assigned to connection: %r" % self.gearman_job.conn)
+
         self.gearman_job.conn = conn
 
     def bind_handle(self, handle):

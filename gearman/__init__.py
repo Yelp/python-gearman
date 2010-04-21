@@ -10,3 +10,9 @@ from gearman.client import GearmanClient
 from gearman.server import GearmanServer
 from gearman.task import Task, Taskset
 from gearman.worker import GearmanWorker
+
+# GearmanConnection - wraps a socket and parses commands
+# GearmanClientBase - Uses a connection and reads down a list of commands... does command_handler callbacks
+
+# GearmanClientHandler - Wraps a GearmanClientBase and does Client specific ops
+# GearmanWorkerHandler - Wraps a GearmanClientBase and does Worker specific ops

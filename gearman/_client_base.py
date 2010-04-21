@@ -3,6 +3,8 @@ import time
 
 import gearman.util
 from gearman.connection import GearmanConnection
+from gearman.errors import ConnectionError
+from gearman.protocol import GEARMAN_COMMAND_TO_NAME
 
 gearman_logger = logging.getLogger("gearman._client_base")
 
@@ -12,18 +14,40 @@ class GearmanClientBase(object):
     Mananges and polls a group of gearman connections
     
     """
-    client_type = None
-
-    def __init__(self, host_list, blocking_timeout=0.0):
+    def __init__(self, host_list=None, blocking_timeout=0.0, connection_handler_class=None, gearman_connection_class=None):
         """By default we're going to setup non-blocking connections"""
-        assert self.client_type is not None, "Cannot instantiate GearmanClientBase directly as this is an abstract base class"
-
-        self.command_handlers = {}
+        self.connection_handlers = {}
         self.connection_list = []
+
+        gearman_connection_class = gearman_connection_class or GearmanConnection
+
+        host_list = host_list or []
         for hostport_tuple in host_list:
             gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
-            client_connection = GearmanConnection(gearman_host, gearman_port, blocking_timeout=blocking_timeout)
+            client_connection = gearman_connection_class(gearman_host, gearman_port, blocking_timeout=blocking_timeout)
+
+            # Create connection handler for every connection
+            self.connection_handlers[client_connection] = connection_handler_class(client_base=self, connection=client_connection)
             self.connection_list.append(client_connection)
+
+    ##################################
+    # Callbacks for Command Handlers #
+    ##################################
+
+    def _check_connection_association(self, gearman_connection):
+        if gearman_connection not in self.connection_list:
+            raise ValueError("Given connection not being managed by this client: %r" % gearman_connection)
+
+    def send_command(self, gearman_connection, cmd_type, cmd_args):
+        self._check_connection_association(gearman_connection)
+        if not gearman_connection.is_connected():
+            raise ConnectionError("Attempted to send a command on a dead connection: %r" % (gearman_connection, cmd_type, cmd_args))
+
+        gearman_connection.send_command(cmd_type, cmd_args)
+
+    ##################################
+    # Callbacks for Command Handlers #
+    ##################################
 
     def poll_connections_once(self, connections, timeout=None):
         """Does a single robust select, catching socket errors and doing all handle_* callbacks"""
@@ -36,6 +60,8 @@ class GearmanClientBase(object):
         ex_list = []
 
         gearman_logger.debug("Polling up to %d connection(s)", len(connections))
+        if timeout is not None and timeout < 0.0:
+            return False
 
         successful_select = False
         while not successful_select and select_conns:
@@ -85,13 +111,22 @@ class GearmanClientBase(object):
             # Keep polling our connections until we find that our request states have all been updated
             any_activity = self.poll_connections_once(submitted_connections, timeout=polling_timeout)
 
-            continue_working = polling_callback_fxn(self, any_activity)
+            has_more_work = polling_callback_fxn(self, any_activity)
+            has_time_remaining = bool(timeout is None) or bool(time_remaining > 0.0)
+            continue_working = bool(has_more_work) and bool(has_time_remaining)
 
     def handle_read(self, conn):
         """By default, we'll handle reads by processing out command list and calling the appropriate command handlers"""
+        connection_handler = self.connection_handlers.get(conn)
+        assert connection_handler, "Connection handler not found for connection %r" % conn
+
         cmd_list = conn.recv_command_list()
         for cmd_tuple in cmd_list:
-            continue_working = self.handle_incoming_command(conn, cmd_tuple)
+            if cmd_tuple is None:
+                continue
+
+            cmd_type, cmd_args = cmd_tuple
+            continue_working = connection_handler.recv_command(cmd_type, cmd_args)
             if continue_working is False:
                 break
 
@@ -103,16 +138,33 @@ class GearmanClientBase(object):
         gearman_logger.error("Exception on connection %s" % conn)
         conn.close()
 
-    def handle_incoming_command(self, conn, cmd_tuple):
-        """Convenience method to call after """
+class GearmanConnectionHandler(object):
+    def __init__(self, client_base, connection):
+        # assert isinstance(client_base, GearmanClientBase), "Expecting a class that is an instance of GearmanClientBase"
+        self.client_base = client_base
+        self.gearman_connection = connection
+
+    def recv_command(self, cmd_type, cmd_args):
+        """Maps any command to a recv_* callback function"""
         completed_work = None
-        if cmd_tuple is None:
-            return completed_work
 
-        cmd_type, cmd_args = cmd_tuple
-        if cmd_type not in self.command_handlers:
-            raise KeyError("Received an unexpected cmd_type: %r not in %r" % (GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), self.command_handlers.keys()))
+        gearman_command_name = GEARMAN_COMMAND_TO_NAME.get(cmd_type, '')
+        if not gearman_command_name or not gearman_command_name.startswith("GEARMAN_COMMAND_"):
+            gearman_logger.error("Could not handle command: %r - %r" % (cmd_type, cmd_args))
+            raise ValueError("Could not handle command: %r - %r" % (cmd_type, cmd_args))
 
-        cmd_callback = self.command_handlers[cmd_type]
-        completed_work = cmd_callback(conn, cmd_type, cmd_args)
+        recv_command_function_name = gearman_command_name.lower().replace("gearman_command_", "recv_")
+
+        cmd_callback = getattr(self, recv_command_function_name, None)
+        if not cmd_callback:
+            gearman_logger.error("Could not handle command: %r - %r" % (cmd_type, cmd_args))
+            raise ValueError("Could not handle command: %r - %r" % (cmd_type, cmd_args))
+
+        # Expand the arguments as parsed from the connection
+        # This must match the parameter names as defined in the command handler
+        completed_work = cmd_callback(**cmd_args)
         return completed_work
+
+    # Re-route all IO dealing with the connection through the base_client
+    def send_command(self, cmd_type, **cmd_args):
+        self.client_base.send_command(self.gearman_connection, cmd_type, cmd_args)
