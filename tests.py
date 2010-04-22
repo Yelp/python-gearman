@@ -3,6 +3,7 @@ import logging
 import os, sys, signal, threading
 import unittest, time, socket
 import collections
+import random
 
 from gearman import GearmanClient, GearmanWorker
 from gearman.connection import GearmanConnection
@@ -11,9 +12,10 @@ from gearman.manager import GearmanManager
 from gearman.server import GearmanServer
 from gearman.task import Task
 from gearman.protocol import *
-from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE, GEARMAN_JOB_STATE_TIMEOUT
+from gearman.job import GearmanJob, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE, GEARMAN_JOB_STATE_TIMEOUT
 from gearman.constants import BACKGROUND_JOB
 from gearman._client_base import GearmanConnectionHandler, GearmanClientBase
+from gearman.worker import GearmanWorkerConnectionHandler, GearmanWorker
 job_servers = ["127.0.0.1"]
 
 class FailedError(Exception):
@@ -50,67 +52,244 @@ def work_warning_fxn(gearman_worker, job):
     gearman_worker.send_job_warning(job, "TEST")
     return ''
 
-class GearmanTestCase(unittest.TestCase):
-    pass
+class MockGearmanConnection(GearmanConnection):
+    def __init__(self, *largs, **kwargs):
+        super(MockGearmanConnection, self).__init__(*largs, **kwargs)
+        self._should_be_connected = False
 
+    def is_connected(self):
+        return self._should_be_connected
 
 class MockGearmanClientBase(GearmanClientBase):
+    """Handy mock client base to test Worker/Client/Abstract ConnectionHandlers"""
     def __init__(self):
         super(MockGearmanClientBase, self).__init__()
+        # ConnectionHandler to command queue map
         self.command_queues = collections.defaultdict(collections.deque)
 
+        # ConnectionHandler to job queue maps
+        self.worker_job_queues = collections.defaultdict(collections.deque)
+
+    # Catch all IO here in the test_command_queue
     def send_command(self, gearman_connection, cmd_type, cmd_args):
-        self.command_queues[gearman_connection].append((cmd_type, cmd_args))
+        actual_connection_handler = self.connection_handlers[gearman_connection]
+        self.command_queues[actual_connection_handler].append((cmd_type, cmd_args))
+
+    def on_job_execute(self, connection_handler, current_job):
+        self.worker_job_queues[connection_handler].append(current_job)
+
+    def handle_error(self, gearman_connection):
+        pass
 
 class MockGearmanConnectionHandler(GearmanConnectionHandler):
     def __init__(self, *largs, **kwargs):
         super(MockGearmanConnectionHandler, self).__init__(*largs, **kwargs)
-        self.test_sent_command_queue = collections.deque()
-        self.test_recv_command_queue = collections.deque()
+        self.sent_command_queue = collections.deque()
+        self.recv_command_queue = collections.deque()
 
     def send_command(self, cmd_type, **cmd_args):
-        self.test_sent_command_queue.append((cmd_type, cmd_args))
+        self.sent_command_queue.append((cmd_type, cmd_args))
         sent_result = super(MockGearmanConnectionHandler, self).send_command(cmd_type, **cmd_args)
-		return sent_result
+        return sent_result
 
     def recv_command(self, cmd_type, cmd_args):
-        self.test_recv_command_queue.append((cmd_type, cmd_args)) 
+        self.recv_command_queue.append((cmd_type, cmd_args)) 
         recv_result = super(MockGearmanConnectionHandler, self).recv_command(cmd_type, cmd_args)
         return recv_result
 
     def recv_noop(self):
         pass
 
-class GearmanConnectionHandlerTest(GearmanTestCase):
+class GearmanAbstractTestCase(unittest.TestCase):
+    connection_handler_class = MockGearmanConnectionHandler
+    
     def setUp(self):
-        self.client_base = MockGearmanClientBase()
-        self.connection_handler = MockGearmanConnectionHandler(self.client_base, None)
+        self.connection = MockGearmanConnection(hostname=None)
 
+        self.client_base = MockGearmanClientBase()
+        self.connection_handler = self.connection_handler_class(self.client_base, self.connection)
+
+        self.client_base.connection_handlers[self.connection] = self.connection_handler
+
+    def assert_sent_command(self, expected_cmd_type, **expected_cmd_args):
+        # Make sure any commands we're passing through the ConnectionHandler gets properly passed through to the client base
+        client_cmd_type, client_cmd_args = self.client_base.command_queues[self.connection_handler].popleft()
+        self.assertEqual(client_cmd_type, expected_cmd_type)
+        self.assertEqual(client_cmd_args, expected_cmd_args)
+
+    def assert_no_command_sent(self):
+        self.failIf(self.client_base.command_queues[self.connection_handler])
+
+class GearmanConnectionHandlerTest(GearmanAbstractTestCase):
     def test_recv_command(self):
         self.connection_handler.recv_command(GEARMAN_COMMAND_NOOP, {})
-        self._assert_command_received(GEARMAN_COMMAND_NOOP, {})
+        self.assert_recv_command(GEARMAN_COMMAND_NOOP, {})
 
         # The mock handler never implemented "recv_all_yours" so we should get an attribute error here
         self.assertRaises(ValueError, self.connection_handler.recv_command, GEARMAN_COMMAND_ALL_YOURS, {})
 
     def test_send_command(self):
-        self.connection_handler.recv_command(GEARMAN_COMMAND_NOOP, {})
-        self._assert_command_received(GEARMAN_COMMAND_NOOP, {})
-
+        self.connection_handler.send_command(GEARMAN_COMMAND_NOOP)
+        self.assert_sent_command(GEARMAN_COMMAND_NOOP)
+ 
         # The mock handler never implemented "recv_all_yours" so we should get an attribute error here
-        self.assertRaises(ValueError, self.connection_handler.recv_command, GEARMAN_COMMAND_ALL_YOURS, {})
+        self.connection_handler.send_command(GEARMAN_COMMAND_ECHO_REQ, text="hello world")
+        self.assert_sent_command(GEARMAN_COMMAND_ECHO_REQ, text="hello world")
 
-    def _assert_command_received(self, expected_cmd_type, expected_cmd_args):
-        cmd_type, cmd_args = self.connection_handler.test_recv_command_queue.popleft()
+    def assert_recv_command(self, expected_cmd_type, expected_cmd_args):
+        cmd_type, cmd_args = self.connection_handler.recv_command_queue.popleft()
         self.assertEqual(cmd_type, expected_cmd_type)
         self.assertEqual(cmd_args, expected_cmd_args)
 
-    def _assert_command_sent(self, expected_cmd_type, expected_cmd_args):
-        cmd_type, cmd_args = self.connection_handler.test_sent_command_queue.popleft()
-        self.assertEqual(cmd_type, expected_cmd_type)
-        self.assertEqual(cmd_args, expected_cmd_args)
+    def assert_sent_command(self, expected_cmd_type, **expected_cmd_args):
+        # All commands should be sent via the ConnectionHandler
+        handler_cmd_type, handler_cmd_args = self.connection_handler.sent_command_queue.popleft()
+        self.assertEqual(handler_cmd_type, expected_cmd_type)
+        self.assertEqual(handler_cmd_args, expected_cmd_args)
 
-class TestConnection(GearmanTestCase):
+        super(GearmanConnectionHandlerTest, self).assert_sent_command(expected_cmd_type, **expected_cmd_args)
+
+class GearmanWorkerConnectionHandlerTest(GearmanAbstractTestCase):
+    """Exhaustively test our WorkerConnectionHandler..."""
+    connection_handler_class = GearmanWorkerConnectionHandler
+
+    def setUp(self):
+        super(GearmanWorkerConnectionHandlerTest, self).setUp()
+        self.connection._should_be_connected = False
+        self.connection_handler._awaiting_job_assignment = False
+
+    def generate_job(self):
+        EXPECTED_JOB_HANDLE = str(random.random())
+        EXPECTED_FUNCTION_NAME = 'fake_function_name'
+        EXPECTED_UNIQUE = random.random()
+        EXPECTED_DATA = random.random()
+
+        return GearmanJob(self.connection, EXPECTED_JOB_HANDLE, EXPECTED_FUNCTION_NAME, EXPECTED_UNIQUE, EXPECTED_DATA)
+
+    def test_request_job(self):
+        # Test the noop case for request_job... if we know we're already awaiting job assignment, no need to ask again
+        self.connection_handler._awaiting_job_assignment = True
+        
+        self.connection_handler.request_job()
+        
+        self.assert_no_command_sent()
+        self.assertTrue(self.connection_handler._awaiting_job_assignment)
+
+        # Test the active case for request_job... if we know we are NOT awaiting job assignment, we need to ask for work
+        self.connection_handler._awaiting_job_assignment = False
+        
+        self.connection_handler.request_job()
+
+        self.assert_sent_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
+        self.assertTrue(self.connection_handler._awaiting_job_assignment)
+
+    def test_set_abilities(self):
+        expected_abilities = ['function_one', 'function_two', 'function_three']
+
+        self.connection._should_be_connected = False
+        self.connection_handler.set_abilities(expected_abilities)
+        self.assert_no_command_sent()
+
+        self.connection._should_be_connected = True
+        self.connection_handler.set_abilities(expected_abilities)
+        self.assert_sent_command(GEARMAN_COMMAND_RESET_ABILITIES)
+        for ability in expected_abilities:
+            self.assert_sent_command(GEARMAN_COMMAND_CAN_DO, function_name=ability)
+
+    def test_set_client_id(self):
+        expected_client_id = "my_client_id"
+
+        self.connection._should_be_connected = False
+        self.connection_handler.set_client_id(expected_client_id)
+        self.assert_no_command_sent()
+
+        self.connection._should_be_connected = True
+        self.connection_handler.set_client_id(expected_client_id)
+        self.assert_sent_command(GEARMAN_COMMAND_SET_CLIENT_ID, data=expected_client_id)
+
+    def test_on_job_completion(self):
+        current_job = self.generate_job()
+        job_result = str(random.random())
+        self.connection_handler.on_job_complete(current_job, job_result)
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=job_result)
+
+    def test_on_job_exception(self):
+        current_job = self.generate_job()
+        job_exception = None
+        self.connection_handler.on_job_exception(current_job, None)
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
+
+    def test_send_functions(self):
+        current_job = self.generate_job()
+        
+        # Test GEARMAN_COMMAND_WORK_STATUS
+        self.connection_handler.send_job_status(current_job, 0, 1)
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=0, denominator=1)
+        
+        # Test GEARMAN_COMMAND_WORK_COMPLETE
+        self.connection_handler.send_job_complete(current_job, "completion data")
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data="completion data")
+        
+        # Test GEARMAN_COMMAND_WORK_FAIL
+        self.connection_handler.send_job_failure(current_job)
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
+
+        # Test GEARMAN_COMMAND_WORK_EXCEPTION
+        self.connection_handler.send_job_exception(current_job, "exception data")
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data="exception data")
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
+        
+        # Test GEARMAN_COMMAND_WORK_DATA
+        self.connection_handler.send_job_data(current_job, "job data")
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data="job data")
+
+        # Test GEARMAN_COMMAND_WORK_WARNING
+        self.connection_handler.send_job_warning(current_job, "job warning")
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data="job warning")
+
+    def test_recv_noop(self):
+        self.connection_handler.recv_noop()
+        self.assert_sent_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
+
+        self.assertTrue(self.connection_handler._awaiting_job_assignment)
+
+    def test_recv_no_job(self):
+        self.connection_handler._awaiting_job_assignment = True
+
+        self.connection_handler.recv_no_job()
+
+        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
+        self.assertFalse(self.connection_handler._awaiting_job_assignment)
+
+    def test_recv_job_assign_uniq(self):
+        current_job = self.generate_job()
+        job_assign_parameters = dict(job_handle=current_job.handle, function_name=current_job.func, unique=current_job.unique, data=current_job.data)
+
+        # Make sure that a ConnectionHandler unaware of any functions throws an AssertionError
+        self.assertRaises(AssertionError, self.connection_handler.recv_job_assign_uniq, **job_assign_parameters)
+
+        # Make our ConnectionHandler is aware of our function so it doesn't throw an exception
+        self.connection_handler._connection_abilities = set([current_job.func])
+
+        # WorkerConnectionHandler will STILL bail as we weren't expecting a job
+        self.assertRaises(AssertionError, self.connection_handler.recv_job_assign_uniq, **job_assign_parameters)
+
+        # WorkerConnectionHandler should pass with flying colors now
+        self.connection_handler._awaiting_job_assignment = True
+        self.connection_handler.recv_job_assign_uniq(**job_assign_parameters)
+
+        # Let's make sure that our mock worker has received the work we were expecting
+        work_queue = self.client_base.worker_job_queues[self.connection_handler]
+        received_job = work_queue.popleft()
+        self.assertEqual(received_job.handle, current_job.handle)
+        self.assertEqual(received_job.func, current_job.func)
+        self.assertEqual(received_job.unique, current_job.unique)
+        self.assertEqual(received_job.data, current_job.data)
+
+        # After all our work is complete, we want to make sure we were greedy
+        self.assert_sent_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
+
+class TestConnection(GearmanAbstractTestCase):
     def setUp(self):
         self.connection = GearmanConnection(job_servers[0], blocking_timeout=2.0)
         self.connection.connect()
@@ -131,7 +310,7 @@ class TestConnection(GearmanTestCase):
         cmd_type, cmd_args = cmd_tuple
         self.failUnlessEqual(cmd_type, GEARMAN_COMMAND_JOB_CREATED)
 
-class TestGearman(GearmanTestCase):
+class TestGearman(GearmanAbstractTestCase):
     def setUp(self):
         self.worker = GearmanWorker(job_servers)
         self.worker.register_function("echo", echo_fxn)
@@ -233,7 +412,7 @@ class TestGearman(GearmanTestCase):
         self.failIf(status_response['running'])
 
 
-class TestManager(GearmanTestCase):
+class TestManager(GearmanAbstractTestCase):
     def setUp(self):
         self.manager = GearmanManager(job_servers[0])
 

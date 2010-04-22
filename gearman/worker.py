@@ -11,10 +11,15 @@ from gearman.job import GearmanJob
 
 log = logging.getLogger("gearman")
 
-POLL_INTERVAL_IN_SECONDS = 1.0
-SLEEP_INTERVAL_IN_SECONDS = 10.0
+POLL_TIMEOUT_IN_SECONDS = 10.0
 
 class GearmanWorker(GearmanClientBase):
+    """GearmanWorkers manage connections and ConnectionHandler
+
+    This is the public facing gearman interface that most users should be instantiating
+    All I/O will be handled by the GearmanWorker
+    All state machine operations are handled on the ConnectionHandler
+    """
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
         kwargs.setdefault('blocking_timeout', 2.0)
@@ -74,54 +79,42 @@ class GearmanWorker(GearmanClientBase):
         connection_handler.on_job_complete(current_job, job_result)
         return True
 
-    def stop(self):
-        self.working = False
-
-    def work(self, poll_interval=POLL_INTERVAL_IN_SECONDS):
+    def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
-
-        self.working = True
         continue_working = True
-        while self.working and continue_working:
-            had_connection_activity = self.poll_connections_once(self.get_alive_connections(), timeout=poll_interval)
-
-            is_idle = not had_connection_activity
-            continue_working = True
-            # continue_working = not bool(stop_if(is_idle, last_job_time))
+        while continue_working:
+            had_connection_activity = self.poll_connections_once(self.get_alive_connections(), timeout=poll_timeout)
+            continue_working = self.after_poll(had_connection_activity)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
         for current_connection in self.get_alive_connections():
             current_connection.close()
 
-    def handle_read(self, conn):
-        """For our worker, we'll want to do blocking calls on processing out commands"""
-        connection_handler = self.connection_handlers.get(conn)
-        connection_handler.on_command_processing_begin()
-        
-        super(GearmanWorker, self).handle_read(conn)
-
-        connection_handler.on_command_processing_end()
+    def after_poll(self, any_activity):
+        return True
 
 class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
+    """GearmanWorker state machine on a per connection basis"""
     def __init__(self, *largs, **kwargs):
         super(GearmanWorkerConnectionHandler, self).__init__(*largs, **kwargs)
         self._connection_abilities = set()
         self._client_id = None
 
-        self._awaiting_job_assignment = False
+        self._awaiting_job_assignment = None
 
     ##################################################################
     ####### Callbacks for the Worker to call... triggers events ######
     ##################################################################
     def request_job(self):
+        # We don't need to request another job if we know one's pending
         if self._awaiting_job_assignment:
             return
 
         self.send_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
         self._awaiting_job_assignment = True
 
-    def set_abilities(self, connection_abilities):
-        self._connection_abilities = connection_abilities
+    def set_abilities(self, connection_abilities_set):
+        self._connection_abilities = connection_abilities_set
         if self.gearman_connection.is_connected():
             self.on_abilities_update()
 
@@ -131,6 +124,8 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
             self.on_client_id_update()
 
     def on_connect(self):
+        self._awaiting_job_assignment = False
+    
         self.connection_abilities = set()
         
         self.on_abilities_update()
@@ -145,13 +140,7 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
 
     def on_client_id_update(self):
         if self._client_id is not None:
-            self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, data=client_id)
-
-    def on_command_processing_begin(self):
-        self._awaiting_job_assignment = False
-
-    def on_command_processing_end(self):
-        self._awaiting_job_assignment = False
+            self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, data=self._client_id)
 
     def on_job_complete(self, current_job, job_result):
         self.send_job_complete(current_job, job_result)
@@ -203,24 +192,27 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
         self.send_command(GEARMAN_COMMAND_PRE_SLEEP)
         self._awaiting_job_assignment = False
 
-        return False
+        return True
 
     def recv_error(self, error_code, error_text):
         log.error("Error from server: %s: %s" % (error_code, error_text))
-        conn.close()
+        self.client_base.handle_error(self.gearman_connection)
+
         return False
 
     def recv_job_assign_uniq(self, job_handle, function_name, unique, data):
         assert function_name in self._connection_abilities, "%s not found in %r" % (function_name, self._connection_abilities)
+        assert self._awaiting_job_assignment, "Received a job when we weren't expecting one"
 
         # Create a new job
         current_job = GearmanJob(self.gearman_connection, job_handle, function_name, unique, data)
-
         self.client_base.on_job_execute(self, current_job)
+
+        self._awaiting_job_assignment = False
 
         # We'll be greedy on requesting jobs... this'll make sure we're aggressively popping things off the queue
         self.request_job()
-        return False
+        return True
 
     def recv_job_assign(self, job_handle, function_name, data):
         return self.recv_job_assign(job_handle=job_handle, function_name=function_name, unique=None, data=data)
