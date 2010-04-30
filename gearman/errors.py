@@ -13,5 +13,11 @@ class CommandError(GearmanError):
 class InvalidResponse(GearmanError):
     pass
 
+class InvalidClientState(GearmanError):
+    pass
+
+class InvalidWorkerState(GearmanError):
+    pass
+
 class ProtocolError(GearmanError):
     pass

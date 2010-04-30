@@ -2,7 +2,6 @@ import collections
 
 GEARMAN_JOB_STATE_PENDING = "PENDING"
 GEARMAN_JOB_STATE_QUEUED = "QUEUED"
-GEARMAN_JOB_STATE_TIMEOUT = "TIMEOUT"
 GEARMAN_JOB_STATE_FAILED = "FAILED"
 GEARMAN_JOB_STATE_COMPLETE = "COMPLETE"
 
@@ -18,16 +17,19 @@ class GearmanJob(object):
     def connection_handle(self):
         return (self.conn, self.handle)
 
+    def to_dict(self):
+        return dict(function_name=self.func, job_handle=self.handle, unique=self.unique, data=self.data)
+
     def __repr__(self):
         return "<GearmanJob conn/handle=%r, func=%s, unique=%s, data=%s>" % (self.connection_handle(), self.func, self.unique, self.data)
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient and GearmanServer to represent job states"""
-    def __init__(self, gearman_job, initial_priority=None, is_background=False, max_retries=0):
+    def __init__(self, gearman_job, initial_priority=None, background=False, max_retries=0):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
-        self.is_background = is_background
+        self.background = background
 
         self.retries_attempted = 0
         self.retries_max = max_retries
@@ -50,6 +52,7 @@ class GearmanJobRequest(object):
         self.server_status = {}
 
         self.state = GEARMAN_JOB_STATE_PENDING
+        self.timed_out = None
 
     def reset(self):
         self.initialize_request()
@@ -57,7 +60,7 @@ class GearmanJobRequest(object):
         self.bind_handle(None)
 
     def bind_connection(self, conn):
-        if self.gearman_job.conn is not None:
+        if self.gearman_job.conn is not None and conn is not None:
             raise ConnectionError("Request has already been assigned to connection: %r" % self.gearman_job.conn)
 
         self.gearman_job.conn = conn
@@ -81,12 +84,11 @@ class GearmanJobRequest(object):
         return self.gearman_job.connection_handle()
 
     def is_complete(self):
-        if self.is_background and self.state != GEARMAN_JOB_STATE_QUEUED:
-            return False
-        elif not self.is_background and self.state not in (GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE):
-            return False
+        background_complete = bool(self.background and self.state == GEARMAN_JOB_STATE_QUEUED)
+        foreground_complete = bool(not self.background and self.state in (GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE))
 
-        return True
+        actually_complete = background_complete or foreground_complete
+        return actually_complete
 
     @staticmethod
     def get_unique_key(request_dict):

@@ -1,3 +1,4 @@
+import collections
 import logging
 import time
 
@@ -14,21 +15,26 @@ class GearmanClientBase(object):
     Mananges and polls a group of gearman connections
     
     """
-    def __init__(self, host_list=None, blocking_timeout=0.0, connection_handler_class=None, gearman_connection_class=None):
+    def __init__(self, host_list=None, blocking_timeout=0.0, gearman_connection_handler_class=None, gearman_connection_class=None):
         """By default we're going to setup non-blocking connections"""
         self.connection_handlers = {}
         self.connection_list = []
 
         gearman_connection_class = gearman_connection_class or GearmanConnection
+        assert gearman_connection_handler_class is not None, 'GearmanClientBase did not receive a connection handler class'
+        self.gearman_connection_handler_class = gearman_connection_handler_class
 
         host_list = host_list or []
         for hostport_tuple in host_list:
             gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
             client_connection = gearman_connection_class(gearman_host, gearman_port, blocking_timeout=blocking_timeout)
 
-            # Create connection handler for every connection
-            self.connection_handlers[client_connection] = connection_handler_class(client_base=self, connection=client_connection)
-            self.connection_list.append(client_connection)
+            self._add_connection(client_connection)
+
+    def _add_connection(self, client_connection):
+	    # Create connection handler for every connection
+        self.connection_handlers[client_connection] = self.gearman_connection_handler_class(client_base=self, connection=client_connection)
+        self.connection_list.append(client_connection)
 
     ##################################
     # Callbacks for Command Handlers #
@@ -41,7 +47,7 @@ class GearmanClientBase(object):
     def send_command(self, gearman_connection, cmd_type, cmd_args):
         self._check_connection_association(gearman_connection)
         if not gearman_connection.is_connected():
-            raise ConnectionError("Attempted to send a command on a dead connection: %r" % (gearman_connection, cmd_type, cmd_args))
+            raise ConnectionError("Attempted to send a command on a dead connection: %r - %r - %r" % (gearman_connection, cmd_type, cmd_args))
 
         gearman_connection.send_command(cmd_type, cmd_args)
 
@@ -106,14 +112,15 @@ class GearmanClientBase(object):
         continue_working = True
         while continue_working:
             time_remaining = stop_time - time.time()
-            polling_timeout = (timeout and time_remaining) or None
+            has_time_remaining = bool(timeout is None) or bool(time_remaining > 0.0)
+            if not has_time_remaining:
+                break
 
             # Keep polling our connections until we find that our request states have all been updated
+            polling_timeout = (timeout and time_remaining) or None
             any_activity = self.poll_connections_once(submitted_connections, timeout=polling_timeout)
 
-            has_more_work = polling_callback_fxn(self, any_activity)
-            has_time_remaining = bool(timeout is None) or bool(time_remaining > 0.0)
-            continue_working = bool(has_more_work) and bool(has_time_remaining)
+            continue_working = polling_callback_fxn(self, any_activity)
 
     def handle_read(self, conn):
         """By default, we'll handle reads by processing out command list and calling the appropriate command handlers"""
@@ -126,7 +133,7 @@ class GearmanClientBase(object):
                 continue
 
             cmd_type, cmd_args = cmd_tuple
-            continue_working = connection_handler.recv_command(cmd_type, cmd_args)
+            continue_working = connection_handler.recv_command(cmd_type, **cmd_args)
             if continue_working is False:
                 break
 
@@ -144,7 +151,9 @@ class GearmanConnectionHandler(object):
         self.client_base = client_base
         self.gearman_connection = connection
 
-    def recv_command(self, cmd_type, cmd_args):
+        self._expected_echoes = collections.deque()
+
+    def recv_command(self, cmd_type, **cmd_args):
         """Maps any command to a recv_* callback function"""
         completed_work = None
 

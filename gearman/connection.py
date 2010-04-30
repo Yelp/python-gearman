@@ -4,7 +4,6 @@ import StringIO
 from time import time
 
 import gearman.util
-from gearman.compat import *
 from gearman.errors import ConnectionError
 from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, GEARMAN_COMMAND_TO_NAME, BINARY_COMMAND_TO_PARAMS, SERVER_COMMAND_TO_PARAMS, NULL_CHAR, \
     pack_binary_command, parse_binary_command, parse_server_command, pack_server_command
@@ -17,7 +16,7 @@ class GearmanConnection(object):
     Wraps a socket and provides the following functionality:
        Full read/write methods for Gearman BINARY commands and responses
        Read and Write for Gearman SERVER commands
-       No read/write convenience methods for Gearmn SERVER responses, use 
+       No read/write convenience methods for Gearman SERVER responses, use 
     
     Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
     """ 
