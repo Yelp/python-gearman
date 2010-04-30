@@ -1,25 +1,22 @@
-#!/usr/bin/env python
-# TODO: Implement retry behavior
-# TODO: Test rotating servers
-
 import collections
 import time
 import random
 import logging
 import os
 
-import gearman.util
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
 from gearman.errors import ServerUnavailable, ConnectionError, InvalidClientState
-from gearman.connection import GearmanConnection
-from gearman.protocol import *
+
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
+
+from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
 
 gearman_logger = logging.getLogger("gearman.client")
 
 RANDOM_UNIQUE_BYTES = 8
 
+# TODO: Implement retry behavior
 class GearmanClient(GearmanClientBase):
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanClient
@@ -68,17 +65,17 @@ class GearmanClient(GearmanClientBase):
         return submitted_job_requests
 
     def _create_request_from_dictionary(self, job_info, background):
-       """Takes a dictionary with fields  {'function_name': function_name, 'unique': unique, 'data': data, 'priority': priority}"""
-       # Make sure we have a unique identifier for ALL our tasks
-       job_unique = job_info.get('unique')
-       if job_unique == '-':
-           job_unique = job_info['data']
-       elif not job_unique:
-           job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex')
+        """Takes a dictionary with fields  {'function_name': function_name, 'unique': unique, 'data': data, 'priority': priority}"""
+        # Make sure we have a unique identifier for ALL our tasks
+        job_unique = job_info.get('unique')
+        if job_unique == '-':
+            job_unique = job_info['data']
+        elif not job_unique:
+            job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex') 
 
-       current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
-       current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
-       return current_request
+        current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
+        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
+        return current_request
 
     def choose_connection_for_request(self, current_request):
         """Return a live connection for the given hash"""

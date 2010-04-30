@@ -1,7 +1,5 @@
-import re
 import struct
-import sys
-from gearman.constants import *
+from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
 from gearman.errors import ProtocolError
 
 # Protocol specific constants

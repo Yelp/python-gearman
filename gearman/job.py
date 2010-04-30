@@ -1,4 +1,5 @@
 import collections
+from gearman.errors import ConnectionError
 
 GEARMAN_JOB_STATE_PENDING = "PENDING"
 GEARMAN_JOB_STATE_QUEUED = "QUEUED"

@@ -1,11 +1,8 @@
-import collections
-import socket, struct, select, errno, logging
-import StringIO
-from time import time
+import socket, struct, errno, logging
 
-import gearman.util
-from gearman.errors import ConnectionError
-from gearman.protocol import DEFAULT_GEARMAN_PORT, COMMAND_HEADER_SIZE, GEARMAN_COMMAND_TO_NAME, BINARY_COMMAND_TO_PARAMS, SERVER_COMMAND_TO_PARAMS, NULL_CHAR, \
+from gearman.errors import ConnectionError, ProtocolError
+from gearman.constants import DEFAULT_GEARMAN_PORT
+from gearman.protocol import GEARMAN_COMMAND_TO_NAME, BINARY_COMMAND_TO_PARAMS, SERVER_COMMAND_TO_PARAMS, NULL_CHAR, \
     pack_binary_command, parse_binary_command, parse_server_command, pack_server_command
 
 gearman_logger = logging.getLogger("gearman.connection")
@@ -34,9 +31,6 @@ class GearmanConnection(object):
     def _reset_connection(self):
         self.gearman_socket = None
         self._is_connected = False
-        self._is_server_connection = False
-        self._is_client_connection = False
-
         self._reset_queues()
 
     def _reset_queues(self):
@@ -58,40 +52,9 @@ class GearmanConnection(object):
     def readable(self):
         return self._is_connected
 
-    def listen(self, backlog=5):
-        if self._is_client_connection:
-            raise TypeError("This connection has been setup as a client side listening socket")
-        elif self._is_connected and self._is_server_connection:
-            return
-
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((self.gearman_host, self.gearman_port))
-        server_socket.listen(backlog)
-
-        self._is_server_connection = True
-        self.bind_socket(server_socket)
-
-    def accept(self):
-        """If we're a server side gearman connection, we'll accept an incoming request and create a server side listening socket from it"""
-        if self._is_client_connection:
-            raise TypeError("This connection has been setup as a client side listening socket")
-        elif not (self._is_connected and self._is_server_connection):
-            raise TypeError("This connection cannot accept if its not connection")
-
-        client_socket, client_addr = self.gearman_socket.accept()
-
-        client_host, client_port = client_addr
-        client_connection = GearmanConnection(client_host, client_port)
-        client_connection._is_server_connection = True
-        client_connection.bind_socket(client_socket)
-        return client_connection
-
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        if self._is_server_connection:
-            raise TypeError("This connection has been setup as a server side listening socket")
-        elif self._is_connected and self._is_client_connection:
+        if self._is_connected:
             return
 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -101,7 +64,6 @@ class GearmanConnection(object):
             self._reset_connection()
             raise ConnectionError(str(exc))
 
-        self._is_client_connection = True
         self.bind_socket(client_socket)
 
     def bind_socket(self, current_socket):
@@ -112,7 +74,6 @@ class GearmanConnection(object):
     
         current_socket.settimeout(self.blocking_timeout)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
-        assert bool(self._is_client_connection) ^ bool(self._is_server_connection), "This connection has NOT been set as client/server"
 
         self._is_connected = True
         self._reset_queues()

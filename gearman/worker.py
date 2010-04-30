@@ -1,12 +1,11 @@
-import collections
-import random, sys, select, logging
-import time
+import logging
+import random
 
-import gearman.util
-from gearman.protocol import *
-from gearman.errors import ConnectionError, InvalidWorkerState
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
+from gearman.errors import ConnectionError, InvalidWorkerState
 from gearman.job import GearmanJob
+from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
+    GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
 
 gearman_logger = logging.getLogger("gearman.client")
 
