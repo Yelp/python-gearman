@@ -200,7 +200,7 @@ def parse_binary_command(in_buffer, is_response=True):
 
     split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
     if len(split_arguments) != len(expected_cmd_params):
-        raise ProtocolError('Received %d argument(s), expecting %d argument(s): %s' % (len(split_arguments), len(expecting), cmd_type))
+        raise ProtocolError('Received %d argument(s), expecting %d argument(s): %s' % (len(split_arguments), len(expected_cmd_params), cmd_type))
 
     # Iterate through the split arguments and assign them labels based on their order
     cmd_args = dict((param_label, param_value) for param_label, param_value in zip(expected_cmd_params, split_arguments))

@@ -1,12 +1,14 @@
 import collections
-import socket
+import logging
 
 from gearman.protocol import GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
 from gearman.connection import DEFAULT_GEARMAN_PORT, GearmanConnection
-from gearman.errors import ConnectionError, ProtocolError
+from gearman.errors import ConnectionError, ProtocolError, InvalidManagerState
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
+
+gearman_logger = logging.getLogger('gearman.manager')
 
 EXPECTED_GEARMAN_SERVER_COMMANDS = set([GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN])
 
@@ -75,7 +77,7 @@ class GearmanManager(GearmanClientBase):
         cmd_type, cmd_resp = self.current_handler.pop_response()
 
         if cmd_type != expected_type:
-            raise InvalidManagerState('Received an out-of-order response... got command %r, expecting command %r' % (cmd_type, expected_type))
+            raise InvalidManagerState('Received an unexpected response... got command %r, expecting command %r' % (cmd_type, expected_type))
 
         return cmd_resp
 

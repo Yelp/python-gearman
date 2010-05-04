@@ -38,31 +38,12 @@ class GearmanClient(GearmanClientBase):
         
         {'function_name': function_name, 'unique': unique, 'data': data}
         """
-        chosen_connections = set()
-
-        submitted_job_requests = []
+        requests_to_submit = []
         for job_info in jobs_to_submit:
             current_request = self._create_request_from_dictionary(job_info, background=background)
+            requests_to_submit.append(current_request)
 
-            chosen_conn = self.choose_connection_for_request(current_request)
-            chosen_connections.add(chosen_conn)
-
-            current_connection_handler = self.connection_handlers[chosen_conn]
-            current_connection_handler.send_job_request(current_request)
-
-            submitted_job_requests.append(current_request)
-
-        # Poll until we know we've gotten acknowledgement that our job's been accepted
-        def continue_while_jobs_still_pending(self, any_activity):
-            return any(current_request.state == GEARMAN_JOB_STATE_PENDING for current_request in submitted_job_requests)
-
-        self.poll_connections_until_stopped(chosen_connections, continue_while_jobs_still_pending, timeout=timeout)
-
-        # Mark any job still in the queued state to timeout
-        for current_request in submitted_job_requests:
-            current_request.timed_out = bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
-
-        return submitted_job_requests
+        return self.submit_multiple_requests(requests_to_submit, timeout=timeout)
 
     def _create_request_from_dictionary(self, job_info, background):
         """Takes a dictionary with fields  {'function_name': function_name, 'unique': unique, 'data': data, 'priority': priority}"""
@@ -76,6 +57,27 @@ class GearmanClient(GearmanClientBase):
         current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
         current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
         return current_request
+
+    def submit_multiple_requests(self, job_requests, timeout=None):
+        chosen_connections = set()
+        for current_request in job_requests:
+            chosen_conn = self.choose_connection_for_request(current_request)
+            chosen_connections.add(chosen_conn)
+
+            current_connection_handler = self.connection_handlers[chosen_conn]
+            current_connection_handler.send_job_request(current_request)
+
+        # Poll until we know we've gotten acknowledgement that our job's been accepted
+        def continue_while_jobs_still_pending(self, any_activity):
+            return any(current_request.state == GEARMAN_JOB_STATE_PENDING for current_request in job_requests)
+
+        self.poll_connections_until_stopped(chosen_connections, continue_while_jobs_still_pending, timeout=timeout)
+
+        # Mark any job still in the queued state to timeout
+        for current_request in job_requests:
+            current_request.timed_out = bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
+
+        return job_requests
 
     def choose_connection_for_request(self, current_request):
         """Return a live connection for the given hash"""

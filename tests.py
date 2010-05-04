@@ -35,7 +35,6 @@ class MockGearmanConnection(GearmanConnection):
     def send_data_from_buffer(self):
         pass
 
-
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s> (%s)' %
             (self.gearman_host, self.gearman_port, self._is_connected, id(self)))
@@ -117,7 +116,7 @@ class _GearmanAbstractTest(unittest.TestCase):
     def setUp(self):
         self.connection = self.connection_class(hostname=None)
 
-        self.client_base = self.client_base_class(gearman_connection_handler_class=self.connection_handler_class, gearman_connection_class=self.connection_handler_class)
+        self.client_base = self.client_base_class(gearman_connection_handler_class=self.connection_handler_class, gearman_connection_class=self.connection_class)
         self.client_base._add_connection(self.connection)
 
         self.connection_handler = self.client_base.connection_handlers[self.connection]
@@ -174,6 +173,7 @@ class GearmanClientTest(_GearmanAbstractTest):
 
     def generate_job_request(self):
         current_request = super(GearmanClientTest, self).generate_job_request()
+
         job_handle = current_request.get_handle()
         self.connection_handler.handle_to_request_map[job_handle] = current_request
         return current_request
