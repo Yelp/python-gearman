@@ -19,7 +19,7 @@ class GearmanManager(GearmanClientBase):
     """
     def __init__(self, **kwargs):
         host_list = kwargs.get('host_list', [])
-        assert len(host_list) == 1, "Only expected a single host"
+        assert len(host_list) == 1, 'Only expected a single host'
 
         # By default we should have non-blocking sockets for a GearmanWorker
         kwargs.setdefault('blocking_timeout', 5.0)
@@ -75,7 +75,7 @@ class GearmanManager(GearmanClientBase):
         cmd_type, cmd_resp = self.current_handler.pop_response()
 
         if cmd_type != expected_type:
-            raise InvalidManagerState("Received an out-of-order response... got command %r, expecting command %r" % (cmd_type, expected_type))
+            raise InvalidManagerState('Received an out-of-order response... got command %r, expecting command %r' % (cmd_type, expected_type))
 
         return cmd_resp
 
@@ -87,7 +87,7 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
         self._sent_commands = collections.deque()
         self._recv_responses = collections.deque()
 
-        self._status_fields = ("function_name", "queued", "running", "workers")
+        self._status_fields = ('function_name', 'queued', 'running', 'workers')
         self._status_response = []
 
         self._workers_response = []
@@ -97,7 +97,7 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
 
     def pop_response(self):
         if not self._sent_commands or not self._recv_responses:
-            raise InvalidManagerState("Attempted to pop a response for a command that is not ready")
+            raise InvalidManagerState('Attempted to pop a response for a command that is not ready')
 
         sent_command = self._sent_commands.popleft()
         recv_response = self._recv_responses.popleft()
@@ -112,31 +112,31 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
                 break
 
         if not expected_server_command:
-            raise ProtocolError("Attempted to send an unknown server command: %s" % expected_server_command)
+            raise ProtocolError('Attempted to send an unknown server command: %s' % expected_server_command)
 
         self._sent_commands.append(expected_server_command)
 
-        output_text = "%s\n" % command_line
+        output_text = '%s\n' % command_line
         self.send_command(GEARMAN_COMMAND_TEXT_COMMAND, raw_text=output_text)
 
     def recv_error(self, error_code, error_text):
-        gearman_logger.error("Error from server: %s: %s" % (error_code, error_text))
+        gearman_logger.error('Error from server: %s: %s' % (error_code, error_text))
         self.client_base.handle_error(self.gearman_connection)
 
         return False
 
     def recv_text_command(self, raw_text):
         if not self._sent_commands:
-            raise InvalidManagerState("Received an unexpected server response")
+            raise InvalidManagerState('Received an unexpected server response')
 
         # Peek at the first command
         cmd_type = self._sent_commands[0]
-        recv_server_command_function_name = "recv_server_%s" % cmd_type
+        recv_server_command_function_name = 'recv_server_%s' % cmd_type
 
         cmd_callback = getattr(self, recv_server_command_function_name, None)
         if not cmd_callback:
-            gearman_logger.error("Could not handle command: %r - %r" % (cmd_type, raw_text))
-            raise ValueError("Could not handle command: %r - %r" % (cmd_type, raw_text))
+            gearman_logger.error('Could not handle command: %r - %r' % (cmd_type, raw_text))
+            raise ValueError('Could not handle command: %r - %r' % (cmd_type, raw_text))
 
         # This must match the parameter names as defined in the command handler
         completed_work = cmd_callback(raw_text)
@@ -153,7 +153,7 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
 
         split_tokens = raw_text.split('\t')
         if len(split_tokens) != len(self._status_fields):
-            raise ProtocolError("Received %d tokens, expected %d tokens: %r" % (len(split_tokens), len(self._status_fields), split_tokens))
+            raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), len(self._status_fields), split_tokens))
 
         # Label our fields
         status_dict = dict((field_name, field_value) for field_name, field_value in zip(self._status_fields, split_tokens))
@@ -173,10 +173,10 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
 
         split_tokens = raw_text.split(' ')
         if len(split_tokens) < 4:
-            raise ProtocolError("Received %d tokens, expected >= 4 tokens: %r" % (len(split_tokens), split_tokens))
+            raise ProtocolError('Received %d tokens, expected >= 4 tokens: %r' % (len(split_tokens), split_tokens))
 
         if split_tokens[3] != ':':
-            raise ProtocolError("Malformed worker response: %r" % (split_tokens, ))
+            raise ProtocolError('Malformed worker response: %r' % (split_tokens, ))
 
         worker_dict = {}
         worker_dict['file_descriptor'] = split_tokens[0]
@@ -189,7 +189,7 @@ class GearmanManagerConnectionHandler(GearmanConnectionHandler):
         return True
 
     def recv_server_maxqueue(self, raw_text):
-        if raw_text != "OK":
+        if raw_text != 'OK':
             raise ProtocolError("Expected 'OK', received: %s" % raw_text)
 
         self._recv_responses.append(raw_text)

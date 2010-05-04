@@ -12,7 +12,7 @@ from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_P
 
 from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
 
-gearman_logger = logging.getLogger("gearman.client")
+gearman_logger = logging.getLogger('gearman.client')
 
 RANDOM_UNIQUE_BYTES = 8
 
@@ -80,7 +80,7 @@ class GearmanClient(GearmanClientBase):
     def choose_connection_for_request(self, current_request):
         """Return a live connection for the given hash"""
         if not self.connection_list:
-            raise ServerUnavailable("Unable to Locate Server")
+            raise ServerUnavailable('Unable to Locate Server')
 
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
         rotating_conns = self.request_to_rotating_connection_queue.get(current_request, None)
@@ -103,7 +103,7 @@ class GearmanClient(GearmanClientBase):
                 skipped_conns += 1
 
         if not chosen_conn:
-            raise ServerUnavailable("Unable to Locate Server")
+            raise ServerUnavailable('Unable to Locate Server')
 
         # Rotate our server list so we'll skip all our broken servers
         rotating_conns.rotate(-skipped_conns)
@@ -186,11 +186,11 @@ class GearmanClientConnectionHandler(GearmanConnectionHandler):
     ###########################################################################
     def assert_request_state(self, current_request, expected_state):
         if current_request.state != expected_state:
-            raise InvalidClientState("Expected handle (%s) to be in state %r, got %s" % (current_request.get_handle(), expected_state, current_request.state))
+            raise InvalidClientState('Expected handle (%s) to be in state %r, got %s' % (current_request.get_handle(), expected_state, current_request.state))
 
     def recv_job_created(self, job_handle):
         if not self.requests_awaiting_handles:
-            raise InvalidClientState("Received a job_handle with no pending requests")
+            raise InvalidClientState('Received a job_handle with no pending requests')
     
         current_request = self.requests_awaiting_handles.popleft()
         self.assert_request_state(current_request, GEARMAN_JOB_STATE_PENDING)
@@ -271,7 +271,7 @@ class GearmanClientConnectionHandler(GearmanConnectionHandler):
         return True
 
     def recv_error(self, error_code, error_text):
-        gearman_logger.error("Error from server: %s: %s" % (error_code, error_text))
+        gearman_logger.error('Error from server: %s: %s' % (error_code, error_text))
         self.client_base.handle_error(self.gearman_connection)
 
         return False

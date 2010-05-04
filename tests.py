@@ -28,7 +28,7 @@ class MockGearmanConnection(GearmanConnection):
 
     def connect(self):
         if self._should_fail_on_connect:
-            raise ConnectionError("Mock connection failure")
+            raise ConnectionError('Mock connection failure')
 
         self._is_connected = bool(self._is_connected is None) or self._is_connected
 
@@ -37,7 +37,7 @@ class MockGearmanConnection(GearmanConnection):
 
 
     def __repr__(self):
-        return ("<GearmanConnection %s:%d connected=%s> (%s)" %
+        return ('<GearmanConnection %s:%d connected=%s> (%s)' %
             (self.gearman_host, self.gearman_port, self._is_connected, id(self)))
 
 class MockGearmanClientBase(GearmanClientBase):
@@ -418,7 +418,7 @@ class GearmanWorkerTest(_GearmanAbstractTest):
         self.assertEqual(self.connection_handler._connection_abilities, ['fake_callback_two'])
 
     def test_setting_client_id(self):
-        new_client_id = "HELLO"
+        new_client_id = 'HELLO'
 
         # Make sure nothing is set
         self.assertEqual(self.client_base.worker_client_id, None)

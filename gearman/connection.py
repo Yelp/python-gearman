@@ -7,7 +7,7 @@ from gearman.constants import DEFAULT_GEARMAN_PORT
 from gearman.protocol import GEARMAN_COMMAND_TO_NAME, GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
-gearman_logger = logging.getLogger("gearman.connection")
+gearman_logger = logging.getLogger('gearman.connection')
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
@@ -36,12 +36,12 @@ class GearmanConnection(object):
         self._reset_queues()
 
     def _reset_queues(self):
-        self._input_buffer = ""
-        self._output_buffer = ""
+        self._input_buffer = ''
+        self._output_buffer = ''
 
     def fileno(self):
         """Implements fileno() for use with select.select()"""
-        assert self.gearman_socket, "No socket set"
+        assert self.gearman_socket, 'No socket set'
         return self.gearman_socket.fileno()
 
     def get_address(self):
@@ -75,7 +75,7 @@ class GearmanConnection(object):
             current_socket.setblocking(0)
     
         current_socket.settimeout(self.blocking_timeout)
-        current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack("L", 1))
+        current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
 
         self._is_connected = True
         self._reset_queues()
@@ -86,7 +86,7 @@ class GearmanConnection(object):
 
     def recv_command(self, is_response=True):
         received_commands = self.recv_command_list(is_response=is_response)
-        assert len(received_commands) == 1, "Received multiple commands when only expecting 1: %r" % received_commands
+        assert len(received_commands) == 1, 'Received multiple commands when only expecting 1: %r' % received_commands
 
         return received_commands[0]
 
@@ -130,7 +130,7 @@ class GearmanConnection(object):
                 return ''
             if exc.args[0] == errno.ECONNRESET:
                 self.gearman_socket.close()
-                raise ConnectionError("connection reset died")
+                raise ConnectionError('connection reset died')
             else:
                 raise
 
@@ -156,7 +156,7 @@ class GearmanConnection(object):
             if not cmd_len:
                 break
 
-            gearman_logger.debug("%s - Recv - %s - %r", hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
+            gearman_logger.debug('%s - Recv - %s - %r', hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
 
             bytes_read += cmd_len
             received_commands.append((cmd_type, cmd_args))
@@ -220,14 +220,14 @@ class GearmanConnection(object):
         for cmd_type, cmd_args, is_response in cmd_list:
             output_buffer += self.pack_command_for_buffer(cmd_type, cmd_args, is_response=is_response)
 
-            gearman_logger.debug("%s - Send - %s - %r", hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
+            gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
 
         return output_buffer
 
     def pack_command_for_buffer(self, cmd_type, cmd_args, is_response):
         """Converts a requested gearman command to its raw binary packet"""
         if cmd_type not in GEARMAN_PARAMS_FOR_COMMAND:
-            raise ProtocolError("Unknown command: %r" % cmd_type)
+            raise ProtocolError('Unknown command: %r' % cmd_type)
         elif cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
             return pack_text_command(cmd_type, cmd_args)
         else:
@@ -243,5 +243,5 @@ class GearmanConnection(object):
         self._reset_connection()
 
     def __repr__(self):
-        return ("<GearmanConnection %s:%d connected=%s>" %
+        return ('<GearmanConnection %s:%d connected=%s>' %
             (self.gearman_host, self.gearman_port, self._is_connected))

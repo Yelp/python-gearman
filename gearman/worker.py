@@ -7,7 +7,7 @@ from gearman.job import GearmanJob
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
 
-gearman_logger = logging.getLogger("gearman.client")
+gearman_logger = logging.getLogger('gearman.client')
 
 POLL_TIMEOUT_IN_SECONDS = 10.0
 
@@ -84,7 +84,7 @@ class GearmanWorker(GearmanClientBase):
         while continue_working:
             alive_connections = self.get_alive_connections()
             if not alive_connections:
-                raise ConnectionError("Found no alive connections in list: %r" % alive_connections)
+                raise ConnectionError('Found no alive connections in list: %r' % alive_connections)
 
             start_working = self.before_poll()
             if not start_working:
@@ -157,8 +157,8 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
 
     # Send Gearman commands related to jobs
     def send_job_status(self, current_job, numerator, denominator):
-        assert type(numerator) in (int, float), "Numerator must be a numeric value"
-        assert type(denominator) in (int, float), "Denominator must be a numeric value"
+        assert type(numerator) in (int, float), 'Numerator must be a numeric value'
+        assert type(denominator) in (int, float), 'Denominator must be a numeric value'
         self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=numerator, denominator=denominator)
 
     def send_job_complete(self, current_job, data):
@@ -206,7 +206,7 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
         return True
 
     def recv_job_assign_uniq(self, job_handle, function_name, unique, data):
-        assert function_name in self._connection_abilities, "%s not found in %r" % (function_name, self._connection_abilities)
+        assert function_name in self._connection_abilities, '%s not found in %r' % (function_name, self._connection_abilities)
         if not self._awaiting_job_assignment:
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
@@ -224,7 +224,7 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
         return self.recv_job_assign(job_handle=job_handle, function_name=function_name, unique=None, data=data)
 
     def recv_error(self, error_code, error_text):
-        gearman_logger.error("Error from server: %s: %s" % (error_code, error_text))
+        gearman_logger.error('Error from server: %s: %s' % (error_code, error_text))
         self.client_base.handle_error(self.gearman_connection)
 
         return False

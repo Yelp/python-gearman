@@ -1,10 +1,10 @@
 import collections
 from gearman.errors import ConnectionError
 
-GEARMAN_JOB_STATE_PENDING = "PENDING"
-GEARMAN_JOB_STATE_QUEUED = "QUEUED"
-GEARMAN_JOB_STATE_FAILED = "FAILED"
-GEARMAN_JOB_STATE_COMPLETE = "COMPLETE"
+GEARMAN_JOB_STATE_PENDING = 'PENDING'
+GEARMAN_JOB_STATE_QUEUED = 'QUEUED'
+GEARMAN_JOB_STATE_FAILED = 'FAILED'
+GEARMAN_JOB_STATE_COMPLETE = 'COMPLETE'
 
 class GearmanJob(object):
     def __init__(self, conn, handle, function_name, unique, data):
@@ -22,7 +22,7 @@ class GearmanJob(object):
         return dict(function_name=self.func, job_handle=self.handle, unique=self.unique, data=self.data)
 
     def __repr__(self):
-        return "<GearmanJob conn/handle=%r, func=%s, unique=%s, data=%s>" % (self.connection_handle(), self.func, self.unique, self.data)
+        return '<GearmanJob conn/handle=%r, func=%s, unique=%s, data=%s>' % (self.connection_handle(), self.func, self.unique, self.data)
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient and GearmanServer to represent job states"""
@@ -62,7 +62,7 @@ class GearmanJobRequest(object):
 
     def bind_connection(self, conn):
         if self.gearman_job.conn is not None and conn is not None:
-            raise ConnectionError("Request has already been assigned to connection: %r" % self.gearman_job.conn)
+            raise ConnectionError('Request has already been assigned to connection: %r' % self.gearman_job.conn)
 
         self.gearman_job.conn = conn
 
