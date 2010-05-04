@@ -705,18 +705,6 @@ class GearmanWorkerConnectionHandlerInterfaceTest(_GearmanAbstractTest):
         self.connection_handler.set_client_id(expected_client_id)
         self.assert_sent_client_id(expected_client_id)
 
-    def test_on_job_completion(self):
-        current_job = self.generate_job()
-        job_result = str(random.random())
-        self.connection_handler.on_job_complete(current_job, job_result)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=job_result)
-
-    def test_on_job_exception(self):
-        current_job = self.generate_job()
-        job_exception = None
-        self.connection_handler.on_job_exception(current_job, None)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
-
     def test_send_functions(self):
         current_job = self.generate_job()
         

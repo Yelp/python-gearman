@@ -47,7 +47,7 @@ class GearmanClientBase(object):
     def send_command(self, gearman_connection, cmd_type, cmd_args):
         self._check_connection_association(gearman_connection)
         if not gearman_connection.is_connected():
-            raise ConnectionError('Attempted to send a command on a dead connection: %r - %r - %r' % (gearman_connection, cmd_type, cmd_args))
+            raise ConnectionError('Attempted to send a command on a dead connection: %r - %r - %r' % (gearman_connection, GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args))
 
         gearman_connection.send_command(cmd_type, cmd_args)
 

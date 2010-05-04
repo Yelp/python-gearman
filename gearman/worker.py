@@ -70,12 +70,18 @@ class GearmanWorker(GearmanClientBase):
         try:
             function_callback = self.worker_abilities[current_job.func]
             job_result = function_callback(connection_handler, current_job)
-        except Exception, e:
-            connection_handler.on_job_exception(current_job, e)
+        except Exception, excp:
+            self.on_job_exception(connection_handler, current_job, excp)
             return False
 
-        connection_handler.on_job_complete(current_job, job_result)
+        self.on_job_complete(connection_handler, current_job, job_result)
         return True
+
+    def on_job_exception(self, connection_handler, current_job, exception):
+        connection_handler.send_job_failure(current_job)
+
+    def on_job_complete(self, connection_handler, current_job, job_result):
+        connection_handler.send_job_complete(current_job, job_result)
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
@@ -144,12 +150,6 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
     def on_client_id_update(self):
         if self._client_id is not None:
             self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=self._client_id)
-
-    def on_job_complete(self, current_job, job_result):
-        self.send_job_complete(current_job, job_result)
-
-    def on_job_exception(self, current_job, exception):
-        self.send_job_failure(current_job)
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
@@ -228,4 +228,3 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
         self.client_base.handle_error(self.gearman_connection)
 
         return False
-
