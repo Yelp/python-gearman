@@ -12,7 +12,7 @@ gearman_logger = logging.getLogger("gearman.client")
 POLL_TIMEOUT_IN_SECONDS = 10.0
 
 class GearmanWorker(GearmanClientBase):
-    """GearmanWorkers manage connections and ConnectionHandler
+    """GearmanWorkers manage connections and ConnectionHandlers
 
     This is the public facing gearman interface that most users should be instantiating
     All I/O will be handled by the GearmanWorker
@@ -20,7 +20,7 @@ class GearmanWorker(GearmanClientBase):
     """
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', 2.0)
+        kwargs.setdefault('blocking_timeout', 5.0)
         kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler) 
         super(GearmanWorker, self).__init__(*args, **kwargs)
 

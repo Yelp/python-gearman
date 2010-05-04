@@ -50,7 +50,10 @@ GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
 GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
 GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
 
-BINARY_COMMAND_TO_PARAMS = {
+# Fake command code 
+GEARMAN_COMMAND_TEXT_COMMAND = 9999
+
+GEARMAN_PARAMS_FOR_COMMAND = {
     # Gearman commands 1-9
     GEARMAN_COMMAND_CAN_DO: ["function_name"],
     GEARMAN_COMMAND_CANT_DO: ["function_name"],
@@ -91,20 +94,9 @@ BINARY_COMMAND_TO_PARAMS = {
     GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ["function_name", "unique", "data"],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: ["function_name", "unique", "data"],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ["function_name", "unique", "data"],
-}
 
-GEARMAN_SERVER_COMMAND_STATUS = "status"
-GEARMAN_SERVER_COMMAND_VERSION = "version"
-GEARMAN_SERVER_COMMAND_WORKERS = "workers"
-GEARMAN_SERVER_COMMAND_MAXQUEUE = "maxqueue"
-GEARMAN_SERVER_COMMAND_SHUTDOWN = "shutdown"
-
-SERVER_COMMAND_TO_PARAMS = {
-    GEARMAN_SERVER_COMMAND_STATUS: [],
-    GEARMAN_SERVER_COMMAND_VERSION: [],
-    GEARMAN_SERVER_COMMAND_WORKERS: [],
-    GEARMAN_SERVER_COMMAND_MAXQUEUE: ["function_name", "queue_size"],
-    GEARMAN_SERVER_COMMAND_SHUTDOWN: ["graceful"]
+    # Fake gearman command
+    GEARMAN_COMMAND_TEXT_COMMAND: ["raw_text"]
 }
 
 GEARMAN_COMMAND_TO_NAME = {
@@ -146,8 +138,16 @@ GEARMAN_COMMAND_TO_NAME = {
     GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: "GEARMAN_COMMAND_JOB_ASSIGN_UNIQ",
     GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: "GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG",
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: "GEARMAN_COMMAND_SUBMIT_JOB_LOW",
-    GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: "GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG"
+    GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: "GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG",
+
+    GEARMAN_COMMAND_TEXT_COMMAND: "GEARMAN_COMMAND_TEXT_COMMAND"
 }
+
+GEARMAN_SERVER_COMMAND_STATUS = "status"
+GEARMAN_SERVER_COMMAND_VERSION = "version"
+GEARMAN_SERVER_COMMAND_WORKERS = "workers"
+GEARMAN_SERVER_COMMAND_MAXQUEUE = "maxqueue"
+GEARMAN_SERVER_COMMAND_SHUTDOWN = "shutdown"
 
 def submit_cmd_for_background_priority(background, priority):
     cmd_type_lookup = {
@@ -172,111 +172,89 @@ def parse_binary_command(in_buffer, is_response=True):
     cmd_args = None
     cmd_len = 0
     expected_packet_size = None
-    
+
+    # If we don't have enough data to parse, error early
     if in_buffer_size < COMMAND_HEADER_SIZE:
         return cmd_type, cmd_args, cmd_len
 
-    if is_response:
-        expected_magic = MAGIC_RES_STRING
-    else:
-        expected_magic = MAGIC_REQ_STRING
+    # By default, we'll assume we're dealing with a gearman command
+    magic, cmd_type, cmd_len = struct.unpack("!4sII", in_buffer[:COMMAND_HEADER_SIZE])
 
-    if COMMAND_HEADER_SIZE <= in_buffer_size:
-        # By default, we'll assume we're dealing with a gearman command
-        magic, cmd_type, cmd_len = struct.unpack("!4sLL", in_buffer[:COMMAND_HEADER_SIZE])
-        expected_packet_size = COMMAND_HEADER_SIZE + cmd_len
-
-    if magic != expected_magic:
+    received_bad_response = bool(is_response) and bool(magic != MAGIC_RES_STRING)
+    received_bad_request = bool(not is_response) and bool(magic != MAGIC_REQ_STRING)
+    if received_bad_response or received_bad_request:
         raise ProtocolError("Malformed Magic")
 
+    expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
+    if expected_cmd_params is None:
+        raise ProtocolError("Received unknown binary command: %s" % cmd_type)
+
+    # If everything indicates this is a valid command, we should check to see if we have enough stuff to read in our buffer
+    expected_packet_size = COMMAND_HEADER_SIZE + cmd_len
     if in_buffer_size < expected_packet_size:
         return None, None, 0
 
-    cmd_params = BINARY_COMMAND_TO_PARAMS.get(cmd_type, None)
-    if cmd_params is None:
-        raise ProtocolError("Unknown binary message received: %s" % cmd_type)
+    binary_payload = in_buffer[COMMAND_HEADER_SIZE:expected_packet_size]
+    if len(expected_cmd_params) == 0 and binary_payload:
+        raise ProtocolError("Expected no binary payload: %s" % cmd_type)
 
-    number_of_params = len(cmd_params)
-    split_arguments = []
-    if number_of_params > 0:
-        post_header_data = in_buffer[COMMAND_HEADER_SIZE:expected_packet_size]
-        split_arguments = post_header_data.split(NULL_CHAR, number_of_params - 1)
-
-    if len(split_arguments) != number_of_params:
-        raise ProtocolError("Received wrong number of arguments to %s" % cmd_type)
+    split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
+    if len(split_arguments) != len(expected_cmd_params):
+        raise ProtocolError("Received %d argument(s), expecting %d argument(s): %s" % (len(split_arguments), len(expecting), cmd_type))
 
     # Iterate through the split arguments and assign them labels based on their order
-    cmd_args = dict(zip(cmd_params, split_arguments))
+    cmd_args = dict((param_label, param_value) for param_label, param_value in zip(expected_cmd_params, split_arguments))
     return cmd_type, cmd_args, expected_packet_size
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
-    expected_cmd_params = BINARY_COMMAND_TO_PARAMS.get(cmd_type, None)
+    expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
     if expected_cmd_params is None:
-        raise ProtocolError("Unknown binary message received: %s" % cmd_type)
+        raise ProtocolError("Received unknown binary command: %s" % cmd_type)
 
-    assert set(expected_cmd_params) == set(cmd_args.keys()), "Command arguments not equal to expected: %r != %r" % (set(expected_cmd_params), set(cmd_args.keys()))
+    expected_parameter_set = set(expected_cmd_params)
+    received_parameter_set = set(cmd_args.keys())
+    if expected_parameter_set != received_parameter_set:
+        raise ProtocolError("Received arguments did not match expected arguments: %r != %r" % (expected_parameter_set, received_parameter_set))
 
-    data_items = []
-    for param in expected_cmd_params:
-        raw_value = cmd_args[param]
-        data_items.append(str(raw_value))
-
-    raw_binary_data = NULL_CHAR.join(data_items)
     if is_response:
         magic = MAGIC_RES_STRING
     else:
         magic = MAGIC_REQ_STRING
 
-    return "%s%s" % (struct.pack("!4sII", magic, cmd_type, len(raw_binary_data)), raw_binary_data)
+    # !NOTE! str should be replaced with bytes in Python 3.x
+    # We will iterate in ORDER and str all our command arguments
+    data_items = [str(cmd_args[param]) for param in expected_cmd_params]
+    binary_payload = NULL_CHAR.join(data_items)
 
-def parse_server_command(in_buffer):
-    """This connection will ONLY parse server COMMANDS, not server RESPONSES"""
+    # Pack the header in the !4sII format then append the binary payload
+    packing_format = "!4sII%ds" % len(binary_payload)
+    return struct.pack(packing_format, magic, cmd_type, len(binary_payload), binary_payload)
+
+def parse_text_command(in_buffer):
+    """Parse a text command and return a single line at a time"""
     cmd_type = None
     cmd_args = None
     cmd_len = 0
-    
-    # # If we think this is a potential server command, parse it out
     if '\n' not in in_buffer:
         return cmd_type, cmd_args, cmd_len
 
-    entire_server_command, in_buffer = in_buffer.split('\n', 1)
- 
-    cmd_len = len(entire_server_command) + 1
+    text_command, in_buffer = in_buffer.split("\n", 1)
+    if NULL_CHAR in text_command:
+        raise ProtocolError("Received unexpected character: %s" % text_command)
 
-    cmd_pieces = entire_server_command.strip().split()
-    if not cmd_pieces:
-        return cmd_type, cmd_args, cmd_len
+    cmd_type = GEARMAN_COMMAND_TEXT_COMMAND
+    cmd_args = dict(raw_text=text_command)
+    cmd_len = len(text_command) + 1
 
-    cmd_type = cmd_pieces[0]
-    split_arguments = cmd_pieces[1:]
-
-    cmd_params = SERVER_COMMAND_TO_PARAMS.get(cmd_type, None)
-    if cmd_params is None:
-        raise ProtocolError("Unknown cmd_type: %s" % cmd_type)
-
-    exp_params = len(cmd_params)
-    seen_params = len(split_arguments)
-    if seen_params > exp_params:
-        raise ProtocolError("Received wrong number of arguments to %s - Expected %d, got %d)" % (cmd_type, exp_params, seen_params))
-
-    # Fill in missing arguments
-    for _ in xrange(exp_params - seen_params):
-        split_arguments.append(None)
-
-    # Iterate through the split arguments and assign them labels based on their order
-    cmd_args = dict(zip(cmd_params, split_arguments))
     return cmd_type, cmd_args, cmd_len
 
-def pack_server_command(cmd_type, cmd_args):
-    cmd_params = SERVER_COMMAND_TO_PARAMS.get(cmd_type, None)
-    if cmd_params is None:
-        raise ProtocolError("Unknown server message received: %s" % cmd_type)
+def pack_text_command(cmd_type, cmd_args):
+    """Parse a text command and return a single line at a time"""
+    if cmd_type != GEARMAN_COMMAND_TEXT_COMMAND:
+        raise ProtocolError("Unknown cmd_type: %s" % cmd_type)
 
-    output_list = [cmd_type]
-    for possible_param in cmd_params:
-        param_value = cmd_args[possible_param]
-        if param_value is not None:
-            output_list.append(param_value)
+    cmd_line = cmd_args.get("raw_text")
+    if cmd_line is None:
+        raise ProtocolError("Did not receive arguments any valid arguments: %s" % cmd_args)
 
-    output_command = "%s\r\n" % " ".join(output_list)
-    return output_command
+    return str(cmd_line)

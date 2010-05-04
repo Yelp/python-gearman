@@ -8,8 +8,6 @@ import types
 
 from gearman.connection import GearmanConnection
 from gearman.errors import ConnectionError, ServerUnavailable, InvalidClientState
-from gearman.manager import GearmanManager
-from gearman.server import GearmanServer
 from gearman.task import Task
 from gearman.protocol import *
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
@@ -17,6 +15,7 @@ from gearman.constants import BACKGROUND_JOB
 from gearman._client_base import GearmanConnectionHandler, GearmanClientBase
 from gearman.worker import GearmanWorkerConnectionHandler, GearmanWorker
 from gearman.client import GearmanClientConnectionHandler, GearmanClient
+from gearman.manager import GearmanManagerConnectionHandler, GearmanManager
 job_servers = ['127.0.0.1']
 
 class MockGearmanConnection(GearmanConnection):
@@ -858,14 +857,13 @@ class GearmanWorkerConnectionHandlerStateMachineTest(_GearmanAbstractTest):
         self.assert_no_pending_commands()
         self.assertTrue(self.connection_handler._awaiting_job_assignment)
 
-
-class TestManager(unittest.TestCase):
+class GearmanManagerTest(unittest.TestCase):
     def setUp(self):
-        self.manager = GearmanManager(job_servers[0])
+        self.manager = GearmanManager(host_list=job_servers, blocking_timeout=1.0)
 
     def testStatus(self):
         status = self.manager.status()
-        self.failUnless(isinstance(status, dict))
+        self.failUnless(type(status) is tuple)
 
     def testVersion(self):
         version = self.manager.version()
@@ -873,7 +871,7 @@ class TestManager(unittest.TestCase):
 
     def testWorkers(self):
         workers = self.manager.workers()
-        self.failUnless(isinstance(workers, list))
+        self.failUnless(type(workers) is tuple)
 
 if __name__ == '__main__':
     unittest.main()

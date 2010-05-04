@@ -151,8 +151,6 @@ class GearmanConnectionHandler(object):
         self.client_base = client_base
         self.gearman_connection = connection
 
-        self._expected_echoes = collections.deque()
-
     def recv_command(self, cmd_type, **cmd_args):
         """Maps any command to a recv_* callback function"""
         completed_work = None

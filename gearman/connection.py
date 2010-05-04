@@ -1,9 +1,11 @@
+# TODO: Merge the binary and server command flows
+
 import socket, struct, errno, logging
 
 from gearman.errors import ConnectionError, ProtocolError
 from gearman.constants import DEFAULT_GEARMAN_PORT
-from gearman.protocol import GEARMAN_COMMAND_TO_NAME, BINARY_COMMAND_TO_PARAMS, SERVER_COMMAND_TO_PARAMS, NULL_CHAR, \
-    pack_binary_command, parse_binary_command, parse_server_command, pack_server_command
+from gearman.protocol import GEARMAN_COMMAND_TO_NAME, GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
+    pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
 gearman_logger = logging.getLogger("gearman.connection")
 
@@ -166,7 +168,7 @@ class GearmanConnection(object):
         if given_buffer[0] == NULL_CHAR:
             return parse_binary_command(given_buffer, is_response=is_response)
         else:
-            return parse_server_command(given_buffer)
+            return parse_text_command(given_buffer)
 
     def send_command(self, cmd_type, cmd_args=None, is_response=False):
         """Buffered method, queues and sends a single Gearman command"""
@@ -224,12 +226,12 @@ class GearmanConnection(object):
 
     def pack_command_for_buffer(self, cmd_type, cmd_args, is_response):
         """Converts a requested gearman command to its raw binary packet"""
-        if cmd_type in BINARY_COMMAND_TO_PARAMS:
-            return pack_binary_command(cmd_type, cmd_args, is_response)
-        elif cmd_type in SERVER_COMMAND_TO_PARAMS:
-            return pack_server_command(cmd_type, cmd_args)
-        else:
+        if cmd_type not in GEARMAN_PARAMS_FOR_COMMAND:
             raise ProtocolError("Unknown command: %r" % cmd_type)
+        elif cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
+            return pack_text_command(cmd_type, cmd_args)
+        else:
+            return pack_binary_command(cmd_type, cmd_args, is_response)
 
     def close(self):
         """Shutdown our existing socket and reset all of our connection data"""

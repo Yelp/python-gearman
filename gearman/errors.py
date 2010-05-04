@@ -19,5 +19,8 @@ class InvalidClientState(GearmanError):
 class InvalidWorkerState(GearmanError):
     pass
 
+class InvalidManagerState(GearmanError):
+    pass
+
 class ProtocolError(GearmanError):
     pass
