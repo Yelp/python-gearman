@@ -58,8 +58,9 @@ class MockGearmanClientBase(GearmanClientBase):
         actual_connection_handler = self.connection_handlers[gearman_connection]
         self.command_queues[actual_connection_handler].append((cmd_type, cmd_args))
 
-    def on_job_execute(self, connection_handler, current_job):
+    def on_job_execute(self, current_job):
         """Masquerade as a GearmanWorker"""
+        connection_handler = self.connection_handlers[current_job.conn]
         self.worker_job_queues[connection_handler].append(current_job)
 
     def handle_error(self, gearman_connection):
@@ -724,7 +725,6 @@ class GearmanWorkerConnectionHandlerInterfaceTest(_GearmanAbstractTest):
         # Test GEARMAN_COMMAND_WORK_EXCEPTION
         self.connection_handler.send_job_exception(current_job, 'exception data')
         self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data='exception data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
         
         # Test GEARMAN_COMMAND_WORK_DATA
         self.connection_handler.send_job_data(current_job, 'job data')

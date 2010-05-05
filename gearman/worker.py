@@ -22,7 +22,7 @@ class GearmanWorker(GearmanClientBase):
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
         kwargs.setdefault('blocking_timeout', 5.0)
-        kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler) 
+        kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler)
         super(GearmanWorker, self).__init__(*args, **kwargs)
 
         self.worker_abilities = {}
@@ -72,23 +72,56 @@ class GearmanWorker(GearmanClientBase):
         alive_connections = [conn for conn in shuffled_list if conn.is_connected()]
         return alive_connections
 
-    def on_job_execute(self, connection_handler, current_job):
-        """Override this function if you'd like different exception handling behavior"""
+    def on_job_execute(self, current_job):
         try:
             function_callback = self.worker_abilities[current_job.func]
-            job_result = function_callback(connection_handler, current_job)
+            job_result = function_callback(current_job)
         except Exception:
-            return self.on_job_exception(connection_handler, current_job, sys.exc_info())
+            return self.on_job_exception(current_job, sys.exc_info())
 
-        return self.on_job_complete(connection_handler, current_job, job_result)
+        return self.on_job_complete(current_job, job_result)
 
-    def on_job_exception(self, connection_handler, current_job, exc_info):
-        connection_handler.send_job_failure(current_job)
+    def on_job_exception(self, current_job, exc_info):
+        self.send_job_failure(current_job)
         return False
 
-    def on_job_complete(self, connection_handler, current_job, job_result):
-        connection_handler.send_job_complete(current_job, job_result)
+    def on_job_complete(self, current_job, job_result):
+        self.send_job_complete(current_job, job_result)
         return True
+
+    # Send Gearman commands related to jobs
+    def _get_handler_for_job(self, current_job):
+        return self.connection_handlers[current_job.conn]
+
+    def send_job_status(self, current_job, numerator, denominator):
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_status(current_job, numerator=numerator, denominator=denominator)
+
+    def send_job_complete(self, current_job, data):
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_complete(current_job, data=data)
+
+    def send_job_failure(self, current_job):
+        """Removes a job from the queue if its backgrounded"""
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_failure(current_job)
+
+    def send_job_exception(self, current_job, data):
+        """Removes a job from the queue if its backgrounded"""
+        # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
+        # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
+        #
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_exception(current_job, data=data)
+        current_handler.send_job_failure(current_job)
+
+    def send_job_data(self, current_job, data):
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_data(current_job, data=data)
+
+    def send_job_warning(self, current_job, data):
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_warning(current_job, data=data)
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
@@ -181,7 +214,6 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
         # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
         #
         self.send_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data=data)
-        self.send_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
 
     def send_job_data(self, current_job, data):
         self.send_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data=data)
@@ -219,7 +251,7 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
 
         # Create a new job
         current_job = GearmanJob(self.gearman_connection, job_handle, function_name, unique, data)
-        self.client_base.on_job_execute(self, current_job)
+        self.client_base.on_job_execute(current_job)
 
         self._awaiting_job_assignment = False
 
