@@ -33,7 +33,7 @@ class GearmanClient(GearmanClientBase):
 
     def submit_multiple_jobs(self, jobs_to_submit, background=FOREGROUND_JOB, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
-        
+
         {'function_name': function_name, 'unique': unique, 'data': data}
         """
         requests_to_submit = []
@@ -50,7 +50,7 @@ class GearmanClient(GearmanClientBase):
         if job_unique == '-':
             job_unique = job_info['data']
         elif not job_unique:
-            job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex') 
+            job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex')
 
         current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
         current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
@@ -191,7 +191,7 @@ class GearmanClientConnectionHandler(GearmanConnectionHandler):
     def recv_job_created(self, job_handle):
         if not self.requests_awaiting_handles:
             raise InvalidClientState('Received a job_handle with no pending requests')
-    
+
         current_request = self.requests_awaiting_handles.popleft()
         self.assert_request_state(current_request, GEARMAN_JOB_STATE_PENDING)
 

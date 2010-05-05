@@ -89,7 +89,7 @@ class MockGearmanConnectionHandler(GearmanConnectionHandler):
         pass
 
 
- # class GearmanConnectionTest(_GearmanAbstractTest):
+# class GearmanConnectionTest(_GearmanAbstractTest):
 #     def setUp(self):
 #         self.connection = GearmanConnection(job_servers[0], blocking_timeout=2.0)
 #         self.connection.connect()
@@ -114,7 +114,7 @@ class _GearmanAbstractTest(unittest.TestCase):
     connection_class = MockGearmanConnection
     client_base_class = MockGearmanClientBase
     connection_handler_class = MockGearmanConnectionHandler
-    
+
     def setUp(self):
         self.connection = self.connection_class(hostname=None)
 
@@ -211,7 +211,7 @@ class GearmanClientTest(_GearmanAbstractTest):
         self.assertEqual(chosen_conn, good_connection)
 
         # No state changed so we should still go there
-        chosen_conn = self.client_base.choose_connection_for_request(current_request)   
+        chosen_conn = self.client_base.choose_connection_for_request(current_request)
         self.assertEqual(chosen_conn, good_connection)
 
         # Pretend like our good connection died so we'll need to choose somethign else
@@ -222,7 +222,7 @@ class GearmanClientTest(_GearmanAbstractTest):
         failed_then_retried_connection._is_connected = True
 
         # Make sure we rotate good_connection and failed_connection out
-        chosen_conn = self.client_base.choose_connection_for_request(current_request)   
+        chosen_conn = self.client_base.choose_connection_for_request(current_request)
         self.assertEqual(chosen_conn, failed_then_retried_connection)
 
     def test_no_connections_for_rotation_for_requests(self):
@@ -232,7 +232,7 @@ class GearmanClientTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         # No connections == death
-        self.assertRaises(ServerUnavailable, self.client_base.choose_connection_for_request, current_request)   
+        self.assertRaises(ServerUnavailable, self.client_base.choose_connection_for_request, current_request)
 
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
@@ -241,7 +241,7 @@ class GearmanClientTest(_GearmanAbstractTest):
         self.client_base._add_connection(failed_connection)
 
         # All failed connections == death
-        self.assertRaises(ServerUnavailable, self.client_base.choose_connection_for_request, current_request)   
+        self.assertRaises(ServerUnavailable, self.client_base.choose_connection_for_request, current_request)
 
     def test_multiple_fg_job_submission(self):
         submitted_job_count = 5
@@ -306,7 +306,7 @@ class GearmanClientTest(_GearmanAbstractTest):
         completed_request.state = GEARMAN_JOB_STATE_QUEUED
         failed_request.state = GEARMAN_JOB_STATE_QUEUED
         timeout_request.state = GEARMAN_JOB_STATE_QUEUED
-        
+
         self.update_requests = True
         def multiple_job_updates(connections, timeout=None):
             # Only give a single status update and have the 3rd job handle timeout
@@ -709,15 +709,15 @@ class GearmanWorkerConnectionHandlerInterfaceTest(_GearmanAbstractTest):
 
     def test_send_functions(self):
         current_job = self.generate_job()
-        
+
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.connection_handler.send_job_status(current_job, 0, 1)
         self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=0, denominator=1)
-        
+
         # Test GEARMAN_COMMAND_WORK_COMPLETE
         self.connection_handler.send_job_complete(current_job, 'completion data')
         self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data='completion data')
-        
+
         # Test GEARMAN_COMMAND_WORK_FAIL
         self.connection_handler.send_job_failure(current_job)
         self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
@@ -725,7 +725,7 @@ class GearmanWorkerConnectionHandlerInterfaceTest(_GearmanAbstractTest):
         # Test GEARMAN_COMMAND_WORK_EXCEPTION
         self.connection_handler.send_job_exception(current_job, 'exception data')
         self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data='exception data')
-        
+
         # Test GEARMAN_COMMAND_WORK_DATA
         self.connection_handler.send_job_data(current_job, 'job data')
         self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data='job data')
@@ -745,7 +745,7 @@ class GearmanWorkerConnectionHandlerInterfaceTest(_GearmanAbstractTest):
 
 class GearmanWorkerConnectionHandlerStateMachineTest(_GearmanAbstractTest):
     """Test multiple state transitions within a GearmanWorkerConnectionHandler
-    
+
     End to end tests without a server
     """
     client_base_class = MockGearmanClientBase

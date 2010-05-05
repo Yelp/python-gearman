@@ -12,15 +12,15 @@ gearman_logger = logging.getLogger('gearman.connection')
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
-    
+
     Wraps a socket and provides the following functionality:
        Full read/write methods for Gearman BINARY commands and responses
        Read and Write for Gearman SERVER commands
-       No read/write convenience methods for Gearman SERVER responses, use 
-    
+       No read/write convenience methods for Gearman SERVER responses, use
+
     Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
-    """ 
-    
+    """
+
     def __init__(self, hostname, port=DEFAULT_GEARMAN_PORT, blocking_timeout=0.0):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = hostname
@@ -74,7 +74,7 @@ class GearmanConnection(object):
             current_socket.setblocking(1)
         else:
             current_socket.setblocking(0)
-    
+
         current_socket.settimeout(self.blocking_timeout)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
 

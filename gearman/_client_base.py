@@ -13,9 +13,9 @@ gearman_logger = logging.getLogger('gearman._client_base')
 
 class GearmanClientBase(object):
     """Abstract base class for any Gearman-type client that needs to connect/listen to multiple connections
-    
+
     Mananges and polls a group of gearman connections
-    
+
     """
     def __init__(self, host_list=None, blocking_timeout=0.0, gearman_connection_handler_class=None, gearman_connection_class=None):
         """By default we're going to setup non-blocking connections"""
@@ -34,7 +34,7 @@ class GearmanClientBase(object):
             self._add_connection(client_connection)
 
     def _add_connection(self, client_connection):
-	    # Create connection handler for every connection
+        # Create connection handler for every connection
         self.connection_handlers[client_connection] = self.gearman_connection_handler_class(client_base=self, connection=client_connection)
         self.connection_list.append(client_connection)
 
@@ -76,7 +76,7 @@ class GearmanClientBase(object):
             select_conns = all_conns - dead_conns
             rx_conns = [c for c in select_conns if c.readable()]
             tx_conns = [c for c in select_conns if c.writable()]
-    
+
             try:
                 rd_list, wr_list, ex_list = gearman.util.select(rx_conns, tx_conns, select_conns, timeout=timeout)
                 successful_select = True

@@ -174,9 +174,9 @@ class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
 
     def on_connect(self):
         self._awaiting_job_assignment = False
-    
+
         self.connection_abilities = set()
-        
+
         self.on_abilities_update()
         self.on_client_id_update()
 
