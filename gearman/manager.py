@@ -22,7 +22,7 @@ class GearmanManager(GearmanClientBase):
         assert len(host_list) == 1, 'Only expected a single host'
 
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', 5.0)
+        kwargs.setdefault('blocking_timeout', 0.0)
         kwargs.setdefault('gearman_connection_handler_class', GearmanManagerConnectionHandler)
         super(GearmanManager, self).__init__(**kwargs)
 

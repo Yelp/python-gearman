@@ -34,7 +34,10 @@ class GearmanClientBase(object):
 
     def _add_connection(self, client_connection):
         # Create connection handler for every connection
-        self.connection_handlers[client_connection] = self.gearman_connection_handler_class(client_base=self, connection=client_connection)
+        current_handler = self.gearman_connection_handler_class(client_base=self, connection=client_connection)
+        current_handler.reset_state()
+
+        self.connection_handlers[client_connection] = current_handler
         self.connection_list.append(client_connection)
 
     ##################################
@@ -150,7 +153,10 @@ class GearmanClientBase(object):
             conn.send_data_from_buffer()
 
     def handle_error(self, conn):
-        gearman_logger.error('Exception on connection %s' % conn)
+        current_handler = self.connection_handlers.get(conn)
+        if current_handler:
+	        current_handler.reset_state()
+
         conn.close()
 
 class GearmanConnectionHandler(object):
@@ -158,6 +164,9 @@ class GearmanConnectionHandler(object):
         # assert isinstance(client_base, GearmanClientBase), 'Expecting a class that is an instance of GearmanClientBase'
         self.client_base = client_base
         self.gearman_connection = connection
+
+    def reset_state(self):
+        pass
 
     def recv_command(self, cmd_type, **cmd_args):
         """Maps any command to a recv_* callback function"""

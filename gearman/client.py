@@ -155,14 +155,13 @@ class GearmanClient(GearmanClientBase):
 
 class GearmanClientConnectionHandler(GearmanConnectionHandler):
     """Command handler is the state machine for this client"""
-    def __init__(self, *largs, **kwargs):
-        super(GearmanClientConnectionHandler, self).__init__(*largs, **kwargs)
 
+    ###########################################################################
+    def reset_state(self):
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()
         self.handle_to_request_map = dict()
 
-    ###########################################################################
     def send_job_request(self, current_request):
         """Register a newly created job request"""
         current_request.bind_connection(self.gearman_connection)

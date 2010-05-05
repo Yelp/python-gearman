@@ -21,7 +21,7 @@ class GearmanWorker(GearmanClientBase):
     """
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', 5.0)
+        kwargs.setdefault('blocking_timeout', 0.0)
         kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler)
         super(GearmanWorker, self).__init__(*args, **kwargs)
 
@@ -149,18 +149,23 @@ class GearmanWorker(GearmanClientBase):
     def after_poll(self, any_activity):
         return True
 
+    def handle_error(self, conn):
+        current_handler = self.connection_handlers[conn]
+        current_handler.reset_state()
+        super(GearmanWorker, self).handle_error(conn)
+
 class GearmanWorkerConnectionHandler(GearmanConnectionHandler):
     """GearmanWorker state machine on a per connection basis"""
-    def __init__(self, *largs, **kwargs):
-        super(GearmanWorkerConnectionHandler, self).__init__(*largs, **kwargs)
+
+    ##################################################################
+    ##### Public interface methods to be called by GearmanWorker #####
+    ##################################################################
+    def reset_state(self):
         self._connection_abilities = []
         self._client_id = None
 
         self._awaiting_job_assignment = None
 
-    ##################################################################
-    ##### Public interface methods to be called by GearmanWorker #####
-    ##################################################################
     def set_abilities(self, connection_abilities_list):
         assert type(connection_abilities_list) in (list, tuple)
         self._connection_abilities = connection_abilities_list

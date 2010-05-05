@@ -465,14 +465,14 @@ class GearmanWorkerTest(_GearmanAbstractTest):
         self.client_base.connection_handlers = {}
 
         # We have no connections so there will never be any work to do
-        self.assertRaises(ConnectionError, self.client_base.work)
+        self.assertRaises(ServerUnavailable, self.client_base.work)
 
         # We were started with a dead connection, make sure we bail again
         dead_connection = MockGearmanConnection()
-        dead_connection._should_fail_on_connect = False
+        dead_connection._should_fail_on_connect = True
         dead_connection._is_connected = False
         self.client_base._add_connection(dead_connection)
-        self.assertRaises(ConnectionError, self.client_base.work)
+        self.assertRaises(ServerUnavailable, self.client_base.work)
 
 class GearmanConnectionHandlerTest(_GearmanAbstractTest):
     """Tests the base ConnectionHandler class that underpins all other ConnectionHandlerTests"""
