@@ -2,7 +2,6 @@ import collections
 import logging
 
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
-from gearman.constants import DEFAULT_POLLING_TIMEOUT
 from gearman.errors import ProtocolError, InvalidManagerState
 from gearman.protocol import GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
@@ -23,7 +22,7 @@ class GearmanManager(GearmanClientBase):
         assert len(host_list) == 1, 'Only expected a single host'
 
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', DEFAULT_POLLING_TIMEOUT)
+        kwargs.setdefault('blocking_timeout', 5.0)
         kwargs.setdefault('gearman_connection_handler_class', GearmanManagerConnectionHandler)
         super(GearmanManager, self).__init__(**kwargs)
 

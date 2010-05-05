@@ -237,7 +237,7 @@ class GearmanConnection(object):
         """Shutdown our existing socket and reset all of our connection data"""
         try:
             self.gearman_socket.close()
-        except:
+        except Exception:
             pass
 
         self._reset_connection()

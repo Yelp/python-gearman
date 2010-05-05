@@ -78,7 +78,7 @@ class GearmanClientBase(object):
             try:
                 rd_list, wr_list, ex_list = gearman.util.select(rx_conns, tx_conns, select_conns, timeout=timeout)
                 successful_select = True
-            except:
+            except Exception:
                 # On any exception, we're going to assume we ran into a socket exception
                 # We'll need to fish for bad connections as suggested at
                 #
@@ -86,7 +86,7 @@ class GearmanClientBase(object):
                 for conn_to_test in select_conns:
                     try:
                         _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
-                    except:
+                    except Exception:
                         dead_conns.add(conn_to_test)
 
         for conn in rd_list:
@@ -106,10 +106,11 @@ class GearmanClientBase(object):
         return any([rd_list, wr_list, ex_list])
 
     def poll_connections_until_stopped(self, submitted_connections, polling_callback_fxn, timeout=None):
-        'Continue to poll our connections until we receive a stopping condition'
+        """Continue to poll our connections until we receive a stopping condition"""
         stop_time = time.time() + (timeout or 0.0)
 
-        continue_working = True
+        any_activity = False
+        continue_working = polling_callback_fxn(self, any_activity)
         while continue_working:
             time_remaining = stop_time - time.time()
             has_time_remaining = bool(timeout is None) or bool(time_remaining > 0.0)

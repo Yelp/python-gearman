@@ -4,7 +4,7 @@ Gearman Client Utils
 """
 import select as select_lib
 import errno
-from gearman.constants import DEFAULT_GEARMAN_PORT, DEFAULT_POLLING_TIMEOUT
+from gearman.constants import DEFAULT_GEARMAN_PORT
 
 def disambiguate_server_parameter(hostport_tuple):
     """Takes either a tuple of (address, port) or a string of 'address:port' and disambiguates them for us"""
@@ -22,9 +22,12 @@ def select(rlist, wlist, xlist, timeout=None):
     wr_list = []
     ex_list = []
 
-    actual_timeout = timeout or DEFAULT_POLLING_TIMEOUT
+    select_args = [rlist, wlist, xlist]
+    if timeout is not None:
+        select_args.append(timeout)
+
     try:
-        rd_list, wr_list, ex_list = select_lib.select(rlist, wlist, xlist, actual_timeout)
+        rd_list, wr_list, ex_list = select_lib.select(*select_args)
     except select_lib.error, exc:
         # Ignore interrupted system call, reraise anything else
         if exc[0] != errno.EINTR:

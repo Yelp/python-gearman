@@ -5,7 +5,6 @@ import sys
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
 from gearman.errors import ConnectionError, InvalidWorkerState
 from gearman.job import GearmanJob
-from gearman.constants import DEFAULT_POLLING_TIMEOUT
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
 
@@ -22,7 +21,7 @@ class GearmanWorker(GearmanClientBase):
     """
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', DEFAULT_POLLING_TIMEOUT)
+        kwargs.setdefault('blocking_timeout', 5.0)
         kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler) 
         super(GearmanWorker, self).__init__(*args, **kwargs)
 
