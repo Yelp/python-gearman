@@ -1,6 +1,7 @@
-# TODO: Merge the binary and server command flows
-
-import socket, struct, errno, logging
+import errno
+import logging
+import socket
+import struct
 
 from gearman.errors import ConnectionError, ProtocolError
 from gearman.constants import DEFAULT_GEARMAN_PORT
@@ -62,7 +63,7 @@ class GearmanConnection(object):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             client_socket.connect((self.gearman_host, self.gearman_port))
-        except (socket.error, socket.timeout), exc:
+        except socket.error, exc:
             self._reset_connection()
             raise ConnectionError(str(exc))
 
@@ -237,7 +238,7 @@ class GearmanConnection(object):
         """Shutdown our existing socket and reset all of our connection data"""
         try:
             self.gearman_socket.close()
-        except Exception:
+        except socket.error:
             pass
 
         self._reset_connection()
