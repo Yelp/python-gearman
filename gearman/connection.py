@@ -64,7 +64,6 @@ class GearmanConnection(object):
         try:
             client_socket.connect((self.gearman_host, self.gearman_port))
         except socket.error, exc:
-            self._reset_connection()
             raise ConnectionError(str(exc))
 
         self.bind_socket(client_socket)
@@ -128,12 +127,16 @@ class GearmanConnection(object):
             recv_buffer = self.gearman_socket.recv(size)
         except socket.error, exc:
             if exc.args[0] == errno.EWOULDBLOCK:
-                return ''
-            if exc.args[0] == errno.ECONNRESET:
-                self.gearman_socket.close()
+                return 0
+            elif exc.args[0] == errno.ECONNRESET:
                 raise ConnectionError('connection reset died')
-            else:
-                raise
+
+            # We should never get here... Gearman API users should never get socket.error's
+            # If you run into this, please forward along the error to the __author__
+            raise
+
+        if len(recv_buffer) == 0:
+            raise ConnectionError('remote disconnected')
 
         self._input_buffer += recv_buffer
         return len(self._input_buffer)
@@ -209,8 +212,12 @@ class GearmanConnection(object):
             if exc.args[0] == errno.EWOULDBLOCK:
                 return len(self._output_buffer)
 
-            self.close()
-            raise ConnectionError(str(exc))
+            # We should never get here... Gearman API users should never get socket.error's
+            # If you run into this, please forward along the error to the __author__
+            raise
+
+        if bytes_sent == 0:
+            raise ConnectionError('remote disconnected')
 
         self._output_buffer = self._output_buffer[bytes_sent:]
         return len(self._output_buffer)

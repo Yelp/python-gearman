@@ -10,6 +10,9 @@ def disambiguate_server_parameter(hostport_tuple):
     """Takes either a tuple of (address, port) or a string of 'address:port' and disambiguates them for us"""
     if type(hostport_tuple) is tuple:
         gearman_host, gearman_port = hostport_tuple
+    elif ':' in hostport_tuple:
+        gearman_host, gearman_possible_port = hostport_tuple.split(':')
+        gearman_port = int(gearman_possible_port)
     else:
         gearman_host = hostport_tuple
         gearman_port = DEFAULT_GEARMAN_PORT

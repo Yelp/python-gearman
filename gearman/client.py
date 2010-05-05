@@ -59,6 +59,7 @@ class GearmanClient(GearmanClientBase):
     def submit_multiple_requests(self, job_requests, timeout=None):
         chosen_connections = set()
         for current_request in job_requests:
+            # Raise ServerUnavailable error if we could not find a server to connect to
             chosen_conn = self.choose_connection_for_request(current_request)
             chosen_connections.add(chosen_conn)
 
@@ -80,7 +81,7 @@ class GearmanClient(GearmanClientBase):
     def choose_connection_for_request(self, current_request):
         """Return a live connection for the given hash"""
         if not self.connection_list:
-            raise ServerUnavailable('Unable to Locate Server')
+            raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
 
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
         rotating_conns = self.request_to_rotating_connection_queue.get(current_request, None)
@@ -103,7 +104,7 @@ class GearmanClient(GearmanClientBase):
                 skipped_conns += 1
 
         if not chosen_conn:
-            raise ServerUnavailable('Unable to Locate Server')
+            raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
 
         # Rotate our server list so we'll skip all our broken servers
         rotating_conns.rotate(-skipped_conns)

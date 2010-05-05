@@ -1,7 +1,6 @@
 import collections
 import logging
 import select as select_lib
-import socket as socket_lib
 import time
 
 import gearman.util
@@ -80,7 +79,7 @@ class GearmanClientBase(object):
             try:
                 rd_list, wr_list, ex_list = gearman.util.select(rx_conns, tx_conns, select_conns, timeout=timeout)
                 successful_select = True
-            except (select_lib.error, socket_lib.error):
+            except select_lib.error:
                 # On any exception, we're going to assume we ran into a socket exception
                 # We'll need to fish for bad connections as suggested at
                 #
@@ -88,14 +87,20 @@ class GearmanClientBase(object):
                 for conn_to_test in select_conns:
                     try:
                         _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
-                    except (select_lib.error, socket_lib.error):
+                    except select_lib.error:
                         dead_conns.add(conn_to_test)
 
         for conn in rd_list:
-            self.handle_read(conn)
+            try:
+                self.handle_read(conn)
+            except ConnectionError:
+                dead_conns.add(conn)
 
         for conn in wr_list:
-            self.handle_write(conn)
+            try:
+                self.handle_write(conn)
+            except ConnectionError:
+                dead_conns.add(conn)
 
         for conn in ex_list:
             self.handle_error(conn)

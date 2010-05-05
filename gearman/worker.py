@@ -3,7 +3,7 @@ import random
 import sys
 
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
-from gearman.errors import ConnectionError, InvalidWorkerState
+from gearman.errors import ConnectionError, InvalidWorkerState, ServerUnavailable
 from gearman.job import GearmanJob
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
@@ -130,7 +130,7 @@ class GearmanWorker(GearmanClientBase):
         while continue_working:
             alive_connections = self.get_alive_connections()
             if not alive_connections:
-                raise ConnectionError('Found no alive connections in list: %r' % alive_connections)
+                raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
             start_working = self.before_poll()
             if not start_working:
