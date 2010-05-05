@@ -5,7 +5,7 @@ import time
 import gearman.util
 from gearman.connection import GearmanConnection
 from gearman.errors import ConnectionError
-from gearman.protocol import GEARMAN_COMMAND_TO_NAME
+from gearman.protocol import get_command_name
 
 gearman_logger = logging.getLogger('gearman._client_base')
 
@@ -47,7 +47,7 @@ class GearmanClientBase(object):
     def send_command(self, gearman_connection, cmd_type, cmd_args):
         self._check_connection_association(gearman_connection)
         if not gearman_connection.is_connected():
-            raise ConnectionError('Attempted to send a command on a dead connection: %r - %r - %r' % (gearman_connection, GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args))
+            raise ConnectionError('Attempted to send a command on a dead connection: %r - %r - %r' % (gearman_connection, get_command_name(cmd_type), cmd_args))
 
         gearman_connection.send_command(cmd_type, cmd_args)
 
@@ -155,8 +155,8 @@ class GearmanConnectionHandler(object):
         """Maps any command to a recv_* callback function"""
         completed_work = None
 
-        gearman_command_name = GEARMAN_COMMAND_TO_NAME.get(cmd_type, '')
-        if not gearman_command_name or not gearman_command_name.startswith('GEARMAN_COMMAND_'):
+        gearman_command_name = get_command_name(cmd_type)
+        if bool(gearman_command_name == cmd_type) or not gearman_command_name.startswith('GEARMAN_COMMAND_'):
             gearman_logger.error('Could not handle command: %r - %r' % (cmd_type, cmd_args))
             raise ValueError('Could not handle command: %r - %r' % (cmd_type, cmd_args))
 

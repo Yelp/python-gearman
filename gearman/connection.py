@@ -5,7 +5,7 @@ import socket, struct, errno, logging
 from gearman.errors import ConnectionError, ProtocolError
 from gearman.constants import DEFAULT_GEARMAN_PORT
 from gearman.protocol import GEARMAN_COMMAND_TO_NAME, GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
-    pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
+    get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
 gearman_logger = logging.getLogger('gearman.connection')
 
@@ -156,7 +156,7 @@ class GearmanConnection(object):
             if not cmd_len:
                 break
 
-            gearman_logger.debug('%s - Recv - %s - %r', hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
+            gearman_logger.debug('%s - Recv - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
 
             bytes_read += cmd_len
             received_commands.append((cmd_type, cmd_args))
@@ -220,7 +220,7 @@ class GearmanConnection(object):
         for cmd_type, cmd_args, is_response in cmd_list:
             output_buffer += self.pack_command_for_buffer(cmd_type, cmd_args, is_response=is_response)
 
-            gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type), cmd_args)
+            gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
 
         return output_buffer
 

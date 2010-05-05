@@ -7,6 +7,7 @@ __version__ = '2.x.x'
 __license__ = 'MIT'
 
 from gearman.client import GearmanClient
+from gearman.manager import GearmanManager
 from gearman.worker import GearmanWorker
 
 # GearmanConnection - wraps a socket and parses commands

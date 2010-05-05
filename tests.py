@@ -1,4 +1,3 @@
-import atexit
 import logging
 import os, sys, signal, threading
 import unittest, time
@@ -6,16 +5,18 @@ import collections
 import random
 import types
 
-from gearman.connection import GearmanConnection
-from gearman.errors import ConnectionError, ServerUnavailable, InvalidClientState
-from gearman.task import Task
-from gearman.protocol import *
-from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
-from gearman.constants import BACKGROUND_JOB
 from gearman._client_base import GearmanConnectionHandler, GearmanClientBase
 from gearman.worker import GearmanWorkerConnectionHandler, GearmanWorker
 from gearman.client import GearmanClientConnectionHandler, GearmanClient
 from gearman.manager import GearmanManagerConnectionHandler, GearmanManager
+
+from gearman.connection import GearmanConnection
+from gearman.constants import BACKGROUND_JOB
+from gearman.errors import ConnectionError, ServerUnavailable, InvalidClientState
+from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
+from gearman.protocol import *
+
+
 job_servers = ['127.0.0.1']
 
 class MockGearmanConnection(GearmanConnection):
@@ -155,7 +156,7 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.assertEqual(self.client_base.command_queues[self.connection_handler], collections.deque())
 
     def assert_commands_equal(self, cmd_type_actual, cmd_type_expected):
-        self.assertEqual(GEARMAN_COMMAND_TO_NAME.get(cmd_type_actual, cmd_type_actual), GEARMAN_COMMAND_TO_NAME.get(cmd_type_expected, cmd_type_expected))
+        self.assertEqual(get_command_name(cmd_type_actual), get_command_name(cmd_type_actual))
 
 
 class GearmanClientTest(_GearmanAbstractTest):

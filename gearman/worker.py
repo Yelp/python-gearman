@@ -1,9 +1,11 @@
 import logging
 import random
+import sys
 
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
 from gearman.errors import ConnectionError, InvalidWorkerState
 from gearman.job import GearmanJob
+from gearman.constants import DEFAULT_POLLING_TIMEOUT
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
 
@@ -20,7 +22,7 @@ class GearmanWorker(GearmanClientBase):
     """
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', 5.0)
+        kwargs.setdefault('blocking_timeout', DEFAULT_POLLING_TIMEOUT)
         kwargs.setdefault('gearman_connection_handler_class', GearmanWorkerConnectionHandler) 
         super(GearmanWorker, self).__init__(*args, **kwargs)
 
@@ -33,16 +35,22 @@ class GearmanWorker(GearmanClientBase):
         for connection_handler in self.connection_handlers.itervalues():
             connection_handler.set_abilities(self.worker_abilities.keys())
 
+        return function_name
+
     def unregister_function(self, function_name):
         """Unregister a function with gearman"""
         self.worker_abilities.pop(function_name, None)
         for connection_handler in self.connection_handlers.itervalues():
             connection_handler.set_abilities(self.worker_abilities.keys())
 
+        return function_name
+
     def set_client_id(self, client_id):
         self.worker_client_id = client_id
         for connection_handler in self.connection_handlers.itervalues():
             connection_handler.set_client_id(client_id)
+
+        return client_id
 
     def get_alive_connections(self):
         """Return a shuffled list of connections that are alive,
@@ -70,18 +78,18 @@ class GearmanWorker(GearmanClientBase):
         try:
             function_callback = self.worker_abilities[current_job.func]
             job_result = function_callback(connection_handler, current_job)
-        except Exception, excp:
-            self.on_job_exception(connection_handler, current_job, excp)
-            return False
+        except Exception:
+            return self.on_job_exception(connection_handler, current_job, sys.exc_info())
 
-        self.on_job_complete(connection_handler, current_job, job_result)
-        return True
+        return self.on_job_complete(connection_handler, current_job, job_result)
 
-    def on_job_exception(self, connection_handler, current_job, exception):
+    def on_job_exception(self, connection_handler, current_job, exc_info):
         connection_handler.send_job_failure(current_job)
+        return False
 
     def on_job_complete(self, connection_handler, current_job, job_result):
         connection_handler.send_job_complete(current_job, job_result)
+        return True
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""

@@ -149,6 +149,9 @@ GEARMAN_SERVER_COMMAND_WORKERS = 'workers'
 GEARMAN_SERVER_COMMAND_MAXQUEUE = 'maxqueue'
 GEARMAN_SERVER_COMMAND_SHUTDOWN = 'shutdown'
 
+def get_command_name(cmd_type):
+    return GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type)
+
 def submit_cmd_for_background_priority(background, priority):
     cmd_type_lookup = {
         (BACKGROUND_JOB, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_BG,
@@ -195,16 +198,20 @@ def parse_binary_command(in_buffer, is_response=True):
         return None, None, 0
 
     binary_payload = in_buffer[COMMAND_HEADER_SIZE:expected_packet_size]
-    if len(expected_cmd_params) == 0 and binary_payload:
-        raise ProtocolError('Expected no binary payload: %s' % cmd_type)
+    split_arguments = []
 
-    split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
+    if len(expected_cmd_params) > 0:
+        split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
+    elif binary_payload:
+        raise ProtocolError('Expected no binary payload: %s' % get_command_name(cmd_type))
+
     if len(split_arguments) != len(expected_cmd_params):
-        raise ProtocolError('Received %d argument(s), expecting %d argument(s): %s' % (len(split_arguments), len(expected_cmd_params), cmd_type))
+        raise ProtocolError('Received %d argument(s), expecting %d argument(s): %s' % (len(split_arguments), len(expected_cmd_params), get_command_name(cmd_type)))
 
     # Iterate through the split arguments and assign them labels based on their order
     cmd_args = dict((param_label, param_value) for param_label, param_value in zip(expected_cmd_params, split_arguments))
     return cmd_type, cmd_args, expected_packet_size
+
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
     expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)

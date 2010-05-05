@@ -5,11 +5,9 @@ import logging
 import os
 
 from gearman._client_base import GearmanClientBase, GearmanConnectionHandler
-from gearman.errors import ServerUnavailable, ConnectionError, InvalidClientState
-
-from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
-
+from gearman.errors import ServerUnavailable, ConnectionError, InvalidClientState
+from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
 
 gearman_logger = logging.getLogger('gearman.client')
