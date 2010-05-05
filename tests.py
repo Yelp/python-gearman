@@ -81,7 +81,7 @@ class MockGearmanConnectionHandler(GearmanConnectionHandler):
 
     def recv_command(self, cmd_type, **cmd_args):
         # Catch all outbound commands from this connection handler
-        self.recv_command_queue.append((cmd_type, cmd_args)) 
+        self.recv_command_queue.append((cmd_type, cmd_args))
         recv_result = super(MockGearmanConnectionHandler, self).recv_command(cmd_type, **cmd_args)
         return recv_result
 
@@ -806,7 +806,7 @@ class GearmanWorkerConnectionHandlerStateMachineTest(_GearmanAbstractTest):
 
     def move_to_state_no_job(self):
         """Move us to the NO_JOB state...
-        
+
         1) We should've most recently sent only a single GEARMAN_COMMAND_GRAB_JOB_UNIQ
         2) We should be awaiting job assignment
         3) Once we receive a NO_JOB, we should say we're going back to sleep"""
@@ -821,7 +821,7 @@ class GearmanWorkerConnectionHandlerStateMachineTest(_GearmanAbstractTest):
 
     def move_to_state_job_assign_uniq(self, fake_job):
         """Move us to the JOB_ASSIGN_UNIQ state...
-        
+
         1) We should've most recently sent only a single GEARMAN_COMMAND_GRAB_JOB_UNIQ
         2) We should be awaiting job assignment
         3) The job we receive should be the one we expected"""
