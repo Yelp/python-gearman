@@ -4,7 +4,7 @@ import sys
 
 from gearman._connection_manager import GearmanConnectionManager
 from gearman.job import GearmanJob
-from gearman.errors import ConnectionError, InvalidWorkerState, ServerUnavailable
+from gearman.errors import ConnectionError, ServerUnavailable
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
 gearman_logger = logging.getLogger('gearman.worker')

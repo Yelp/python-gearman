@@ -7,14 +7,14 @@ import errno
 from gearman.constants import DEFAULT_GEARMAN_PORT
 
 def unlist(given_list):
-	"""Convert the (possibly) single item list into a single item"""
-	list_size = len(given_list)
-	if list_size > 1:
-		raise ValueError(list_size)
-	elif list_size == 0:
-		return None
-	else:
-		return given_list[0]
+    """Convert the (possibly) single item list into a single item"""
+    list_size = len(given_list)
+    if list_size > 1:
+        raise ValueError(list_size)
+    elif list_size == 0:
+        return None
+    else:
+        return given_list[0]
 
 def disambiguate_server_parameter(hostport_tuple):
     """Takes either a tuple of (address, port) or a string of 'address:port' and disambiguates them for us"""

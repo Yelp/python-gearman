@@ -1,13 +1,7 @@
 import logging
-import select as select_lib
-import time
-
-import gearman.util
-from gearman._connection import GearmanConnection
-from gearman.errors import ConnectionError
 from gearman.protocol import get_command_name
 
-gearman_logger = logging.getLogger('gearman._connection_manager')
+gearman_logger = logging.getLogger('gearman._command_handler')
 
 class GearmanCommandHandler(object):
     def __init__(self, connection_manager):
@@ -28,8 +22,9 @@ class GearmanCommandHandler(object):
 
         gearman_command_name = get_command_name(cmd_type)
         if bool(gearman_command_name == cmd_type) or not gearman_command_name.startswith('GEARMAN_COMMAND_'):
-            gearman_logger.error('Could not handle command: %r - %r' % (cmd_type, cmd_args))
-            raise ValueError('Could not handle command: %r - %r' % (cmd_type, cmd_args))
+            unknown_command_msg = 'Could not handle command: %r - %r' % (gearman_command_name, cmd_args)
+            gearman_logger.error(unknown_command_msg)
+            raise ValueError(unknown_command_msg)
 
         recv_command_function_name = gearman_command_name.lower().replace('gearman_command_', 'recv_')
 
@@ -45,11 +40,11 @@ class GearmanCommandHandler(object):
         return completed_work
 
     def recv_error(self, error_code, error_text):
-        gearman_logger.error('Error from server: %s: %s' % (error_code, error_text))
+        gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
         self.connection_manager.on_handler_error(self)
 
         return False
 
-    # Re-route all IO dealing with the connection through the base_client
+    # Re-route all IO dealing with the connection through the connection manager
     def send_command(self, cmd_type, **cmd_args):
         self.connection_manager.send_command(self, cmd_type, cmd_args)

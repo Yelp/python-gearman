@@ -69,7 +69,7 @@ class GearmanClient(GearmanConnectionManager):
         # Optionally, we'll allow a user to wait until all jobs are complete with the same timeout
         time_remaining = timeout and (stop_time - time.time())
         if wait_until_complete and (time_remaining is None or time_remaining > 0.0):
-            out_requests = self.wait_until_jobs_completed(accepted_job_requests, timeout=time_remaining)
+            out_requests = self.wait_until_jobs_completed(out_requests, timeout=time_remaining)
 
         return out_requests
 

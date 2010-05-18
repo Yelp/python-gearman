@@ -21,7 +21,6 @@ class GearmanConnection(object):
 
     Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
     """
-
     def __init__(self, hostname, port=DEFAULT_GEARMAN_PORT, blocking_timeout=0.0):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = hostname
