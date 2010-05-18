@@ -189,7 +189,9 @@ def parse_binary_command(in_buffer, is_response=True):
         raise ProtocolError('Malformed Magic')
 
     expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
-    if expected_cmd_params is None:
+
+    # GEARMAN_COMMAND_TEXT_COMMAND is a faked command that we use to support server text-based commands
+    if expected_cmd_params is None or cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
         raise ProtocolError('Received unknown binary command: %s' % cmd_type)
 
     # If everything indicates this is a valid command, we should check to see if we have enough stuff to read in our buffer
@@ -205,6 +207,8 @@ def parse_binary_command(in_buffer, is_response=True):
     elif binary_payload:
         raise ProtocolError('Expected no binary payload: %s' % get_command_name(cmd_type))
 
+    # This is a sanity check on the binary_payload.split() phase
+    # We should never be able to get here with any VALID gearman data
     if len(split_arguments) != len(expected_cmd_params):
         raise ProtocolError('Received %d argument(s), expecting %d argument(s): %s' % (len(split_arguments), len(expected_cmd_params), get_command_name(cmd_type)))
 
@@ -215,8 +219,8 @@ def parse_binary_command(in_buffer, is_response=True):
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
     expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
-    if expected_cmd_params is None:
-        raise ProtocolError('Received unknown binary command: %s' % cmd_type)
+    if expected_cmd_params is None or cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
+        raise ProtocolError('Received unknown binary command: %s' % get_command_name(cmd_type))
 
     expected_parameter_set = set(expected_cmd_params)
     received_parameter_set = set(cmd_args.keys())
@@ -234,8 +238,9 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
     binary_payload = NULL_CHAR.join(data_items)
 
     # Pack the header in the !4sII format then append the binary payload
-    packing_format = '!4sII%ds' % len(binary_payload)
-    return struct.pack(packing_format, magic, cmd_type, len(binary_payload), binary_payload)
+    payload_size = len(binary_payload)
+    packing_format = '!4sII%ds' % payload_size
+    return struct.pack(packing_format, magic, cmd_type, payload_size, binary_payload)
 
 def parse_text_command(in_buffer):
     """Parse a text command and return a single line at a time"""
@@ -249,6 +254,7 @@ def parse_text_command(in_buffer):
     if NULL_CHAR in text_command:
         raise ProtocolError('Received unexpected character: %s' % text_command)
 
+    # Fake gearman command "TEXT_COMMAND" used to process server admin client responses
     cmd_type = GEARMAN_COMMAND_TEXT_COMMAND
     cmd_args = dict(raw_text=text_command)
     cmd_len = len(text_command) + 1
@@ -258,7 +264,7 @@ def parse_text_command(in_buffer):
 def pack_text_command(cmd_type, cmd_args):
     """Parse a text command and return a single line at a time"""
     if cmd_type != GEARMAN_COMMAND_TEXT_COMMAND:
-        raise ProtocolError('Unknown cmd_type: %s' % cmd_type)
+        raise ProtocolError('Unknown cmd_type: Received %s, expecting %s' % (get_command_name(cmd_type), get_command_name(GEARMAN_COMMAND_TEXT_COMMAND)))
 
     cmd_line = cmd_args.get('raw_text')
     if cmd_line is None:

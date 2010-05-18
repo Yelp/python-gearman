@@ -6,8 +6,11 @@ __author__ = 'Matthew Tai <mtai@yelp.com>'
 __version__ = '2.x.x'
 __license__ = 'MIT'
 
+import sys
+sys.path.insert(0, '/nail/home/mtai/pg/python-gearman')
+
 from gearman.client import GearmanClient
-from gearman.manager import GearmanManager
+from gearman.admin_client import GearmanAdminClient
 from gearman.worker import GearmanWorker
 
 # GearmanConnection - wraps a socket and parses commands

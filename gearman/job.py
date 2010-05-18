@@ -54,6 +54,7 @@ class GearmanJobRequest(object):
 
         self.state = GEARMAN_JOB_STATE_PENDING
         self.timed_out = None
+        self.connection_failed = False
 
     def reset(self):
         self.initialize_request()
@@ -85,7 +86,7 @@ class GearmanJobRequest(object):
         return self.gearman_job.connection_handle()
 
     def is_complete(self):
-        background_complete = bool(self.background and self.state == GEARMAN_JOB_STATE_QUEUED)
+        background_complete = bool(self.background and self.state in (GEARMAN_JOB_STATE_QUEUED))
         foreground_complete = bool(not self.background and self.state in (GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE))
 
         actually_complete = background_complete or foreground_complete
