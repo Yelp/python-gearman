@@ -4,6 +4,8 @@ import os
 import random
 import time
 
+import gearman.util
+
 from gearman._connection_manager import GearmanConnectionManager
 from gearman.client_handler import GearmanClientCommandHandler
 from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
@@ -32,7 +34,7 @@ class GearmanClient(GearmanConnectionManager):
     def submit_job(self, function_name, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
         job_info = dict(function_name=function_name, data=data, unique=unique, priority=priority)
         completed_job_list = self.submit_multiple_jobs([job_info], background=background, timeout=timeout, wait_until_complete=wait_until_complete)
-        return completed_job_list[0]
+        return gearman.util.unlist(completed_job_list)
 
     def submit_multiple_jobs(self, jobs_to_submit, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
@@ -51,7 +53,7 @@ class GearmanClient(GearmanConnectionManager):
     def submit_multiple_requests(self, job_requests, wait_until_complete=False, timeout=None):
         """Submit these job requests and wait till our jobs are accepted"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        stop_time = timeout and (time.time() + timeout)
+        stopwatch = gearman.util.Stopwatch(timeout)
 
         chosen_connections = set()
         for current_request in job_requests:
@@ -63,12 +65,12 @@ class GearmanClient(GearmanConnectionManager):
             current_command_handler.send_job_request(current_request)
 
         # We should always wait until our job is accepted, this should be fast
-        time_remaining = timeout and (stop_time - time.time())
+        time_remaining = stopwatch.get_time_remaining()
         out_requests = self.wait_until_jobs_accepted(job_requests, timeout=time_remaining)
 
         # Optionally, we'll allow a user to wait until all jobs are complete with the same timeout
-        time_remaining = timeout and (stop_time - time.time())
-        if wait_until_complete and (time_remaining is None or time_remaining > 0.0):
+        time_remaining = stopwatch.get_time_remaining()
+        if wait_until_complete and bool(time_remaining != 0.0):
             out_requests = self.wait_until_jobs_completed(out_requests, timeout=time_remaining)
 
         return out_requests
@@ -77,17 +79,18 @@ class GearmanClient(GearmanConnectionManager):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_connections_from_requests(job_requests)
 
-        is_request_pending = lambda current_request: bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
+        def is_request_pending(current_request):
+            return bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
 
         # Poll until we know we've gotten acknowledgement that our job's been accepted
         def continue_while_jobs_pending(any_activity, callback_data):
-            return any(is_request_pending(current_request) for current_request in job_requests)
+            return any(bool(is_request_pending(current_request) and not current_request.connection_failed) for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_jobs_pending, timeout=timeout)
 
         # Mark any job still in the queued state to timeout
         for current_request in job_requests:
-            current_request.timed_out = is_request_pending(current_request) and bool(not current_request.connection_failed)
+            current_request.timed_out = is_request_pending(current_request)
 
         return job_requests
 
@@ -95,20 +98,20 @@ class GearmanClient(GearmanConnectionManager):
         """Keep polling on our connection until our job requests are complete"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_connections_from_requests(job_requests)
-    
-        is_request_incomplete = lambda current_request: not current_request.is_complete()
+
+        def is_request_incomplete(current_request):
+            return not current_request.is_complete()
 
         # Poll until we get responses for all our functions
         def continue_while_jobs_incomplete(any_activity, callback_data):
-            return any(is_request_incomplete(current_request) for current_request in job_requests)
+            return any(is_request_incomplete(current_request) and not current_request.connection_failed for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_jobs_incomplete, timeout=timeout)
 
         # Mark any job still in the queued state to timeout
         for current_request in job_requests:
             job_incomplete = is_request_incomplete(current_request)
-
-            current_request.timed_out = job_incomplete and bool(not current_request.connection_failed)
+            current_request.timed_out = job_incomplete
             if not job_incomplete:
                 self.request_to_rotating_connection_queue.pop(current_request, None)
 
@@ -116,7 +119,7 @@ class GearmanClient(GearmanConnectionManager):
 
     def get_job_status(self, current_request, timeout=None):
         request_list = self.get_job_statuses([current_request], timeout=timeout)
-        return request_list[0]
+        return gearman.util.unlist(request_list)
 
     def get_job_statuses(self, job_requests, timeout=None):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
@@ -134,17 +137,18 @@ class GearmanClient(GearmanConnectionManager):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_connections_from_requests(job_requests)
 
-        is_status_not_updated = lambda current_request: current_request.server_status.get('time_received') == current_request.server_status.get('last_time_received')
+        def is_status_not_updated(current_request):
+            return bool(current_request.server_status.get('time_received') == current_request.server_status.get('last_time_received'))
 
         # Poll to make sure we send out our request for a status update
         def continue_while_status_not_updated(any_activity, callback_data):
-            return any(is_status_not_updated(current_request) for current_request in job_requests)
+            return any(bool(is_status_not_updated(current_request) and not current_request.connection_failed) for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_status_not_updated, timeout=timeout)
 
         for current_request in job_requests:
             current_request.server_status = current_request.server_status or {}
-            current_request.timed_out = is_status_not_updated(current_request) and bool(not current_request.connection_failed)
+            current_request.timed_out = is_status_not_updated(current_request)
 
         return job_requests
 

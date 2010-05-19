@@ -126,13 +126,13 @@ class GearmanConnectionManager(object):
 
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, callback_data=None, timeout=None):
         """Continue to poll our connections until we receive a stopping condition"""
-        stop_time = timeout and (time.time() + timeout)
+        stopwatch = gearman.util.Stopwatch(timeout)
 
         any_activity = False
         continue_working = callback_fxn(any_activity, callback_data)
         while continue_working:
-            time_remaining = timeout and (stop_time - time.time())
-            if bool(time_remaining is not None) and bool(time_remaining < 0.0):
+            time_remaining = stopwatch.get_time_remaining()
+            if time_remaining == 0.0:
                 break
 
             # Keep polling our connections until we find that our request states have all been updated

@@ -137,7 +137,9 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         self.connection_manager.on_job_execute(gearman_job)
 
         # We'll be greedy on requesting jobs... this'll make sure we're aggressively popping things off the queue
-        self._grab_job()
+        self._release_job_lock()
+        self._sleep()
+
         return True
 
     def recv_job_assign(self, job_handle, function_name, data):

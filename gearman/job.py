@@ -53,7 +53,7 @@ class GearmanJobRequest(object):
         self.server_status = {}
 
         self.state = GEARMAN_JOB_STATE_PENDING
-        self.timed_out = None
+        self.timed_out = False
         self.connection_failed = False
 
     def reset(self):

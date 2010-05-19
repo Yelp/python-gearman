@@ -219,6 +219,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
 
         self.move_to_state_job_assign_uniq(self.generate_job_dict())
 
+        self.move_to_state_wakeup()
+
         self.move_to_state_no_job()
 
     def test_wakeup_sleep_wakup_work(self):
@@ -229,6 +231,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.move_to_state_wakeup()
 
         self.move_to_state_job_assign_uniq(self.generate_job_dict())
+
+        self.move_to_state_wakeup()
 
         self.move_to_state_no_job()
 
@@ -250,9 +254,15 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
 
         self.move_to_state_job_assign_uniq(self.generate_job_dict())
 
-        self.move_to_state_job_assign_uniq(self.generate_job_dict())
+        self.move_to_state_wakeup()
 
         self.move_to_state_job_assign_uniq(self.generate_job_dict())
+
+        self.move_to_state_wakeup()
+
+        self.move_to_state_job_assign_uniq(self.generate_job_dict())
+
+        self.move_to_state_wakeup()
 
         # After this job completes, we're going to greedily ask for more jobs
         self.move_to_state_no_job()
@@ -285,6 +295,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.move_to_state_wakeup()
 
         self.move_to_state_job_assign_uniq(self.generate_job_dict())
+
+        self.move_to_state_wakeup()
 
         self.move_to_state_no_job()
 
@@ -328,8 +340,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertEqual(current_job.data, fake_job['data'])
 
         # At the end of recv_command(GEARMAN_COMMAND_JOB_ASSIGN_UNIQ)
-        # We should have greedily requested a job
-        self.assert_job_lock(is_locked=True)
+        self.assert_job_lock(is_locked=False)
+        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def assert_awaiting_job(self):
         self.assert_sent_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
