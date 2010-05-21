@@ -4,6 +4,7 @@ import time
 
 import gearman.util
 from gearman._connection import GearmanConnection
+from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError
 from gearman.protocol import get_command_name
 
@@ -126,7 +127,8 @@ class GearmanConnectionManager(object):
         for conn in dead_conns:
             self.handle_error(conn)
 
-        gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', len(connections), len(rd_list), len(wr_list), len(ex_list) + len(dead_conns))
+        if _DEBUG_MODE_:
+	        gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', len(connections), len(rd_list), len(wr_list), len(ex_list) + len(dead_conns))
 
         return any([rd_list, wr_list, ex_list])
 

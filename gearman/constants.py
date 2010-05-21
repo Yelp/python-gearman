@@ -1,3 +1,4 @@
+_DEBUG_MODE_ = False
 DEFAULT_GEARMAN_PORT = 4730
 
 # Job submission parameters

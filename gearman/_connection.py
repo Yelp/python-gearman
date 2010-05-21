@@ -5,7 +5,7 @@ import socket
 import struct
 
 from gearman.errors import ConnectionError, ProtocolError
-from gearman.constants import DEFAULT_GEARMAN_PORT
+from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
@@ -169,7 +169,7 @@ class GearmanConnection(object):
         else:
             cmd_type, cmd_args, cmd_len = parse_text_command(given_buffer)
 
-        if cmd_type is not None:
+        if _DEBUG_MODE_ and cmd_type is not None:
             gearman_logger.debug('%s - Recv - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
 
         return cmd_type, cmd_args, cmd_len
@@ -225,7 +225,8 @@ class GearmanConnection(object):
         if cmd_type not in GEARMAN_PARAMS_FOR_COMMAND:
             raise ProtocolError('Unknown command: %r' % get_command_name(cmd_type))
 
-        gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
+        if _DEBUG_MODE_:
+	        gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
 
         if cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
             return pack_text_command(cmd_type, cmd_args)
