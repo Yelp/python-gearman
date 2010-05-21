@@ -6,6 +6,7 @@ import gearman.util
 from gearman._connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, ServerUnavailable
+from gearman.job import GearmanJob, GearmanJobRequest
 from gearman.protocol import get_command_name
 
 gearman_logger = logging.getLogger('gearman._connection_manager')
@@ -18,6 +19,9 @@ class GearmanConnectionManager(object):
     """
     command_handler_class = None
     connection_class = GearmanConnection
+
+    job_class = GearmanJob
+    job_request_class = GearmanJobRequest
 
     def __init__(self, host_list=None, blocking_timeout=0.0):
         """By default we're going to setup non-blocking connections"""

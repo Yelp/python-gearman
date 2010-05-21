@@ -3,7 +3,6 @@ import random
 import sys
 
 from gearman._connection_manager import GearmanConnectionManager
-from gearman.job import GearmanJob
 from gearman.errors import ConnectionError
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
@@ -19,7 +18,6 @@ class GearmanWorker(GearmanConnectionManager):
     All state machine operations are handled on the CommandHandler
     """
     command_handler_class = GearmanWorkerCommandHandler
-    gearman_job_class = GearmanJob
 
     def __init__(self, *args, **kwargs):
         # By default we should have non-blocking sockets for a GearmanWorker
@@ -38,7 +36,7 @@ class GearmanWorker(GearmanConnectionManager):
         self.handler_initial_state['abilities'] = self.worker_abilities.keys()
         self.handler_initial_state['client_id'] = self.worker_client_id
 
-    def register_function(self, task, callback_function):
+    def register_task(self, task, callback_function):
         """Register a function with gearman"""
         self.worker_abilities[task] = callback_function
         self._update_initial_state()
@@ -48,7 +46,7 @@ class GearmanWorker(GearmanConnectionManager):
 
         return task
 
-    def unregister_function(self, task):
+    def unregister_task(self, task):
         """Unregister a function with gearman"""
         self.worker_abilities.pop(task, None)
         self._update_initial_state()
@@ -83,7 +81,7 @@ class GearmanWorker(GearmanConnectionManager):
 
     def create_job(self, command_handler, job_handle, task, unique, data):
         current_connection = self.handler_to_connection_map[command_handler]
-        return self.gearman_job_class(current_connection, job_handle, task, unique, data)
+        return self.job_class(current_connection, job_handle, task, unique, data)
 
     def on_job_execute(self, current_job):
         try:

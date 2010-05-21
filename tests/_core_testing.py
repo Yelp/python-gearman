@@ -54,6 +54,9 @@ class _GearmanAbstractTest(unittest.TestCase):
     connection_manager_class = MockGearmanConnectionManager
     command_handler_class = None
 
+    job_class = GearmanJob
+    job_request_class = GearmanJobRequest
+
     def setUp(self):
         # Create a new MockGearmanTestClient on the fly
         self.setup_connection_manager()
@@ -75,7 +78,7 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
-        return GearmanJob(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        return self.job_class(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()))
 
     def generate_job_dict(self):
         current_job = self.generate_job()
@@ -83,8 +86,8 @@ class _GearmanAbstractTest(unittest.TestCase):
 
     def generate_job_request(self, priority=NO_PRIORITY, background=FOREGROUND_JOB):
         job_handle = str(random.random())
-        current_job = GearmanJob(conn=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
-        current_request = GearmanJobRequest(current_job, initial_priority=priority, background=background)
+        current_job = self.job_class(conn=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
          # Start this off as someone being queued
         current_request.state = GEARMAN_JOB_STATE_QUEUED

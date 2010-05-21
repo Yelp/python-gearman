@@ -12,3 +12,5 @@ sys.path.insert(0, '/nail/home/mtai/pg/python-gearman')
 from gearman.admin_client import GearmanAdminClient
 from gearman.client import GearmanClient
 from gearman.worker import GearmanWorker
+
+from gearman.job import GearmanJob, GearmanJobRequest

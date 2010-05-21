@@ -59,14 +59,14 @@ class WorkerTest(_GearmanAbstractWorkerTest):
             pass
 
         # Register a single callback
-        self.connection_manager.register_function('fake_callback_one', fake_callback_one)
+        self.connection_manager.register_task('fake_callback_one', fake_callback_one)
         self.failUnless('fake_callback_one' in self.connection_manager.worker_abilities)
         self.failIf('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
         self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one'])
 
         # Register another callback and make sure the command_handler sees the same functions
-        self.connection_manager.register_function('fake_callback_two', fake_callback_two)
+        self.connection_manager.register_task('fake_callback_two', fake_callback_two)
         self.failUnless('fake_callback_one' in self.connection_manager.worker_abilities)
         self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
@@ -74,7 +74,7 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one', 'fake_callback_two'])
 
         # Unregister a callback and make sure the command_handler sees the same functions
-        self.connection_manager.unregister_function('fake_callback_one')
+        self.connection_manager.unregister_task('fake_callback_one')
         self.failIf('fake_callback_one' in self.connection_manager.worker_abilities)
         self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
@@ -145,9 +145,9 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
         self.connection._is_connected = False
 
         self.connection_manager.set_client_id(expected_client_id)
-        self.connection_manager.unregister_function('__test_ability__')
+        self.connection_manager.unregister_task('__test_ability__')
         for task in expected_abilities:
-            self.connection_manager.register_function(task, None)
+            self.connection_manager.register_task(task, None)
 
         # We were disconnected, connect and wipe pending commands
         self.connection_manager.attempt_connect(self.connection)
@@ -217,7 +217,7 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
 
     def setup_connection_manager(self):
         super(WorkerCommandHandlerStateMachineTest, self).setup_connection_manager()
-        self.connection_manager.register_function('__test_ability__', None)
+        self.connection_manager.register_task('__test_ability__', None)
 
     def setup_command_handler(self):
         super(_GearmanAbstractWorkerTest, self).setup_command_handler()

@@ -33,7 +33,7 @@ class GearmanClient(GearmanConnectionManager):
 
     def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
         job_info = dict(task=task, data=data, unique=unique, priority=priority, background=background)
-        completed_job_list = self.submit_multiple_jobs([job_info], timeout=timeout, wait_until_complete=wait_until_complete)
+        completed_job_list = self.submit_multiple_jobs([job_info], wait_until_complete=wait_until_complete, timeout=timeout)
         return gearman.util.unlist(completed_job_list)
 
     def submit_multiple_jobs(self, jobs_to_submit, wait_until_complete=False, timeout=None):
@@ -43,10 +43,8 @@ class GearmanClient(GearmanConnectionManager):
         """
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
-        requests_to_submit = []
-        for job_info in jobs_to_submit:
-            current_request = self._create_request_from_dictionary(job_info)
-            requests_to_submit.append(current_request)
+        requests_to_submit = [self._create_request_from_dictionary(job_info) for job_info in jobs_to_submit]
+
 
         return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, timeout=timeout)
 
