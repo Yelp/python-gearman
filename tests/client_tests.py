@@ -40,12 +40,9 @@ class ClientTest(_GearmanAbstractTest):
         return current_request
 
     def test_connection_rotation_for_requests(self):
-        self.connection_manager.connection_list = []
-        self.connection_manager.command_handlers = {}
-
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
-        failed_connection._should_fail_on_connect = True
+        failed_connection._should_fail_on_bind = True
         failed_connection._is_connected = False
 
         failed_then_retried_connection = MockGearmanConnection()
@@ -53,35 +50,33 @@ class ClientTest(_GearmanAbstractTest):
         failed_then_retried_connection._is_connected = True
 
         good_connection = MockGearmanConnection()
-        good_connection._should_fail_on_connect = False
+        good_connection._should_fail_on_bind = False
         good_connection._is_connected = True
 
-        # Register all our connections
-        self.connection_manager._add_connection(failed_connection)
-        self.connection_manager._add_connection(failed_then_retried_connection)
-        self.connection_manager._add_connection(good_connection)
+        self.connection_manager.connection_list = [failed_connection, failed_then_retried_connection, good_connection]
 
+        # Register all our connections
         current_request = self.generate_job_request()
 
         self.failIf(current_request in self.connection_manager.request_to_rotating_connection_queue)
 
         # Make sure that when we start up, we get our good connection
-        chosen_conn = self.connection_manager.select_connection_for_request(current_request)
+        chosen_conn = self.connection_manager.choose_request_connection(current_request)
         self.assertEqual(chosen_conn, good_connection)
 
         # No state changed so we should still go there
-        chosen_conn = self.connection_manager.select_connection_for_request(current_request)
+        chosen_conn = self.connection_manager.choose_request_connection(current_request)
         self.assertEqual(chosen_conn, good_connection)
 
         # Pretend like our good connection died so we'll need to choose somethign else
-        good_connection._should_fail_on_connect = True
+        good_connection._should_fail_on_bind = True
         good_connection._is_connected = False
 
         failed_then_retried_connection._should_fail_on_connect = False
         failed_then_retried_connection._is_connected = True
 
         # Make sure we rotate good_connection and failed_connection out
-        chosen_conn = self.connection_manager.select_connection_for_request(current_request)
+        chosen_conn = self.connection_manager.choose_request_connection(current_request)
         self.assertEqual(chosen_conn, failed_then_retried_connection)
 
     def test_no_connections_for_rotation_for_requests(self):
@@ -91,16 +86,16 @@ class ClientTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         # No connections == death
-        self.assertRaises(ServerUnavailable, self.connection_manager.select_connection_for_request, current_request)
+        self.assertRaises(ServerUnavailable, self.connection_manager.choose_request_connection, current_request)
 
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
-        failed_connection._should_fail_on_connect = True
+        failed_connection._should_fail_on_bind = True
         failed_connection._is_connected = False
-        self.connection_manager._add_connection(failed_connection)
+        self.connection_manager.connection_list.append(failed_connection)
 
         # All failed connections == death
-        self.assertRaises(ServerUnavailable, self.connection_manager.select_connection_for_request, current_request)
+        self.assertRaises(ServerUnavailable, self.connection_manager.choose_request_connection, current_request)
 
     def test_multiple_fg_job_submission(self):
         submitted_job_count = 5
@@ -148,7 +143,7 @@ class ClientTest(_GearmanAbstractTest):
             pass
 
         self.connection_manager.poll_connections_once = job_failed_submission
-        job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, priority=HIGH_PRIORITY, timeout=0.1)
+        job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, priority=HIGH_PRIORITY, timeout=0.01)
 
         self.assertEqual(job_request.priority, HIGH_PRIORITY)
         self.assertEqual(job_request.background, FOREGROUND_JOB)
@@ -176,7 +171,7 @@ class ClientTest(_GearmanAbstractTest):
 
         self.connection_manager.poll_connections_once = multiple_job_updates
 
-        finished_requests = self.connection_manager.wait_until_jobs_completed([completed_request, failed_request, timeout_request], timeout=0.1)
+        finished_requests = self.connection_manager.wait_until_jobs_completed([completed_request, failed_request, timeout_request], timeout=0.01)
         del self.update_requests
 
         finished_completed_request, finished_failed_request, finished_timeout_request = finished_requests
@@ -225,7 +220,7 @@ class ClientTest(_GearmanAbstractTest):
 
         self.connection_manager.poll_connections_once = retrieve_status_timeout
 
-        job_request = self.connection_manager.get_job_status(single_request, timeout=0.1)
+        job_request = self.connection_manager.get_job_status(single_request, timeout=0.01)
         self.assertTrue(job_request.timed_out)
 
 

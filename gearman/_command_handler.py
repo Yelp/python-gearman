@@ -4,17 +4,16 @@ from gearman.protocol import get_command_name
 gearman_logger = logging.getLogger('gearman._command_handler')
 
 class GearmanCommandHandler(object):
+    """A command handler manages the state which we should be in given that we received a certain stream of commands"""
     def __init__(self, connection_manager):
         self.connection_manager = connection_manager
 
-        # Initialize the state of this command handler
-        self.reset_state()
-
-    def on_connection_error(self):
+    def initial_state(self, *largs, **kwargs):
         pass
 
-    def reset_state(self):
-        raise NotImplementedError
+    def send_command(self, cmd_type, **cmd_args):
+        """Hand off I/O to the connection mananger"""
+        self.connection_manager.send_command(self, cmd_type, cmd_args)
 
     def recv_command(self, cmd_type, **cmd_args):
         """Maps any command to a recv_* callback function"""
@@ -34,17 +33,11 @@ class GearmanCommandHandler(object):
             gearman_logger.error(missing_callback_msg)
             raise ValueError(missing_callback_msg)
 
-        # Expand the arguments as parsed from the connection
+        # Expand the arguments as passed by the protocol
         # This must match the parameter names as defined in the command handler
         completed_work = cmd_callback(**cmd_args)
         return completed_work
 
     def recv_error(self, error_code, error_text):
-        gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
-        self.connection_manager.on_handler_error(self)
-
-        return False
-
-    # Re-route all IO dealing with the connection through the connection manager
-    def send_command(self, cmd_type, **cmd_args):
-        self.connection_manager.send_command(self, cmd_type, cmd_args)
+        """When we receive an error from the server, notify the connection manager that we have a gearman error"""
+        return self.connection_manager.on_gearman_error(error_code, error_test)

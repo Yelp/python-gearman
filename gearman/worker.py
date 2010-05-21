@@ -30,55 +30,59 @@ class GearmanWorker(GearmanConnectionManager):
         self.worker_client_id = None
         self.command_handler_holding_job_lock = None
 
+        self._update_initial_state()
+
+    def _update_initial_state(self):
+        self.handler_initial_state['abilities'] = self.worker_abilities.keys()
+        self.handler_initial_state['client_id'] = self.worker_client_id
+
     def register_function(self, function_name, callback_function):
         """Register a function with gearman"""
         self.worker_abilities[function_name] = callback_function
+        self._update_initial_state()
+
         for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.worker_abilities.keys())
+            command_handler.set_abilities(self.handler_initial_state['abilities'])
 
         return function_name
 
     def unregister_function(self, function_name):
         """Unregister a function with gearman"""
         self.worker_abilities.pop(function_name, None)
+        self._update_initial_state()
+
         for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.worker_abilities.keys())
+            command_handler.set_abilities(self.handler_initial_state['abilities'])
 
         return function_name
 
     def set_client_id(self, client_id):
         self.worker_client_id = client_id
+        self._update_initial_state()
+
         for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_client_id(client_id)
+            command_handler.set_client_id(self.handler_initial_state['client_id'])
 
         return client_id
 
-    def get_alive_connections(self):
+    def get_live_connections(self):
         """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
         shuffled_list = list(self.connection_list)
         random.shuffle(shuffled_list)
 
-        for conn in shuffled_list:
-            if conn.is_connected():
-                continue
+        for current_connection in shuffled_list:
+            self.attempt_connect(current_connection)
 
-            try:
-                conn.connect()
-            except ConnectionError:
-                continue
-            else:
-                command_handler = self.connection_to_handler_map.get(conn)
-                command_handler.on_connect()
+        live_connections = [conn for conn in shuffled_list if conn.is_connected()]
+        if not live_connections:
+            raise ServerUnavailable('Found no valid connections in list: %r' % shuffled_list)
 
-        alive_connections = [conn for conn in shuffled_list if conn.is_connected()]
-        return alive_connections
+        return live_connections
 
     def create_job(self, command_handler, job_handle, function_name, unique, data):
         current_connection = self.handler_to_connection_map[command_handler]
-
-        job_instance = self.gearman_job_class(current_connection, job_handle, function_name, unique, data)
-        return job_instance
+        return self.gearman_job_class(current_connection, job_handle, function_name, unique, data)
 
     def on_job_execute(self, current_job):
         try:
@@ -156,25 +160,29 @@ class GearmanWorker(GearmanConnectionManager):
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
         continue_working = True
-        alive_connections = []
+        live_connections = []
+
+        def instance_method_wrapper(any_activity, callback_data):
+            return self.after_poll
+
         while continue_working:
-            alive_connections = self.get_alive_connections()
-            if not alive_connections:
-                raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
-
-            start_working = self.before_poll()
-            if not start_working:
-                break
-
-            had_connection_activity = self.poll_connections_once(alive_connections, timeout=poll_timeout)
-            continue_working = self.after_poll(had_connection_activity)
+            live_connections = self.get_live_connections()
+            continue_working = self.poll_connections_until_stopped(live_connections, instance_method_wrapper, timeout=poll_timeout)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
-        for current_connection in alive_connections:
+        for current_connection in live_connections:
             current_connection.close()
 
-    def before_poll(self):
+    def after_poll(self, any_activity, callback_data=None):
         return True
 
-    def after_poll(self, any_activity):
-        return True
+    def shutdown(self):
+        self.command_handler_holding_job_lock = None
+        super(GearmanWorker, self).shutdown(current_connection)
+
+    def handle_error(self, current_connection):
+        current_handler = self.connection_to_handler_map.get(current_connection)
+        if current_handler:
+            self.set_job_lock(current_handler, lock=False)
+
+        super(GearmanWorker, self).handle_error(current_connection)

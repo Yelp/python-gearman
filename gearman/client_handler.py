@@ -11,30 +11,18 @@ gearman_logger = logging.getLogger('gearman.client')
 
 class GearmanClientCommandHandler(GearmanCommandHandler):
     """Maintains the state of this connection on behalf of a GearmanClient"""
-    def reset_state(self):
+    def __init__(self, *largs, **kwargs):
+        super(GearmanClientCommandHandler, self).__init__(*largs, **kwargs)
+    
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()
         self.handle_to_request_map = dict()
-
-    ##################################################################
-    ### Public interface methods to be called by GearmanClientBase ###
-    ##################################################################
-    def on_connection_error(self):
-        for pending_request in self.requests_awaiting_handles:
-            pending_request.connection_failed = True
-
-        for inflight_request in self.handle_to_request_map.itervalues():
-            inflight_request.connection_failed = True
-
-        self.reset_state()
 
     ##################################################################
     ##### Public interface methods to be called by GearmanClient #####
     ##################################################################
     def send_job_request(self, current_request):
         """Register a newly created job request"""
-        self.connection_manager.bind_connection_to_request(self, current_request)
-
         # Mutate arguments for this job...
         gearman_job = current_request.get_job()
 
@@ -47,13 +35,17 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         self.requests_awaiting_handles.append(current_request)
 
     def send_get_status_of_job(self, current_request):
-        current_handle = current_request.get_handle()
-        self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_handle)
+        self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.get_handle())
+
+    def get_requests(self):
+        pending_requests = self.requests_awaiting_handles
+        inflight_requests = self.handle_to_request_map.itervalues()
+        return pending_requests, inflight_requests
 
     ##################################################################
     ## Gearman command callbacks with kwargs defined by protocol.py ##
     ##################################################################
-    def assert_request_state(self, current_request, expected_state):
+    def _assert_request_state(self, current_request, expected_state):
         if current_request.state != expected_state:
             raise InvalidClientState('Expected handle (%s) to be in state %r, got %s' % (current_request.get_handle(), expected_state, current_request.state))
 
@@ -62,7 +54,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
             raise InvalidClientState('Received a job_handle with no pending requests')
 
         current_request = self.requests_awaiting_handles.popleft()
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_PENDING)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_PENDING)
 
         current_request.bind_handle(job_handle)
         current_request.state = GEARMAN_JOB_STATE_QUEUED
@@ -74,7 +66,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_data(self, job_handle, data):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.data_updates.append(data)
 
@@ -82,7 +74,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_warning(self, job_handle, data):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.warning_updates.append(data)
 
@@ -90,7 +82,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_status(self, job_handle, numerator, denominator):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         status_tuple = (float(numerator), float(denominator))
         current_request.status_updates.append(status_tuple)
@@ -99,7 +91,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_complete(self, job_handle, data):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.result = data
         current_request.state = GEARMAN_JOB_STATE_COMPLETE
@@ -108,7 +100,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_fail(self, job_handle):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.state = GEARMAN_JOB_STATE_FAILED
 
@@ -119,7 +111,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
         #
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.exception = data
 
@@ -127,7 +119,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_status_res(self, job_handle, known, running, numerator, denominator):
         current_request = self.handle_to_request_map[job_handle]
-        self.assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
+        self._assert_request_state(current_request, GEARMAN_JOB_STATE_QUEUED)
 
         current_request.server_status = {
             'handle': job_handle,

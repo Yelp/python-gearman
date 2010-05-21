@@ -9,57 +9,39 @@ gearman_logger = logging.getLogger('gearman.worker_handler')
 
 class GearmanWorkerCommandHandler(GearmanCommandHandler):
     """GearmanWorker state machine on a per connection basis"""
-
-    def reset_state(self):
-        self._connection_abilities = []
+    """Maintains the state of this connection on behalf of a GearmanClient"""
+    def __init__(self, *largs, **kwargs):
+        super(GearmanWorkerCommandHandler, self).__init__(*largs, **kwargs)
+    
+        self._handler_abilities = []
         self._client_id = None
 
-        self.connection_manager.set_job_lock(self, lock=False)
+    def initial_state(self, abilities=None, client_id=None):
+        self.set_client_id(client_id)
+        self.set_abilities(abilities)
 
-    ##################################################################
-    ### Public interface methods to be called by GearmanClientBase ###
-    ##################################################################
-
-    def on_connection_error(self):
-        self.reset_state()
+        self._sleep()
 
     ##################################################################
     ##### Public interface methods to be called by GearmanWorker #####
     ##################################################################
-
     def set_abilities(self, connection_abilities_list):
         assert type(connection_abilities_list) in (list, tuple)
-        self._connection_abilities = connection_abilities_list
-        self.on_abilities_update()
+        self._handler_abilities = connection_abilities_list
+
+        self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
+        for function_name in self._handler_abilities:
+            self.send_command(GEARMAN_COMMAND_CAN_DO, function_name=function_name)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
-        self.on_client_id_update()
 
-    def on_connect(self):
-        self.connection_manager.set_job_lock(self, lock=False)
-
-        self.connection_abilities = set()
-
-        self.on_abilities_update()
-        self.on_client_id_update()
-
-        self.send_command(GEARMAN_COMMAND_PRE_SLEEP)
-
-    def on_abilities_update(self):
-        self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
-        for function_name in self._connection_abilities:
-            self.send_command(GEARMAN_COMMAND_CAN_DO, function_name=function_name)
-
-    def on_client_id_update(self):
         if self._client_id is not None:
             self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=self._client_id)
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
     ###############################################################
-
-    # Send Gearman commands related to jobs
     def send_job_status(self, current_job, numerator, denominator):
         assert type(numerator) in (int, float), 'Numerator must be a numeric value'
         assert type(denominator) in (int, float), 'Denominator must be a numeric value'
@@ -126,14 +108,15 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_job_assign_uniq(self, job_handle, function_name, unique, data):
-        assert function_name in self._connection_abilities, '%s not found in %r' % (function_name, self._connection_abilities)
+        assert function_name in self._handler_abilities, '%s not found in %r' % (function_name, self._handler_abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
         if not self.connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        # Create a new job
         gearman_job = self.connection_manager.create_job(self, job_handle, function_name, unique, data)
+
+        # Create a new job
         self.connection_manager.on_job_execute(gearman_job)
 
         # We'll be greedy on requesting jobs... this'll make sure we're aggressively popping things off the queue

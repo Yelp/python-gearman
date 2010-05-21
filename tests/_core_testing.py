@@ -2,6 +2,7 @@ import collections
 import random
 import unittest
 
+import gearman.util
 from gearman._command_handler import GearmanCommandHandler
 from gearman._connection import GearmanConnection
 from gearman._connection_manager import GearmanConnectionManager
@@ -13,19 +14,21 @@ from gearman.protocol import get_command_name
 
 class MockGearmanConnection(GearmanConnection):
     def __init__(self, *largs, **kwargs):
-        kwargs.setdefault('hostname', None)
+        kwargs.setdefault('host', '__testing_host__')
         super(MockGearmanConnection, self).__init__(*largs, **kwargs)
 
-        self._is_connected = True
         self._should_fail_on_connect = False
+        self._should_fail_on_bind = False
 
     def connect(self):
-        super(MockGearmanConnection, self).connect()
         if self._should_fail_on_connect:
-            raise ConnectionError('Mock connection failure')
+            raise ConnectionError('Mock connect failure')
+
+        super(MockGearmanConnection, self).connect()
 
     def bind_client_socket(self):
-        pass
+        if self._should_fail_on_bind:
+            raise ConnectionError('Mock bind failure')
 
     def read_data_from_socket(self):
         pass
@@ -52,19 +55,27 @@ class _GearmanAbstractTest(unittest.TestCase):
     command_handler_class = None
 
     def setUp(self):
-        self.connection = self.connection_class(hostname=None)
-
         # Create a new MockGearmanTestClient on the fly
+        self.setup_connection_manager()
+        self.setup_connection()
+        self.setup_command_handler()
+
+    def setup_connection_manager(self):
         testing_attributes = {'command_handler_class': self.command_handler_class, 'connection_class': self.connection_class}
         testing_client_class = type('MockGearmanTestingClient', (self.connection_manager_class, ), testing_attributes)
 
         self.connection_manager = testing_client_class()
-        self.connection_manager._add_connection(self.connection)
 
+    def setup_connection(self):
+        self.connection = self.connection_class()
+        self.connection_manager.connection_list = [self.connection]
+
+    def setup_command_handler(self):
+        self.connection_manager.attempt_connect(self.connection)
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
-        return GearmanJob(self.connection, handle=str(random.random()), function_name='test_function_name', unique=str(random.random()), data=str(random.random()))
+        return GearmanJob(self.connection, handle=str(random.random()), function_name='__test_ability__', unique=str(random.random()), data=str(random.random()))
 
     def generate_job_dict(self):
         current_job = self.generate_job()
@@ -72,7 +83,7 @@ class _GearmanAbstractTest(unittest.TestCase):
 
     def generate_job_request(self, priority=NO_PRIORITY, background=FOREGROUND_JOB):
         job_handle = str(random.random())
-        current_job = GearmanJob(conn=self.connection, handle=job_handle, function_name='client_echo', unique=str(random.random()), data=str(random.random()))
+        current_job = GearmanJob(conn=self.connection, handle=job_handle, function_name='__test_ability__', unique=str(random.random()), data=str(random.random()))
         current_request = GearmanJobRequest(current_job, initial_priority=priority, background=background)
 
          # Start this off as someone being queued
@@ -97,4 +108,4 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.assertEqual(self.connection._outgoing_commands, collections.deque())
 
     def assert_commands_equal(self, cmd_type_actual, cmd_type_expected):
-        self.assertEqual(get_command_name(cmd_type_actual), get_command_name(cmd_type_actual))
+        self.assertEqual(get_command_name(cmd_type_actual), get_command_name(cmd_type_expected))

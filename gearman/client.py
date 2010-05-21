@@ -58,8 +58,10 @@ class GearmanClient(GearmanConnectionManager):
         chosen_connections = set()
         for current_request in job_requests:
             # Raise ServerUnavailable error if we could not find a server to connect to
-            chosen_conn = self.select_connection_for_request(current_request)
+            chosen_conn = self.choose_request_connection(current_request)
             chosen_connections.add(chosen_conn)
+
+            current_request.bind_connection(chosen_conn)
 
             current_command_handler = self.connection_to_handler_map[chosen_conn]
             current_command_handler.send_job_request(current_request)
@@ -77,7 +79,7 @@ class GearmanClient(GearmanConnectionManager):
 
     def wait_until_jobs_accepted(self, job_requests, timeout=None):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        job_connections = self._get_connections_from_requests(job_requests)
+        job_connections = self._get_request_connections(job_requests)
 
         def is_request_pending(current_request):
             return bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
@@ -97,7 +99,7 @@ class GearmanClient(GearmanConnectionManager):
     def wait_until_jobs_completed(self, job_requests, timeout=None):
         """Keep polling on our connection until our job requests are complete"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        job_connections = self._get_connections_from_requests(job_requests)
+        job_connections = self._get_request_connections(job_requests)
 
         def is_request_incomplete(current_request):
             return not current_request.is_complete()
@@ -135,7 +137,7 @@ class GearmanClient(GearmanConnectionManager):
 
     def wait_until_job_statuses_received(self, job_requests, timeout=None):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        job_connections = self._get_connections_from_requests(job_requests)
+        job_connections = self._get_request_connections(job_requests)
 
         def is_status_not_updated(current_request):
             return bool(current_request.server_status.get('time_received') == current_request.server_status.get('last_time_received'))
@@ -152,7 +154,7 @@ class GearmanClient(GearmanConnectionManager):
 
         return job_requests
 
-    def _get_connections_from_requests(self, job_requests):
+    def _get_request_connections(self, job_requests):
         submitted_job_connections = set(current_request.get_connection() for current_request in job_requests)
         submitted_job_connections.discard(None)
 
@@ -172,38 +174,44 @@ class GearmanClient(GearmanConnectionManager):
         current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
         return current_request
 
-    def bind_connection_to_request(self, command_handler, current_request):
-        current_connection = self.handler_to_connection_map[command_handler]
-        current_request.bind_connection(current_connection)
-
-    def select_connection_for_request(self, current_request):
+    def choose_request_connection(self, current_request):
         """Return a live connection for the given hash"""
         if not self.connection_list:
             raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
 
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
-        rotating_conns = self.request_to_rotating_connection_queue.get(current_request, None)
-        if not rotating_conns:
+        rotating_connections = self.request_to_rotating_connection_queue.get(current_request, None)
+        if not rotating_connections:
             shuffled_connection_list = list(self.connection_list)
             random.shuffle(shuffled_connection_list)
 
-            rotating_conns = collections.deque(shuffled_connection_list)
-            self.request_to_rotating_connection_queue[current_request] = rotating_conns
+            rotating_connections = collections.deque(shuffled_connection_list)
+            self.request_to_rotating_connection_queue[current_request] = rotating_connections
 
-        chosen_conn = None
-        skipped_conns = 0
-
-        for possible_conn in rotating_conns:
-            try:
-                possible_conn.connect() # Make sure the connection is up (noop if already connected)
-                chosen_conn = possible_conn
+        skipped_connections = 0
+        chosen_connection = None
+        for possible_conn in rotating_connections:
+            chosen_connection = self.attempt_connect(possible_conn)
+            if chosen_connection is not None:
                 break
-            except ConnectionError:
-                skipped_conns += 1
 
-        if not chosen_conn:
+            skipped_connections += 1
+
+        if chosen_connection is None:
             raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
 
         # Rotate our server list so we'll skip all our broken servers
-        rotating_conns.rotate(-skipped_conns)
-        return chosen_conn
+        rotating_connections.rotate(-skipped_connections)
+        return chosen_connection
+
+    def handle_error(self, current_connection):
+        current_handler = self.connection_to_handler_map[current_connection]
+        pending_requests, inflight_requests = current_handler.get_requests()
+
+        for current_request in pending_requests:
+            current_request.connection_failed = True
+
+        for current_request in inflight_requests:
+            current_request.connection_failed = True
+
+        super(GearmanClient, self).handle_error(current_connection)

@@ -15,14 +15,16 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
     def __init__(self, *largs, **kwargs):
         super(GearmanAdminClientCommandHandler, self).__init__(*largs, **kwargs)
         self._status_fields = 4
-        self.reset_state()
 
-    def reset_state(self):
         self._sent_commands = collections.deque()
         self._recv_responses = collections.deque()
 
         self._status_response = []
         self._workers_response = []
+
+    #######################################################################
+    ##### Public interface methods to be called by GearmanAdminClient #####
+    #######################################################################
 
     def has_response(self):
         return bool(self._recv_responses)
@@ -51,6 +53,10 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         output_text = '%s\n' % command_line
         self.send_command(GEARMAN_COMMAND_TEXT_COMMAND, raw_text=output_text)
 
+    ###########################################################
+    ### Callbacks when we receive a command from the server ###
+    ###########################################################
+
     def recv_text_command(self, raw_text):
         if not self._sent_commands:
             raise InvalidAdminClientState('Received an unexpected server response')
@@ -68,9 +74,8 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         completed_work = cmd_callback(raw_text)
         return completed_work
 
-    # Begin receiving server messages
     def recv_server_status(self, raw_text):
-        """Parse a multi-line status message line by line"""
+        """Slowly assemble a server status message line by line"""
         if raw_text == '.':
             output_response = tuple(self._status_response)
             self._recv_responses.append(output_response)
@@ -93,10 +98,12 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_server_version(self, raw_text):
+        """Version response is a simple passthrough"""
         self._recv_responses.append(raw_text)
         return False
 
     def recv_server_workers(self, raw_text):
+        """Slowly assemble a server workers message line by line"""
         if raw_text == '.':
             output_response = tuple(self._workers_response)
             self._recv_responses.append(output_response)
@@ -104,7 +111,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
             return False
 
         split_tokens = raw_text.split(' ')
-        if len(split_tokens) < 4:
+        if len(split_tokens) < self._status_fields:
             raise ProtocolError('Received %d tokens, expected >= 4 tokens: %r' % (len(split_tokens), split_tokens))
 
         if split_tokens[3] != ':':
@@ -121,6 +128,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_server_maxqueue(self, raw_text):
+        """Maxqueue response is a simple passthrough"""
         if raw_text != 'OK':
             raise ProtocolError("Expected 'OK', received: %s" % raw_text)
 
@@ -128,5 +136,6 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_server_shutdown(self, raw_text):
+        """Shutdown response is a simple passthrough"""
         self._recv_responses.append(None)
         return False

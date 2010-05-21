@@ -8,7 +8,7 @@ from gearman.worker import GearmanWorker
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
 from gearman.errors import ServerUnavailable, InvalidWorkerState
-from gearman.protocol import GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, \
+from gearman.protocol import get_command_name, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, \
     GEARMAN_COMMAND_NOOP, GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_NO_JOB, GEARMAN_COMMAND_GRAB_JOB_UNIQ, GEARMAN_COMMAND_JOB_ASSIGN_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING
 
@@ -20,14 +20,35 @@ class MockGearmanWorker(MockGearmanConnectionManager, GearmanWorker):
         self.worker_job_queues = collections.defaultdict(collections.deque)
 
     def on_job_execute(self, current_job):
-        command_handler = self._get_handler_for_job(current_job)
-        self.worker_job_queues[command_handler].append(current_job)
+        current_handler = self.connection_to_handler_map[current_job.conn]
+        self.worker_job_queues[current_handler].append(current_job)
 
-class WorkerTest(_GearmanAbstractTest):
-    """Test the public worker interface"""
+class _GearmanAbstractWorkerTest(_GearmanAbstractTest):
     connection_manager_class = MockGearmanWorker
     command_handler_class = GearmanWorkerCommandHandler
 
+    def setup_command_handler(self):
+        super(_GearmanAbstractWorkerTest, self).setup_command_handler()
+        self.assert_sent_abilities([])
+        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
+
+    def assert_sent_abilities(self, expected_abilities):
+        observed_abilities = set()
+    
+        self.assert_sent_command(GEARMAN_COMMAND_RESET_ABILITIES)
+        for ability in expected_abilities:
+            cmd_type, cmd_args = self.connection._outgoing_commands.popleft()
+
+            self.assertEqual(get_command_name(cmd_type), get_command_name(GEARMAN_COMMAND_CAN_DO))
+            observed_abilities.add(cmd_args['function_name'])
+
+        self.assertEqual(observed_abilities, set(expected_abilities))
+
+    def assert_sent_client_id(self, expected_client_id):
+        self.assert_sent_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=expected_client_id)
+
+class WorkerTest(_GearmanAbstractWorkerTest):
+    """Test the public worker interface"""
     def test_registering_functions(self):
         # Tests that the abilities were set on the GearmanWorker AND the GearmanWorkerCommandHandler
         # Does NOT test that commands were actually sent out as that is tested in GearmanWorkerCommandHandlerInterfaceTest.test_set_abilities
@@ -42,7 +63,7 @@ class WorkerTest(_GearmanAbstractTest):
         self.failUnless('fake_callback_one' in self.connection_manager.worker_abilities)
         self.failIf('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
-        self.assertEqual(self.command_handler._connection_abilities, ['fake_callback_one'])
+        self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one'])
 
         # Register another callback and make sure the command_handler sees the same functions
         self.connection_manager.register_function('fake_callback_two', fake_callback_two)
@@ -50,14 +71,14 @@ class WorkerTest(_GearmanAbstractTest):
         self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
-        self.assertEqual(self.command_handler._connection_abilities, ['fake_callback_one', 'fake_callback_two'])
+        self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one', 'fake_callback_two'])
 
         # Unregister a callback and make sure the command_handler sees the same functions
         self.connection_manager.unregister_function('fake_callback_one')
         self.failIf('fake_callback_one' in self.connection_manager.worker_abilities)
         self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
-        self.assertEqual(self.command_handler._connection_abilities, ['fake_callback_two'])
+        self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_two'])
 
     def test_setting_client_id(self):
         new_client_id = 'HELLO'
@@ -78,24 +99,22 @@ class WorkerTest(_GearmanAbstractTest):
 
         # Spin up a bunch of imaginary gearman connections
         good_connection = MockGearmanConnection()
-        good_connection._should_fail_on_connect = False
+        good_connection._should_fail_on_bind = False
         good_connection._is_connected = True
 
         failed_then_retried_connection = MockGearmanConnection()
-        failed_then_retried_connection._should_fail_on_connect = True
+        failed_then_retried_connection._should_fail_on_bind = True
         failed_then_retried_connection._is_connected = True
 
         failed_connection = MockGearmanConnection()
-        failed_connection._should_fail_on_connect = True
+        failed_connection._should_fail_on_bind = True
         failed_connection._is_connected = False
 
         # Register all our connections
-        self.connection_manager._add_connection(good_connection)
-        self.connection_manager._add_connection(failed_then_retried_connection)
-        self.connection_manager._add_connection(failed_connection)
+        self.connection_manager.connection_list = [good_connection, failed_then_retried_connection, failed_connection]
 
         # The only alive connections should be the ones that ultimately be connection._is_connected
-        alive_connections = self.connection_manager.get_alive_connections()
+        alive_connections = self.connection_manager.get_live_connections()
         self.assertTrue(good_connection in alive_connections)
         self.assertTrue(failed_then_retried_connection in alive_connections)
         self.assertFalse(failed_connection in alive_connections)
@@ -109,45 +128,42 @@ class WorkerTest(_GearmanAbstractTest):
 
         # We were started with a dead connection, make sure we bail again
         dead_connection = MockGearmanConnection()
-        dead_connection._should_fail_on_connect = True
+        dead_connection._should_fail_on_bind = True
         dead_connection._is_connected = False
-        self.connection_manager._add_connection(dead_connection)
+        self.connection_manager.connection_list = [dead_connection]
+
         self.assertRaises(ServerUnavailable, self.connection_manager.work)
 
 
-class WorkerCommandHandlerInterfaceTest(_GearmanAbstractTest):
+class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
     """Test the public interface a GearmanWorker may need to call in order to update state on a GearmanWorkerCommandHandler"""
-    connection_manager_class = MockGearmanWorker
-    command_handler_class = GearmanWorkerCommandHandler
-
-    def setUp(self):
-        super(WorkerCommandHandlerInterfaceTest, self).setUp()
-        self.connection._is_connected = False
 
     def test_on_connect(self):
         expected_abilities = ['function_one', 'function_two', 'function_three']
         expected_client_id = 'my_client_id'
 
-        self.command_handler.set_abilities(expected_abilities)
-        self.command_handler.set_client_id(expected_client_id)
+        self.connection._is_connected = False
+
+        self.connection_manager.set_client_id(expected_client_id)
+        self.connection_manager.unregister_function('__test_ability__')
+        for function_name in expected_abilities:
+            self.connection_manager.register_function(function_name, None)
 
         # We were disconnected, connect and wipe pending commands
-        self.connection.connect()
-        self.command_handler.on_connect()
+        self.connection_manager.attempt_connect(self.connection)
 
-        self.assert_sent_abilities(expected_abilities)
+        # When we attempt a new connection, make sure we get a new command handler
+        self.assertNotEquals(self.command_handler, self.connection_manager.connection_to_handler_map[self.connection])
+
         self.assert_sent_client_id(expected_client_id)
+        self.assert_sent_abilities(expected_abilities)
         self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
         self.assert_no_pending_commands()
 
     def test_set_abilities(self):
         expected_abilities = ['function_one', 'function_two', 'function_three']
 
-        self.command_handler.set_abilities(expected_abilities)
-
         # We were disconnected, connect and wipe pending commands
-        self.connection.connect()
-
         self.command_handler.set_abilities(expected_abilities)
         self.assert_sent_abilities(expected_abilities)
         self.assert_no_pending_commands()
@@ -155,19 +171,17 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractTest):
     def test_set_client_id(self):
         expected_client_id = 'my_client_id'
 
-        self.command_handler.set_client_id(expected_client_id)
+        handler_initial_state = {}
+        handler_initial_state['abilities'] = []
+        handler_initial_state['client_id'] = None
 
         # We were disconnected, connect and wipe pending commands
-        self.connection.connect()
-
         self.command_handler.set_client_id(expected_client_id)
         self.assert_sent_client_id(expected_client_id)
         self.assert_no_pending_commands()
 
     def test_send_functions(self):
         current_job = self.generate_job()
-
-        self.connection._is_connected = True
 
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.command_handler.send_job_status(current_job, 0, 1)
@@ -193,16 +207,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractTest):
         self.command_handler.send_job_warning(current_job, 'job warning')
         self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data='job warning')
 
-    def assert_sent_abilities(self, expected_abilities):
-        self.assert_sent_command(GEARMAN_COMMAND_RESET_ABILITIES)
-        for ability in expected_abilities:
-            self.assert_sent_command(GEARMAN_COMMAND_CAN_DO, function_name=ability)
-
-    def assert_sent_client_id(self, expected_client_id):
-        self.assert_sent_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=expected_client_id)
-
-
-class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
+class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
     """Test multiple state transitions within a GearmanWorkerCommandHandler
 
     End to end tests without a server
@@ -210,9 +215,14 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
     connection_manager_class = MockGearmanWorker
     command_handler_class = GearmanWorkerCommandHandler
 
-    def setUp(self):
-        super(WorkerCommandHandlerStateMachineTest, self).setUp()
-        self.command_handler._connection_abilities = ['test_function_name']
+    def setup_connection_manager(self):
+        super(WorkerCommandHandlerStateMachineTest, self).setup_connection_manager()
+        self.connection_manager.register_function('__test_ability__', None)
+
+    def setup_command_handler(self):
+        super(_GearmanAbstractWorkerTest, self).setup_command_handler()
+        self.assert_sent_abilities(['__test_ability__'])
+        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def test_wakeup_work(self):
         self.move_to_state_wakeup()
@@ -269,7 +279,10 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractTest):
 
     def test_worker_already_locked(self):
         other_connection = MockGearmanConnection()
-        other_handler = self.connection_manager._add_connection(other_connection)
+        self.connection_manager.connection_list.append(other_connection)
+        self.connection_manager.attempt_connect(other_connection)
+
+        other_handler = self.connection_manager.connection_to_handler_map[other_connection]
         other_handler.recv_command(GEARMAN_COMMAND_NOOP)
 
         # Make sure other handler has a lock
