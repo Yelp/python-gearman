@@ -31,21 +31,21 @@ class GearmanClient(GearmanConnectionManager):
         # Ignores the fact if a request has been bound to a connection or not
         self.request_to_rotating_connection_queue = collections.defaultdict(collections.deque)
 
-    def submit_job(self, function_name, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
-        job_info = dict(function_name=function_name, data=data, unique=unique, priority=priority)
-        completed_job_list = self.submit_multiple_jobs([job_info], background=background, timeout=timeout, wait_until_complete=wait_until_complete)
+    def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
+        job_info = dict(task=task, data=data, unique=unique, priority=priority, background=background)
+        completed_job_list = self.submit_multiple_jobs([job_info], timeout=timeout, wait_until_complete=wait_until_complete)
         return gearman.util.unlist(completed_job_list)
 
-    def submit_multiple_jobs(self, jobs_to_submit, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
+    def submit_multiple_jobs(self, jobs_to_submit, wait_until_complete=False, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
-        {'function_name': function_name, 'unique': unique, 'data': data}
+        {'task': task, 'unique': unique, 'data': data, 'priority': priority}
         """
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
         requests_to_submit = []
         for job_info in jobs_to_submit:
-            current_request = self._create_request_from_dictionary(job_info, background=background)
+            current_request = self._create_request_from_dictionary(job_info)
             requests_to_submit.append(current_request)
 
         return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, timeout=timeout)
@@ -161,8 +161,8 @@ class GearmanClient(GearmanConnectionManager):
         return submitted_job_connections
 
     # Begin helpers for submit_multple_jobs / submit_multiple_requests
-    def _create_request_from_dictionary(self, job_info, background):
-        """Takes a dictionary with fields  {'function_name': function_name, 'unique': unique, 'data': data, 'priority': priority}"""
+    def _create_request_from_dictionary(self, job_info):
+        """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')
         if job_unique == '-':
@@ -170,15 +170,12 @@ class GearmanClient(GearmanConnectionManager):
         elif not job_unique:
             job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex')
 
-        current_job = GearmanJob(conn=None, handle=None, function_name=job_info['function_name'], unique=job_unique, data=job_info['data'])
-        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
+        current_job = GearmanJob(conn=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
+        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=job_info.get('background', FOREGROUND_JOB))
         return current_request
 
     def choose_request_connection(self, current_request):
         """Return a live connection for the given hash"""
-        if not self.connection_list:
-            raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
-
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
         rotating_connections = self.request_to_rotating_connection_queue.get(current_request, None)
         if not rotating_connections:

@@ -29,7 +29,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         cmd_type = submit_cmd_for_background_priority(current_request.background, current_request.priority)
 
         # Handle the IO for requesting a job
-        self.send_command(cmd_type, function_name=gearman_job.func, data=gearman_job.data, unique=gearman_job.unique)
+        self.send_command(cmd_type, task=gearman_job.task, data=gearman_job.data, unique=gearman_job.unique)
 
         # Once this command is sent, our request is awaiting a handle
         self.requests_awaiting_handles.append(current_request)

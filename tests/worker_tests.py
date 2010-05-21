@@ -40,7 +40,7 @@ class _GearmanAbstractWorkerTest(_GearmanAbstractTest):
             cmd_type, cmd_args = self.connection._outgoing_commands.popleft()
 
             self.assertEqual(get_command_name(cmd_type), get_command_name(GEARMAN_COMMAND_CAN_DO))
-            observed_abilities.add(cmd_args['function_name'])
+            observed_abilities.add(cmd_args['task'])
 
         self.assertEqual(observed_abilities, set(expected_abilities))
 
@@ -146,8 +146,8 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         self.connection_manager.set_client_id(expected_client_id)
         self.connection_manager.unregister_function('__test_ability__')
-        for function_name in expected_abilities:
-            self.connection_manager.register_function(function_name, None)
+        for task in expected_abilities:
+            self.connection_manager.register_function(task, None)
 
         # We were disconnected, connect and wipe pending commands
         self.connection_manager.attempt_connect(self.connection)
@@ -348,7 +348,7 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
 
         current_job = self.connection_manager.worker_job_queues[self.command_handler].popleft()
         self.assertEqual(current_job.handle, fake_job['job_handle'])
-        self.assertEqual(current_job.func, fake_job['function_name'])
+        self.assertEqual(current_job.task, fake_job['task'])
         self.assertEqual(current_job.unique, fake_job['unique'])
         self.assertEqual(current_job.data, fake_job['data'])
 

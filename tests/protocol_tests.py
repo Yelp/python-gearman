@@ -99,7 +99,7 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         uniq_command_buffer = struct.pack('!4sII%ds' % payload_size, protocol.MAGIC_RES_STRING, protocol.GEARMAN_COMMAND_JOB_ASSIGN_UNIQ, payload_size, binary_payload)
         cmd_type, cmd_args, cmd_len = protocol.parse_binary_command(uniq_command_buffer)
         self.assertEquals(cmd_type, protocol.GEARMAN_COMMAND_JOB_ASSIGN_UNIQ)
-        self.assertEquals(cmd_args, dict(job_handle='test', function_name='function', unique='identifier', data=expected_data))
+        self.assertEquals(cmd_args, dict(job_handle='test', task='function', unique='identifier', data=expected_data))
         self.assertEquals(cmd_len, len(uniq_command_buffer))
 
     #######################
@@ -161,9 +161,9 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
 
     def test_packing_multiple_args(self):
         cmd_type = protocol.GEARMAN_COMMAND_SUBMIT_JOB
-        cmd_args = dict(function_name='function', unique='12345', data='abcd')
+        cmd_args = dict(task='function', unique='12345', data='abcd')
 
-        ordered_parameters = [cmd_args['function_name'], cmd_args['unique'], cmd_args['data']]
+        ordered_parameters = [cmd_args['task'], cmd_args['unique'], cmd_args['data']]
 
         expected_payload = protocol.NULL_CHAR.join(ordered_parameters)
         expected_payload_size = len(expected_payload)

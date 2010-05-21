@@ -7,7 +7,7 @@ sys.path.insert(0, '/nail/home/mtai/pg/python-gearman')
 from gearman.admin_client import GearmanAdminClient
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 
-from gearman.errors import ServerUnavailable, InvalidAdminClientState, ProtocolError
+from gearman.errors import InvalidAdminClientState, ProtocolError
 from gearman.protocol import GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
@@ -55,12 +55,12 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertEquals(len(server_response), 2)
 
         test_response, another_response = server_response
-        self.assertEquals(test_response['function_name'], 'test_function')
+        self.assertEquals(test_response['task'], 'test_function')
         self.assertEquals(test_response['queued'], 1)
         self.assertEquals(test_response['running'], 5)
         self.assertEquals(test_response['workers'],  17)
 
-        self.assertEquals(another_response['function_name'], 'another_function')
+        self.assertEquals(another_response['task'], 'another_function')
         self.assertEquals(another_response['queued'], 2)
         self.assertEquals(another_response['running'], 4)
         self.assertEquals(another_response['workers'],  23)
@@ -102,12 +102,12 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertEquals(test_response['file_descriptor'], '12')
         self.assertEquals(test_response['ip'], 'IP-A')
         self.assertEquals(test_response['client_id'], 'CLIENT-A')
-        self.assertEquals(test_response['function_names'],  ('function-A', 'function-B'))
+        self.assertEquals(test_response['tasks'],  ('function-A', 'function-B'))
 
         self.assertEquals(another_response['file_descriptor'], '13')
         self.assertEquals(another_response['ip'], 'IP-B')
         self.assertEquals(another_response['client_id'], 'CLIENT-B')
-        self.assertEquals(another_response['function_names'],  ('function-C', ))
+        self.assertEquals(another_response['tasks'],  ('function-C', ))
 
     def test_maxqueue(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_MAXQUEUE)

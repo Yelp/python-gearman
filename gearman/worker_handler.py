@@ -30,8 +30,8 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         self._handler_abilities = connection_abilities_list
 
         self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
-        for function_name in self._handler_abilities:
-            self.send_command(GEARMAN_COMMAND_CAN_DO, function_name=function_name)
+        for task in self._handler_abilities:
+            self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
@@ -107,14 +107,14 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         return True
 
-    def recv_job_assign_uniq(self, job_handle, function_name, unique, data):
-        assert function_name in self._handler_abilities, '%s not found in %r' % (function_name, self._handler_abilities)
+    def recv_job_assign_uniq(self, job_handle, task, unique, data):
+        assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
         if not self.connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        gearman_job = self.connection_manager.create_job(self, job_handle, function_name, unique, data)
+        gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, data)
 
         # Create a new job
         self.connection_manager.on_job_execute(gearman_job)
@@ -125,5 +125,5 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         return True
 
-    def recv_job_assign(self, job_handle, function_name, data):
-        return self.recv_job_assign(job_handle=job_handle, function_name=function_name, unique=None, data=data)
+    def recv_job_assign(self, job_handle, task, data):
+        return self.recv_job_assign(job_handle=job_handle, task=task, unique=None, data=data)

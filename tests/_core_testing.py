@@ -75,7 +75,7 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
-        return GearmanJob(self.connection, handle=str(random.random()), function_name='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        return GearmanJob(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()))
 
     def generate_job_dict(self):
         current_job = self.generate_job()
@@ -83,7 +83,7 @@ class _GearmanAbstractTest(unittest.TestCase):
 
     def generate_job_request(self, priority=NO_PRIORITY, background=FOREGROUND_JOB):
         job_handle = str(random.random())
-        current_job = GearmanJob(conn=self.connection, handle=job_handle, function_name='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        current_job = GearmanJob(conn=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
         current_request = GearmanJobRequest(current_job, initial_priority=priority, background=background)
 
          # Start this off as someone being queued
@@ -94,7 +94,7 @@ class _GearmanAbstractTest(unittest.TestCase):
     def assert_jobs_equal(self, job_actual, job_expected):
         # Validates that GearmanJobs are essentially equal
         self.assertEqual(job_actual.handle, job_expected.handle)
-        self.assertEqual(job_actual.func, job_expected.func)
+        self.assertEqual(job_actual.task, job_expected.task)
         self.assertEqual(job_actual.unique, job_expected.unique)
         self.assertEqual(job_actual.data, job_expected.data)
 

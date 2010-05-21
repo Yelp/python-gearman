@@ -38,8 +38,8 @@ class GearmanAdminClient(GearmanConnectionManager):
             self.current_connection = None
             self.current_handler = None
 
-    def send_maxqueue(self, function_name, max_size):
-        self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, function_name, max_size))
+    def send_maxqueue(self, task, max_size):
+        self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, task, max_size))
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MAXQUEUE)
 
     def send_shutdown(self, graceful=True):

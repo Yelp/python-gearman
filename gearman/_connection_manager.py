@@ -163,7 +163,7 @@ class GearmanConnectionManager(object):
             callback_ok = callback_fxn(any_activity)
 
         if not connection_ok:
-            raise ServerUnavailable('Found no valid connections in list: %r' % submitted_connections)
+            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
         return bool(connection_ok and callback_ok)
 

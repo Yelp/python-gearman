@@ -111,7 +111,7 @@ class ClientTest(_GearmanAbstractTest):
         job_dictionaries = [current_job.to_dict() for current_job in expected_job_list]
 
         # Test multiple job submission
-        job_requests = self.connection_manager.submit_multiple_jobs(job_dictionaries, background=FOREGROUND_JOB)
+        job_requests = self.connection_manager.submit_multiple_jobs(job_dictionaries)
         for current_request, expected_job in zip(job_requests, expected_job_list):
             current_job = current_request.get_job()
             self.assert_jobs_equal(current_job, expected_job)
@@ -129,7 +129,7 @@ class ClientTest(_GearmanAbstractTest):
             return rx_conns, wr_conns, ex_conns
 
         self.connection_manager.handle_connection_activity = mark_job_created
-        job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, background=BACKGROUND_JOB, priority=LOW_PRIORITY)
+        job_request = self.connection_manager.submit_job(expected_job.task, expected_job.data, unique=expected_job.unique, background=BACKGROUND_JOB, priority=LOW_PRIORITY)
 
         current_job = job_request.get_job()
         self.assert_jobs_equal(current_job, expected_job)
@@ -146,7 +146,7 @@ class ClientTest(_GearmanAbstractTest):
             return rx_conns, wr_conns, ex_conns
 
         self.connection_manager.handle_connection_activity = job_failed_submission
-        job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, priority=HIGH_PRIORITY, timeout=0.01)
+        job_request = self.connection_manager.submit_job(expected_job.task, expected_job.data, unique=expected_job.unique, priority=HIGH_PRIORITY, timeout=0.01)
 
         self.assertEqual(job_request.priority, HIGH_PRIORITY)
         self.assertEqual(job_request.background, FOREGROUND_JOB)
@@ -251,7 +251,7 @@ class ClientCommandHandlerInterfaceTest(_GearmanAbstractTest):
                 self.assertEqual(queued_request, current_request)
 
                 expected_cmd_type = submit_cmd_for_background_priority(background, priority)
-                self.assert_sent_command(expected_cmd_type, function_name=gearman_job.func, data=gearman_job.data, unique=gearman_job.unique)
+                self.assert_sent_command(expected_cmd_type, task=gearman_job.task, data=gearman_job.data, unique=gearman_job.unique)
 
     def test_get_status_of_job(self):
         current_request = self.generate_job_request()

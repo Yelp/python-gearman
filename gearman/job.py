@@ -7,11 +7,11 @@ GEARMAN_JOB_STATE_FAILED = 'FAILED'
 GEARMAN_JOB_STATE_COMPLETE = 'COMPLETE'
 
 class GearmanJob(object):
-    def __init__(self, conn, handle, function_name, unique, data):
+    def __init__(self, conn, handle, task, unique, data):
         self.conn = conn
         self.handle = handle
 
-        self.func = function_name
+        self.task = task
         self.unique = unique
         self.data = data
 
@@ -19,10 +19,10 @@ class GearmanJob(object):
         return (self.conn, self.handle)
 
     def to_dict(self):
-        return dict(function_name=self.func, job_handle=self.handle, unique=self.unique, data=self.data)
+        return dict(task=self.task, job_handle=self.handle, unique=self.unique, data=self.data)
 
     def __repr__(self):
-        return '<GearmanJob conn/handle=%r, func=%s, unique=%s, data=%s>' % (self.connection_handle(), self.func, self.unique, self.data)
+        return '<GearmanJob conn/handle=%r, task=%s, unique=%s, data=%s>' % (self.connection_handle(), self.task, self.unique, self.data)
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient and GearmanServer to represent job states"""

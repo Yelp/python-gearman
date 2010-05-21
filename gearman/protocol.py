@@ -55,32 +55,32 @@ GEARMAN_COMMAND_TEXT_COMMAND = 9999
 
 GEARMAN_PARAMS_FOR_COMMAND = {
     # Gearman commands 1-9
-    GEARMAN_COMMAND_CAN_DO: ['function_name'],
-    GEARMAN_COMMAND_CANT_DO: ['function_name'],
+    GEARMAN_COMMAND_CAN_DO: ['task'],
+    GEARMAN_COMMAND_CANT_DO: ['task'],
     GEARMAN_COMMAND_RESET_ABILITIES: [],
     GEARMAN_COMMAND_PRE_SLEEP: [],
     GEARMAN_COMMAND_NOOP: [],
-    GEARMAN_COMMAND_SUBMIT_JOB: ['function_name', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_JOB_CREATED: ['job_handle'],
     GEARMAN_COMMAND_GRAB_JOB: [],
 
     # Gearman commands 10-19
     GEARMAN_COMMAND_NO_JOB: [],
-    GEARMAN_COMMAND_JOB_ASSIGN: ['job_handle', 'function_name', 'data'],
+    GEARMAN_COMMAND_JOB_ASSIGN: ['job_handle', 'task', 'data'],
     GEARMAN_COMMAND_WORK_STATUS: ['job_handle', 'numerator', 'denominator'],
     GEARMAN_COMMAND_WORK_COMPLETE: ['job_handle', 'data'],
     GEARMAN_COMMAND_WORK_FAIL: ['job_handle'],
     GEARMAN_COMMAND_GET_STATUS: ['job_handle'],
     GEARMAN_COMMAND_ECHO_REQ: ['data'],
     GEARMAN_COMMAND_ECHO_RES: ['data'],
-    GEARMAN_COMMAND_SUBMIT_JOB_BG: ['function_name', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB_BG: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_ERROR: ['error_code', 'error_text'],
 
     # Gearman commands 20-29
     GEARMAN_COMMAND_STATUS_RES: ['job_handle', 'known', 'running', 'numerator', 'denominator'],
-    GEARMAN_COMMAND_SUBMIT_JOB_HIGH: ['function_name', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB_HIGH: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_SET_CLIENT_ID: ['client_id'],
-    GEARMAN_COMMAND_CAN_DO_TIMEOUT: ['function_name', 'timeout'],
+    GEARMAN_COMMAND_CAN_DO_TIMEOUT: ['task', 'timeout'],
     GEARMAN_COMMAND_ALL_YOURS: [],
     GEARMAN_COMMAND_WORK_EXCEPTION: ['job_handle', 'data'],
     GEARMAN_COMMAND_OPTION_REQ: ['option_name'],
@@ -90,10 +90,10 @@ GEARMAN_PARAMS_FOR_COMMAND = {
 
     # Gearman commands 30-39
     GEARMAN_COMMAND_GRAB_JOB_UNIQ: [],
-    GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: ['job_handle', 'function_name', 'unique', 'data'],
-    GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ['function_name', 'unique', 'data'],
-    GEARMAN_COMMAND_SUBMIT_JOB_LOW: ['function_name', 'unique', 'data'],
-    GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ['function_name', 'unique', 'data'],
+    GEARMAN_COMMAND_JOB_ASSIGN_UNIQ: ['job_handle', 'task', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ['task', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB_LOW: ['task', 'unique', 'data'],
+    GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ['task', 'unique', 'data'],
 
     # Fake gearman command
     GEARMAN_COMMAND_TEXT_COMMAND: ['raw_text']

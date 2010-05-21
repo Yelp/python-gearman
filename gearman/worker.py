@@ -4,7 +4,7 @@ import sys
 
 from gearman._connection_manager import GearmanConnectionManager
 from gearman.job import GearmanJob
-from gearman.errors import ConnectionError, ServerUnavailable
+from gearman.errors import ConnectionError
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
 gearman_logger = logging.getLogger('gearman.worker')
@@ -38,25 +38,25 @@ class GearmanWorker(GearmanConnectionManager):
         self.handler_initial_state['abilities'] = self.worker_abilities.keys()
         self.handler_initial_state['client_id'] = self.worker_client_id
 
-    def register_function(self, function_name, callback_function):
+    def register_function(self, task, callback_function):
         """Register a function with gearman"""
-        self.worker_abilities[function_name] = callback_function
+        self.worker_abilities[task] = callback_function
         self._update_initial_state()
 
         for command_handler in self.handler_to_connection_map.iterkeys():
             command_handler.set_abilities(self.handler_initial_state['abilities'])
 
-        return function_name
+        return task
 
-    def unregister_function(self, function_name):
+    def unregister_function(self, task):
         """Unregister a function with gearman"""
-        self.worker_abilities.pop(function_name, None)
+        self.worker_abilities.pop(task, None)
         self._update_initial_state()
 
         for command_handler in self.handler_to_connection_map.iterkeys():
             command_handler.set_abilities(self.handler_initial_state['abilities'])
 
-        return function_name
+        return task
 
     def set_client_id(self, client_id):
         self.worker_client_id = client_id
@@ -81,13 +81,13 @@ class GearmanWorker(GearmanConnectionManager):
 
         return output_connections
 
-    def create_job(self, command_handler, job_handle, function_name, unique, data):
+    def create_job(self, command_handler, job_handle, task, unique, data):
         current_connection = self.handler_to_connection_map[command_handler]
-        return self.gearman_job_class(current_connection, job_handle, function_name, unique, data)
+        return self.gearman_job_class(current_connection, job_handle, task, unique, data)
 
     def on_job_execute(self, current_job):
         try:
-            function_callback = self.worker_abilities[current_job.func]
+            function_callback = self.worker_abilities[current_job.task]
             job_result = function_callback(current_job)
         except Exception:
             return self.on_job_exception(current_job, sys.exc_info())

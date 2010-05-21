@@ -87,10 +87,10 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self._status_fields, split_tokens))
 
         # Label our fields
-        function_name, queued_count, running_count, worker_count = split_tokens
+        task, queued_count, running_count, worker_count = split_tokens
         
         status_dict = {}
-        status_dict['function_name'] = function_name
+        status_dict['task'] = task
         status_dict['queued'] = int(queued_count)
         status_dict['running'] = int(running_count)
         status_dict['workers'] = int(worker_count)
@@ -121,7 +121,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         worker_dict['file_descriptor'] = split_tokens[0]
         worker_dict['ip'] = split_tokens[1]
         worker_dict['client_id'] = split_tokens[2]
-        worker_dict['function_names'] = tuple(split_tokens[4:])
+        worker_dict['tasks'] = tuple(split_tokens[4:])
 
         # Label our fields
         self._workers_response.append(worker_dict)
