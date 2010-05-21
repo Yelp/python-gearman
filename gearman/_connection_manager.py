@@ -5,7 +5,7 @@ import time
 import gearman.util
 from gearman._connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
-from gearman.errors import ConnectionError
+from gearman.errors import ConnectionError, ServerUnavailable
 from gearman.protocol import get_command_name
 
 gearman_logger = logging.getLogger('gearman._connection_manager')
@@ -76,81 +76,96 @@ class GearmanConnectionManager(object):
 
         return current_connection
 
-    def poll_connections_once(self, connections, timeout=None):
+    def poll_connections_once(self, submitted_connections, timeout=None):
         """Does a single robust select, catching socket errors and doing all handle_* callbacks"""
-        all_conns = set(connections)
-        dead_conns = set()
-        select_conns = all_conns
+        select_connections = set(current_connection for current_connection in submitted_connections if current_connection.is_connected())
 
-        rd_list = []
-        wr_list = []
-        ex_list = []
+        rd_connections = set()
+        wr_connections = set()
+        ex_connections = set()
 
         if timeout is not None and timeout < 0.0:
-            return False
+            return rd_connections, wr_connections, ex_connections
 
         successful_select = False
-        while not successful_select and select_conns:
-            select_conns = all_conns - dead_conns
-            rx_conns = [c for c in select_conns if c.readable()]
-            tx_conns = [c for c in select_conns if c.writable()]
+        while not successful_select and select_connections:
+            select_connections -= ex_connections
+            check_rd_connections = [current_connection for current_connection in select_connections if current_connection.readable()]
+            check_wr_connections = [current_connection for current_connection in select_connections if current_connection.writable()]
 
             try:
-                rd_list, wr_list, ex_list = gearman.util.select(rx_conns, tx_conns, select_conns, timeout=timeout)
+                rd_list, wr_list, ex_list = gearman.util.select(check_rd_connections, check_wr_connections, select_connections, timeout=timeout)
+                rd_connections |= set(rd_list)
+                wr_connections |= set(wr_list)
+                ex_connections |= set(ex_list)
+
                 successful_select = True
             except (select_lib.error, ConnectionError):
                 # On any exception, we're going to assume we ran into a socket exception
                 # We'll need to fish for bad connections as suggested at
                 #
                 # http://www.amk.ca/python/howto/sockets/
-                for conn_to_test in select_conns:
+                for conn_to_test in select_connections:
                     try:
                         _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
                     except (select_lib.error, ConnectionError):
-                        dead_conns.add(conn_to_test)
-
-        for conn in rd_list:
-            try:
-                self.handle_read(conn)
-            except ConnectionError:
-                dead_conns.add(conn)
-
-        for conn in wr_list:
-            try:
-                self.handle_write(conn)
-            except ConnectionError:
-                dead_conns.add(conn)
-
-        for conn in ex_list:
-            self.handle_error(conn)
-
-        for conn in dead_conns:
-            self.handle_error(conn)
+                        rd_connections.discard(conn_to_test)
+                        wr_connections.discard(conn_to_test)
+                        ex_connections.add(conn_to_test)
 
         if _DEBUG_MODE_:
-	        gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', len(connections), len(rd_list), len(wr_list), len(ex_list) + len(dead_conns))
+            gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', \
+                len(select_connections), len(rd_connections), len(wr_connections), len(ex_connections))
 
-        return any([rd_list, wr_list, ex_list])
+        return rd_connections, wr_connections, ex_connections
 
-    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, callback_data=None, timeout=None):
+    def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
+        actual_rd_connections = set(rd_connections)
+        actual_wr_connections = set(wr_connections)
+        actual_ex_connections = set(ex_connections)
+
+        for current_connection in actual_rd_connections:
+            try:
+                self.handle_read(current_connection)
+            except ConnectionError:
+                actual_ex_connections.add(current_connection)
+
+        for current_connection in actual_wr_connections:
+            try:
+                self.handle_write(current_connection)
+            except ConnectionError:
+                actual_ex_connections.add(current_connection)
+
+        for current_connection in actual_ex_connections:
+            self.handle_error(current_connection)
+
+        return actual_rd_connections, actual_wr_connections, actual_ex_connections
+
+    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
         """Continue to poll our connections until we receive a stopping condition"""
-        if not submitted_connections:
-            return False
-
         stopwatch = gearman.util.Stopwatch(timeout)
 
         any_activity = False
-        continue_working = callback_fxn(any_activity, callback_data)
-        while continue_working:
+        callback_ok = callback_fxn(any_activity)
+        connection_ok = any(current_connection.is_connected() for current_connection in submitted_connections)
+
+        while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
             if time_remaining == 0.0:
                 break
 
             # Keep polling our connections until we find that our request states have all been updated
-            any_activity = self.poll_connections_once(submitted_connections, timeout=time_remaining)
-            continue_working = callback_fxn(any_activity, callback_data)
+            read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
+            self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
-        return continue_working
+            any_activity = any([read_connections, write_connections, dead_connections])
+            connection_ok = any(current_connection.is_connected() for current_connection in submitted_connections)
+            callback_ok = callback_fxn(any_activity)
+
+        if not connection_ok:
+            raise ServerUnavailable('Found no valid connections in list: %r' % submitted_connections)
+
+        return bool(connection_ok and callback_ok)
 
     def handle_read(self, current_connection):
         """By default, we'll handle reads by processing out command list and calling the appropriate command handlers"""

@@ -85,7 +85,7 @@ class GearmanClient(GearmanConnectionManager):
             return bool(current_request.state == GEARMAN_JOB_STATE_PENDING)
 
         # Poll until we know we've gotten acknowledgement that our job's been accepted
-        def continue_while_jobs_pending(any_activity, callback_data):
+        def continue_while_jobs_pending(any_activity):
             return any(bool(is_request_pending(current_request) and not current_request.connection_failed) for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_jobs_pending, timeout=timeout)
@@ -105,7 +105,7 @@ class GearmanClient(GearmanConnectionManager):
             return not current_request.is_complete()
 
         # Poll until we get responses for all our functions
-        def continue_while_jobs_incomplete(any_activity, callback_data):
+        def continue_while_jobs_incomplete(any_activity):
             return any(is_request_incomplete(current_request) and not current_request.connection_failed for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_jobs_incomplete, timeout=timeout)
@@ -143,7 +143,7 @@ class GearmanClient(GearmanConnectionManager):
             return bool(current_request.server_status.get('time_received') == current_request.server_status.get('last_time_received'))
 
         # Poll to make sure we send out our request for a status update
-        def continue_while_status_not_updated(any_activity, callback_data):
+        def continue_while_status_not_updated(any_activity):
             return any(bool(is_status_not_updated(current_request) and not current_request.connection_failed) for current_request in job_requests)
 
         self.poll_connections_until_stopped(job_connections, continue_while_status_not_updated, timeout=timeout)

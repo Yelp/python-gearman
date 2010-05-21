@@ -26,11 +26,11 @@ class ClientTest(_GearmanAbstractTest):
 
     def setUp(self):
         super(ClientTest, self).setUp()
-        self.original_poll_connections_once = self.connection_manager.poll_connections_once
+        self.original_handle_connection_activity = self.connection_manager.handle_connection_activity
 
     def tearDown(self):
         super(ClientTest, self).tearDown()
-        self.connection_manager.poll_connections_once = self.original_poll_connections_once
+        self.connection_manager.handle_connection_activity = self.original_handle_connection_activity
 
     def generate_job_request(self):
         current_request = super(ClientTest, self).generate_job_request()
@@ -100,11 +100,13 @@ class ClientTest(_GearmanAbstractTest):
     def test_multiple_fg_job_submission(self):
         submitted_job_count = 5
         expected_job_list = [self.generate_job() for _ in xrange(submitted_job_count)]
-        def mark_jobs_created(connections, timeout=None):
+        def mark_jobs_created(rx_conns, wr_conns, ex_conns):
             for current_job in expected_job_list:
                 self.command_handler.recv_command(GEARMAN_COMMAND_JOB_CREATED, job_handle=current_job.handle)
 
-        self.connection_manager.poll_connections_once = mark_jobs_created
+            return rx_conns, wr_conns, ex_conns
+ 
+        self.connection_manager.handle_connection_activity = mark_jobs_created
 
         job_dictionaries = [current_job.to_dict() for current_job in expected_job_list]
 
@@ -122,10 +124,11 @@ class ClientTest(_GearmanAbstractTest):
 
     def test_single_bg_job_submission(self):
         expected_job = self.generate_job()
-        def mark_job_created(connections, timeout=None):
+        def mark_job_created(rx_conns, wr_conns, ex_conns):
             self.command_handler.recv_command(GEARMAN_COMMAND_JOB_CREATED, job_handle=expected_job.handle)
+            return rx_conns, wr_conns, ex_conns
 
-        self.connection_manager.poll_connections_once = mark_job_created
+        self.connection_manager.handle_connection_activity = mark_job_created
         job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, background=BACKGROUND_JOB, priority=LOW_PRIORITY)
 
         current_job = job_request.get_job()
@@ -139,10 +142,10 @@ class ClientTest(_GearmanAbstractTest):
 
     def test_single_fg_job_submission_timeout(self):
         expected_job = self.generate_job()
-        def job_failed_submission(connections, timeout=None):
-            pass
+        def job_failed_submission(rx_conns, wr_conns, ex_conns):
+            return rx_conns, wr_conns, ex_conns
 
-        self.connection_manager.poll_connections_once = job_failed_submission
+        self.connection_manager.handle_connection_activity = job_failed_submission
         job_request = self.connection_manager.submit_job(expected_job.func, expected_job.data, unique=expected_job.unique, priority=HIGH_PRIORITY, timeout=0.01)
 
         self.assertEqual(job_request.priority, HIGH_PRIORITY)
@@ -162,14 +165,16 @@ class ClientTest(_GearmanAbstractTest):
         timeout_request.state = GEARMAN_JOB_STATE_QUEUED
 
         self.update_requests = True
-        def multiple_job_updates(connections, timeout=None):
+        def multiple_job_updates(rx_conns, wr_conns, ex_conns):
             # Only give a single status update and have the 3rd job handle timeout
             if self.update_requests:
                 self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=completed_request.get_handle(), data='12345')
                 self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=failed_request.get_handle())
                 self.update_requests = False
 
-        self.connection_manager.poll_connections_once = multiple_job_updates
+            return rx_conns, wr_conns, ex_conns
+
+        self.connection_manager.handle_connection_activity = multiple_job_updates
 
         finished_requests = self.connection_manager.wait_until_jobs_completed([completed_request, failed_request, timeout_request], timeout=0.01)
         del self.update_requests
@@ -195,10 +200,11 @@ class ClientTest(_GearmanAbstractTest):
         single_request = self.generate_job_request()
         single_request.state = GEARMAN_JOB_STATE_QUEUED
 
-        def retrieve_status(connections, timeout=None):
+        def retrieve_status(rx_conns, wr_conns, ex_conns):
             self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=single_request.get_handle(), known='1', running='0', numerator='0.0', denominator='1.0')
+            return rx_conns, wr_conns, ex_conns
 
-        self.connection_manager.poll_connections_once = retrieve_status
+        self.connection_manager.handle_connection_activity = retrieve_status
 
         job_request = self.connection_manager.get_job_status(single_request)
         request_status = job_request.server_status
@@ -215,10 +221,10 @@ class ClientTest(_GearmanAbstractTest):
         single_request = self.generate_job_request()
         single_request.state = GEARMAN_JOB_STATE_QUEUED
 
-        def retrieve_status_timeout(connections, timeout=None):
+        def retrieve_status_timeout(rx_conns, wr_conns, ex_conns):
             pass
 
-        self.connection_manager.poll_connections_once = retrieve_status_timeout
+        self.connection_manager.handle_connection_activity = retrieve_status_timeout
 
         job_request = self.connection_manager.get_job_status(single_request, timeout=0.01)
         self.assertTrue(job_request.timed_out)

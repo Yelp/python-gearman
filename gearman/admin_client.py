@@ -64,7 +64,7 @@ class GearmanAdminClient(GearmanConnectionManager):
 
     def wait_until_server_responds(self, expected_type):
         current_handler = self.current_handler
-        def continue_while_no_response(any_activity, callback_data):
+        def continue_while_no_response(any_activity):
             return (not current_handler.has_response())
 
         self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.blocking_timeout)
