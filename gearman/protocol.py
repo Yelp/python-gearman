@@ -166,7 +166,7 @@ def submit_cmd_for_background_priority(background, priority):
     return cmd_type
 
 def parse_binary_command(in_buffer, is_response=True):
-    """Parse data and return (function name, argument dict, command size)
+    """Parse data and return (command type, command arguments dict, command size)
     or (None, None, data) if there's not enough data for a complete command.
     """
     in_buffer_size = len(in_buffer)
@@ -218,6 +218,7 @@ def parse_binary_command(in_buffer, is_response=True):
 
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
+    """Packs the given command using the parameter ordering specified in GEARMAN_PARAMS_FOR_COMMAND"""
     expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
     if expected_cmd_params is None or cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
         raise ProtocolError('Received unknown binary command: %s' % get_command_name(cmd_type))
@@ -227,6 +228,7 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
     if expected_parameter_set != received_parameter_set:
         raise ProtocolError('Received arguments did not match expected arguments: %r != %r' % (expected_parameter_set, received_parameter_set))
 
+    # Select the right expected magic
     if is_response:
         magic = MAGIC_RES_STRING
     else:

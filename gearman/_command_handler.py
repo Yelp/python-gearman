@@ -4,12 +4,26 @@ from gearman.protocol import get_command_name
 gearman_logger = logging.getLogger('gearman._command_handler')
 
 class GearmanCommandHandler(object):
-    """A command handler manages the state which we should be in given that we received a certain stream of commands"""
+    """A command handler manages the state which we should be in given a certain stream of commands
+
+    GearmanCommandHandler does no I/O and only understands sending/receiving commands
+    """
     def __init__(self, connection_manager):
         self.connection_manager = connection_manager
 
     def initial_state(self, *largs, **kwargs):
         pass
+
+    def fetch_commands(self):
+        """Called by a Connection Mananger to notify us that we have pending commands"""
+        continue_working = True
+        while continue_working:
+            cmd_tuple = self.connection_manager.read_command(self)
+            if cmd_tuple is None:
+                break
+
+            cmd_type, cmd_args = cmd_tuple
+            continue_working = self.recv_command(cmd_type, **cmd_args)
 
     def send_command(self, cmd_type, **cmd_args):
         """Hand off I/O to the connection mananger"""

@@ -32,6 +32,7 @@ class GearmanClient(GearmanConnectionManager):
         self.request_to_rotating_connection_queue = collections.defaultdict(collections.deque)
 
     def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
+        """Submit a single job to any gearman server"""
         job_info = dict(task=task, data=data, unique=unique, priority=priority, background=background)
         completed_job_list = self.submit_multiple_jobs([job_info], wait_until_complete=wait_until_complete, timeout=timeout)
         return gearman.util.unlist(completed_job_list)
@@ -39,12 +40,12 @@ class GearmanClient(GearmanConnectionManager):
     def submit_multiple_jobs(self, jobs_to_submit, wait_until_complete=False, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
-        {'task': task, 'unique': unique, 'data': data, 'priority': priority}
+        {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}
         """
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
+        # Convert all job dicts to job request objects
         requests_to_submit = [self._create_request_from_dictionary(job_info) for job_info in jobs_to_submit]
-
 
         return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, timeout=timeout)
 
@@ -55,7 +56,6 @@ class GearmanClient(GearmanConnectionManager):
 
         chosen_connections = set()
         for current_request in job_requests:
-            # Raise ServerUnavailable error if we could not find a server to connect to
             chosen_conn = self.choose_request_connection(current_request)
             chosen_connections.add(chosen_conn)
 
@@ -76,6 +76,7 @@ class GearmanClient(GearmanConnectionManager):
         return out_requests
 
     def wait_until_jobs_accepted(self, job_requests, timeout=None):
+        """Go into a select loop until all our jobs have moved to STATE_PENDING"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_request_connections(job_requests)
 
@@ -95,7 +96,7 @@ class GearmanClient(GearmanConnectionManager):
         return job_requests
 
     def wait_until_jobs_completed(self, job_requests, timeout=None):
-        """Keep polling on our connection until our job requests are complete"""
+        """Go into a select loop until all our jobs have completed or failed"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_request_connections(job_requests)
 
@@ -118,10 +119,12 @@ class GearmanClient(GearmanConnectionManager):
         return job_requests
 
     def get_job_status(self, current_request, timeout=None):
+        """Fetch the job status of a single request"""
         request_list = self.get_job_statuses([current_request], timeout=timeout)
         return gearman.util.unlist(request_list)
 
     def get_job_statuses(self, job_requests, timeout=None):
+        """Fetch the job status of a multiple requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         for current_request in job_requests:
             current_request.server_status['last_time_received'] = current_request.server_status.get('time_received')
@@ -134,6 +137,7 @@ class GearmanClient(GearmanConnectionManager):
         return self.wait_until_job_statuses_received(job_requests, timeout=timeout)
 
     def wait_until_job_statuses_received(self, job_requests, timeout=None):
+        """Go into a select loop until we received statuses on all our requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         job_connections = self._get_request_connections(job_requests)
 
@@ -200,6 +204,10 @@ class GearmanClient(GearmanConnectionManager):
         return chosen_connection
 
     def handle_error(self, current_connection):
+        """When we enter a connection error state, we should mark all requests as connection_failed
+
+        This doesn't have much meaning for backgrounded requests
+        """
         current_handler = self.connection_to_handler_map[current_connection]
         pending_requests, inflight_requests = current_handler.get_requests()
 

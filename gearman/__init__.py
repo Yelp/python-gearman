@@ -13,4 +13,4 @@ from gearman.admin_client import GearmanAdminClient
 from gearman.client import GearmanClient
 from gearman.worker import GearmanWorker
 
-from gearman.job import GearmanJob, GearmanJobRequest
+from gearman._connection_manager import DataEncoder

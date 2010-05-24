@@ -5,7 +5,7 @@ import unittest
 import gearman.util
 from gearman._command_handler import GearmanCommandHandler
 from gearman._connection import GearmanConnection
-from gearman._connection_manager import GearmanConnectionManager
+from gearman._connection_manager import GearmanConnectionManager, NoopEncoder
 
 from gearman.constants import BACKGROUND_JOB, FOREGROUND_JOB, NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY
 from gearman.errors import ConnectionError

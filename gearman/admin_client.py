@@ -10,11 +10,11 @@ from gearman.protocol import GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMA
 gearman_logger = logging.getLogger('gearman.admin_client')
 
 class GearmanAdminClient(GearmanConnectionManager):
-    """GearmanWorkers manage connections and CommandHandlers
+    """Connects to a single server and sends TEXT based administrative commands.
+    This client acts as a BLOCKING client and each call will poll until it receives a satisfactory server response
 
-    This is the public facing gearman interface that most users should be instantiating
-    All I/O will be handled by the GearmanWorker
-    All state machine operations are handled on the CommandHandler
+    http://gearman.org/index.php?id=protocol
+    See section 'Administrative Protocol'
     """
     command_handler_class = GearmanAdminClientCommandHandler
 

@@ -8,6 +8,7 @@ import time
 from gearman.constants import DEFAULT_GEARMAN_PORT
 
 class Stopwatch(object):
+    """Timer class that keeps track of time remaining"""
     def __init__(self, time_remaining):
         if time_remaining is not None:
             self.stop_time = time.time() + time_remaining

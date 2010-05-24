@@ -36,6 +36,9 @@ class GearmanWorker(GearmanConnectionManager):
         self.handler_initial_state['abilities'] = self.worker_abilities.keys()
         self.handler_initial_state['client_id'] = self.worker_client_id
 
+    ########################################################
+    ##### Public methods for general GearmanWorker use #####
+    ########################################################
     def register_task(self, task, callback_function):
         """Register a function with gearman"""
         self.worker_abilities[task] = callback_function
@@ -57,6 +60,7 @@ class GearmanWorker(GearmanConnectionManager):
         return task
 
     def set_client_id(self, client_id):
+        """Set a pretty client ID"""
         self.worker_client_id = client_id
         self._update_initial_state()
 
@@ -65,6 +69,30 @@ class GearmanWorker(GearmanConnectionManager):
 
         return client_id
 
+    def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
+        """Loop indefinitely working tasks from all connections."""
+        continue_working = True
+        live_connections = []
+
+        def continue_while_connections_alive(any_activity):
+            return self.after_poll(any_activity)
+
+        # Shuffle our connections after the poll timeout
+        while continue_working:
+            worker_connections = self.get_worker_connections()
+            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
+
+        # If we were kicked out of the worker loop, we should shutdown all our connections
+        for current_connection in live_connections:
+            current_connection.close()
+
+    def shutdown(self):
+        self.command_handler_holding_job_lock = None
+        super(GearmanWorker, self).shutdown(current_connection)
+
+    ###############################################################
+    ## Methods to override when dealing with connection polling ##
+    ##############################################################
     def get_worker_connections(self):
         """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
@@ -79,50 +107,21 @@ class GearmanWorker(GearmanConnectionManager):
 
         return output_connections
 
-    def create_job(self, command_handler, job_handle, task, unique, data):
-        current_connection = self.handler_to_connection_map[command_handler]
-        return self.job_class(current_connection, job_handle, task, unique, data)
-
-    def on_job_execute(self, current_job):
-        try:
-            function_callback = self.worker_abilities[current_job.task]
-            job_result = function_callback(current_job)
-        except Exception:
-            return self.on_job_exception(current_job, sys.exc_info())
-
-        return self.on_job_complete(current_job, job_result)
-
-    def on_job_exception(self, current_job, exc_info):
-        self.send_job_failure(current_job)
-        return False
-
-    def on_job_complete(self, current_job, job_result):
-        self.send_job_complete(current_job, job_result)
+    def after_poll(self, any_activity):
+        """Polling callback to notify any outside listeners whats going on with the GearmanWorker"""
         return True
 
-    def set_job_lock(self, command_handler, lock):
-        if command_handler not in self.handler_to_connection_map:
-            return False
+    def handle_error(self, current_connection):
+        """If we discover that a connection has a problem, we better release the job lock"""
+        current_handler = self.connection_to_handler_map.get(current_connection)
+        if current_handler:
+            self.set_job_lock(current_handler, lock=False)
 
-        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
-        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
+        super(GearmanWorker, self).handle_error(current_connection)
 
-        # If we've already been locked, we should say the lock failed
-        # If we're attempting to unlock something when we don't have a lock, we're in a bad state
-        if failed_lock or failed_unlock:
-            return False
-
-        if lock:
-            self.command_handler_holding_job_lock = command_handler
-        elif not lock:
-            self.command_handler_holding_job_lock = None
-
-        return True
-
-    def check_job_lock(self, command_handler):
-        return bool(self.command_handler_holding_job_lock == command_handler)
-
-    # Send Gearman commands related to jobs
+    #############################################################
+    ## Public methods so Gearman jobs can send Gearman updates ##
+    #############################################################
     def _get_handler_for_job(self, current_job):
         return self.connection_to_handler_map[current_job.conn]
 
@@ -156,33 +155,51 @@ class GearmanWorker(GearmanConnectionManager):
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_warning(current_job, data=data)
 
-    def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
-        """Loop indefinitely working tasks from all connections."""
-        continue_working = True
-        live_connections = []
+    #####################################################
+    ##### Callback methods for GearmanWorkerHandler #####
+    #####################################################
+    def create_job(self, command_handler, job_handle, task, unique, data):
+        """"""
+        current_connection = self.handler_to_connection_map[command_handler]
+        return self.job_class(current_connection, job_handle, task, unique, data)
 
-        def continue_while_connections_alive(any_activity):
-            return self.after_poll(any_activity)
+    def on_job_execute(self, current_job):
+        try:
+            function_callback = self.worker_abilities[current_job.task]
+            job_result = function_callback(current_job)
+        except Exception:
+            return self.on_job_exception(current_job, sys.exc_info())
 
-        # Shuffle our connections after the poll timeout
-        while continue_working:
-            worker_connections = self.get_worker_connections()
-            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
+        return self.on_job_complete(current_job, job_result)
 
-        # If we were kicked out of the worker loop, we should shutdown all our connections
-        for current_connection in live_connections:
-            current_connection.close()
+    def on_job_exception(self, current_job, exc_info):
+        self.send_job_failure(current_job)
+        return False
 
-    def after_poll(self, any_activity):
+    def on_job_complete(self, current_job, job_result):
+        self.send_job_complete(current_job, job_result)
         return True
 
-    def shutdown(self):
-        self.command_handler_holding_job_lock = None
-        super(GearmanWorker, self).shutdown(current_connection)
+    def set_job_lock(self, command_handler, lock):
+        """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
+        if command_handler not in self.handler_to_connection_map:
+            return False
 
-    def handle_error(self, current_connection):
-        current_handler = self.connection_to_handler_map.get(current_connection)
-        if current_handler:
-            self.set_job_lock(current_handler, lock=False)
+        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
+        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
 
-        super(GearmanWorker, self).handle_error(current_connection)
+        # If we've already been locked, we should say the lock failed
+        # If we're attempting to unlock something when we don't have a lock, we're in a bad state
+        if failed_lock or failed_unlock:
+            return False
+
+        if lock:
+            self.command_handler_holding_job_lock = command_handler
+        else:
+            self.command_handler_holding_job_lock = None
+
+        return True
+
+    def check_job_lock(self, command_handler):
+        """Check to see if we hold the job lock"""
+        return bool(self.command_handler_holding_job_lock == command_handler)

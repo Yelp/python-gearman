@@ -7,10 +7,7 @@ class ConnectionError(GearmanError):
 class ServerUnavailable(GearmanError):
     pass
 
-class CommandError(GearmanError):
-    pass
-
-class InvalidResponse(GearmanError):
+class ProtocolError(GearmanError):
     pass
 
 class InvalidClientState(GearmanError):
@@ -20,7 +17,4 @@ class InvalidWorkerState(GearmanError):
     pass
 
 class InvalidAdminClientState(GearmanError):
-    pass
-
-class ProtocolError(GearmanError):
     pass

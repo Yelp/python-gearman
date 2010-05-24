@@ -1,4 +1,5 @@
 import collections
+from gearman.constants import NO_PRIORITY, FOREGROUND_JOB
 from gearman.errors import ConnectionError
 
 GEARMAN_JOB_STATE_PENDING = 'PENDING'
@@ -7,6 +8,7 @@ GEARMAN_JOB_STATE_FAILED = 'FAILED'
 GEARMAN_JOB_STATE_COMPLETE = 'COMPLETE'
 
 class GearmanJob(object):
+    """Represents the basics of a job... used in GearmanClient / GearmanWorker to represent job states"""
     def __init__(self, conn, handle, task, unique, data):
         self.conn = conn
         self.handle = handle
@@ -22,11 +24,11 @@ class GearmanJob(object):
         return dict(task=self.task, job_handle=self.handle, unique=self.unique, data=self.data)
 
     def __repr__(self):
-        return '<GearmanJob conn/handle=%r, task=%s, unique=%s, data=%s>' % (self.connection_handle(), self.task, self.unique, self.data)
+        return '<GearmanJob conn/handle=%r, task=%s, unique=%s, data=%r>' % (self.connection_handle(), self.task, self.unique, self.data)
 
 class GearmanJobRequest(object):
-    """Represents a job request... used in GearmanClient and GearmanServer to represent job states"""
-    def __init__(self, gearman_job, initial_priority=None, background=False, max_retries=0):
+    """Represents a job request... used in GearmanClient to represent job states"""
+    def __init__(self, gearman_job, initial_priority=NO_PRIORITY, background=FOREGROUND_JOB, max_retries=0):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
@@ -79,9 +81,6 @@ class GearmanJobRequest(object):
     def get_job(self):
         return self.gearman_job
 
-    def unique_key(self):
-        return self.get_unique_key(self.gearman_job.__dict__)
-
     def connection_handle(self):
         return self.gearman_job.connection_handle()
 
@@ -91,8 +90,3 @@ class GearmanJobRequest(object):
 
         actually_complete = background_complete or foreground_complete
         return actually_complete
-
-    @staticmethod
-    def get_unique_key(request_dict):
-        """Takes a dictionary with fields 'func' and 'unique' and returns a unique key"""
-        return (request_dict['func'], request_dict['unique'])

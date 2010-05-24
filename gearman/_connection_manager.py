@@ -11,11 +11,33 @@ from gearman.protocol import get_command_name
 
 gearman_logger = logging.getLogger('gearman._connection_manager')
 
+class DataEncoder(object):
+    @classmethod
+    def dumps(cls, encodable_object):
+        raise NotImplementedError
+
+    @classmethod
+    def loads(cls, decodable_string):
+        raise NotImplementedError
+
+class NoopEncoder(DataEncoder):
+    """Provide common object dumps for all communications over gearman"""
+    @classmethod
+    def dumps(cls, encodable_object):
+        return encodable_object
+
+    @classmethod
+    def loads(cls, decodable_string):
+        return decodable_string
+
 class GearmanConnectionManager(object):
     """Abstract base class for any Gearman-type client that needs to connect/listen to multiple connections
 
     Mananges and polls a group of gearman connections
-    Forwards commands from the connection to its designated command handler
+    Forwards all communication between a connection and a command handler
+    The state of a connection is represented within the command handler
+
+    Automatically encodes all 'data' fields as specified in protocol.py
     """
     command_handler_class = None
     connection_class = GearmanConnection
@@ -23,8 +45,9 @@ class GearmanConnectionManager(object):
     job_class = GearmanJob
     job_request_class = GearmanJobRequest
 
+    data_encoder = NoopEncoder
+
     def __init__(self, host_list=None, blocking_timeout=0.0):
-        """By default we're going to setup non-blocking connections"""
         assert self.command_handler_class is not None, 'GearmanClientBase did not receive a command handler class'
 
         self.connection_list = []
@@ -49,7 +72,7 @@ class GearmanConnectionManager(object):
     ###################################
 
     def add_connection(self, hostport_tuple):
-        """Add a connection"""
+        """Add a new connection to this connection manager"""
         gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
 
         client_connection = self.connection_class(host=gearman_host, port=gearman_port, blocking_timeout=self.blocking_timeout)
@@ -58,7 +81,7 @@ class GearmanConnectionManager(object):
         return client_connection
 
     def attempt_connect(self, current_connection):
-        """Attempt to connect... if not previous connected, create a new CommandHandler to manage state"""
+        """Attempt to connect... if not previously connected, create a new CommandHandler to manage this connection's state"""
         assert current_connection in self.connection_list, "Unknown connection - %r" % current_connection
         was_connected = current_connection.is_connected()
 
@@ -81,7 +104,7 @@ class GearmanConnectionManager(object):
         return current_connection
 
     def poll_connections_once(self, submitted_connections, timeout=None):
-        """Does a single robust select, catching socket errors and doing all handle_* callbacks"""
+        """Does a single robust select, catching socket errors"""
         select_connections = set(current_connection for current_connection in submitted_connections if current_connection.is_connected())
 
         rd_connections = set()
@@ -124,6 +147,7 @@ class GearmanConnectionManager(object):
         return rd_connections, wr_connections, ex_connections
 
     def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
+        """Process all connection activity... executes all handle_* callbacks"""
         actual_rd_connections = set(rd_connections)
         actual_wr_connections = set(wr_connections)
         actual_ex_connections = set(ex_connections)
@@ -158,7 +182,7 @@ class GearmanConnectionManager(object):
             if time_remaining == 0.0:
                 break
 
-            # Keep polling our connections until we find that our request states have all been updated
+            # Do a single robust select and handle all connection activity
             read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
             self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
@@ -166,13 +190,14 @@ class GearmanConnectionManager(object):
             connection_ok = any(current_connection.is_connected() for current_connection in submitted_connections)
             callback_ok = callback_fxn(any_activity)
 
+        # We should raise here if we have no alive connections (don't go into a select polling loop with no connections
         if not connection_ok:
             raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
         return bool(connection_ok and callback_ok)
 
     def handle_read(self, current_connection):
-        """By default, we'll handle reads by processing out command list and calling the appropriate command handlers"""
+        """Handle all our pending socket data"""
         current_handler = self.connection_to_handler_map[current_connection]
 
         # Transfer data from socket -> buffer
@@ -181,14 +206,8 @@ class GearmanConnectionManager(object):
         # Transfer command from buffer -> command queue
         current_connection.read_commands_from_buffer()
 
-        continue_working = True
-        while continue_working:
-            cmd_tuple = current_connection.read_command()
-            if cmd_tuple is None:
-                break
-
-            cmd_type, cmd_args = cmd_tuple
-            continue_working = current_handler.recv_command(cmd_type, **cmd_args)
+        # Notify the handler that we have commands to fetch
+        current_handler.fetch_commands()
 
     def handle_write(self, current_connection):
         # Transfer command from command queue -> buffer
@@ -207,10 +226,37 @@ class GearmanConnectionManager(object):
     # Callbacks for Command Handlers #
     ##################################
 
-    def send_command(self, command_handler, cmd_type, cmd_args):
-        """Forward this command handler's request to send a command
-        Isolates CommandHandlers from having to know about IO"""
+    def read_command(self, command_handler):
+        """CommandHandlers call this function to fetch pending commands
+
+        NOTE: CommandHandlers have NO knowledge as to which connection they're representing
+              ConnectionManagers must fetch and forward commands to CommandHandlers
+        """
+        # Fetch a command on our CommandHandler's behalf
         gearman_connection = self.handler_to_connection_map[command_handler]
+        cmd_tuple = gearman_connection.read_command()
+        if cmd_tuple is None:
+            return cmd_tuple
+
+        # Automatically serialize our data field and forward this on to our CommandHandler
+        cmd_type, cmd_args = cmd_tuple
+        if 'data' in cmd_args:
+            cmd_args['data'] = self.data_encoder.loads(cmd_args['data'])
+
+        return cmd_type, cmd_args
+
+    def send_command(self, command_handler, cmd_type, cmd_args):
+        """CommandHandlers call this function to send pending commands
+
+        NOTE: CommandHandlers have NO knowledge as to which connection they're representing
+              ConnectionManagers must forward outbounb commands to Connections
+        """
+        # Assume the CommandHandler doesn't try to do anything funny with our data fields
+        # Automatically serialize any data objects for transfer over the wire
+        gearman_connection = self.handler_to_connection_map[command_handler]
+        if 'data' in cmd_args:
+            cmd_args['data'] = self.data_encoder.dumps(cmd_args['data'])
+
         gearman_connection.send_command(cmd_type, cmd_args)
 
     def on_gearman_error(self, error_code, error_text):

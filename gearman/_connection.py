@@ -13,13 +13,14 @@ gearman_logger = logging.getLogger('gearman._connection')
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
+    Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
 
     Wraps a socket and provides the following functionality:
-       Full read/write methods for Gearman BINARY commands and responses
-       Full read/write methods for Gearman SERVER commands and responses (using GEARMAN_COMMAND_TEXT_COMMAND)
+        Full read/write methods for Gearman BINARY commands and responses
+        Full read/write methods for Gearman SERVER commands and responses (using GEARMAN_COMMAND_TEXT_COMMAND)
 
-    Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
-    Buffers incoming/outgoing DATA and COMMANDS
+        Manages raw data buffers for socket-level operations
+        Manages command buffers for gearman-level operations
 
     All I/O and buffering should be done in this class
     """
@@ -84,7 +85,7 @@ class GearmanConnection(object):
         self._is_server_side = False
 
     def bind_client_socket(self):
-        """Creates a socket and subsequently binds/configures our socket options"""
+        """Creates a client side socket and subsequently binds/configures our socket options"""
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             client_socket.connect((self.gearman_host, self.gearman_port))
@@ -94,6 +95,7 @@ class GearmanConnection(object):
         self.bind_socket(client_socket)
 
     def bind_socket(self, current_socket):
+        """Setup common options for all Gearman-related sockets"""
         if self.gearman_socket is not None:
             raise ConnectionError("Attempted to bind a socket on a connection that's already connected")
 
@@ -110,7 +112,7 @@ class GearmanConnection(object):
         return self._is_connected
 
     def read_command(self):
-        """Reads data from the current command queue"""
+        """Reads a single command from the command queue"""
         if not self._incoming_commands:
             return None
 
@@ -155,7 +157,7 @@ class GearmanConnection(object):
         return len(self._incoming_buffer)
 
     def _unpack_command(self, given_buffer):
-        """Conditionally parse a binary command or a text based server command"""
+        """Conditionally unpack a binary command or a text based server command"""
         assert self._is_client_side is not None, "Ambiguous connection state"
 
         if not given_buffer:
@@ -174,14 +176,12 @@ class GearmanConnection(object):
 
         return cmd_type, cmd_args, cmd_len
 
-    def send_command(self, cmd_type, cmd_args=None):
-        """Buffered method, queues and sends a single Gearman command"""
-        cmd_args = cmd_args or {}
-        cmd_tuple = (cmd_type, cmd_args)
-        self._outgoing_commands.append(cmd_tuple)
+    def send_command(self, cmd_type, cmd_args):
+        """Adds a single gearman command to the outgoing command queue"""
+        self._outgoing_commands.append((cmd_type, cmd_args))
 
     def send_commands_to_buffer(self):
-        """Converts commands to data"""
+        """Sends and packs commands -> buffer"""
         if not self._outgoing_commands:
             return
 
@@ -194,7 +194,7 @@ class GearmanConnection(object):
         self._outgoing_buffer = ''.join(packed_data)
 
     def send_data_to_socket(self):
-        """Try to send out some bytes we have stored in our output buffer
+        """Send data from buffer -> socket
 
         Returns remaining size of the output buffer
         """
@@ -221,12 +221,12 @@ class GearmanConnection(object):
         return len(self._outgoing_buffer)
 
     def _pack_command(self, cmd_type, cmd_args):
-        """Converts a requested gearman command to its raw binary packet"""
+        """Converts a command to its raw binary format"""
         if cmd_type not in GEARMAN_PARAMS_FOR_COMMAND:
             raise ProtocolError('Unknown command: %r' % get_command_name(cmd_type))
 
         if _DEBUG_MODE_:
-	        gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
+            gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
 
         if cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
             return pack_text_command(cmd_type, cmd_args)
@@ -238,8 +238,8 @@ class GearmanConnection(object):
     def close(self):
         """Shutdown our existing socket and reset all of our connection data"""
         try:
-	        if self.gearman_socket:
-	            self.gearman_socket.close()
+            if self.gearman_socket:
+                self.gearman_socket.close()
         except socket.error:
             pass
 

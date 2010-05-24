@@ -8,8 +8,14 @@ from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_AB
 gearman_logger = logging.getLogger('gearman.worker_handler')
 
 class GearmanWorkerCommandHandler(GearmanCommandHandler):
-    """GearmanWorker state machine on a per connection basis"""
-    """Maintains the state of this connection on behalf of a GearmanClient"""
+    """GearmanWorker state machine on a per connection basis
+
+    A worker can be in the following distinct states:
+        SLEEP         -> Doing nothing, can be awoken
+        AWAKE         -> Transitional state (for NOOP)
+        AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
+        EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
+    """
     def __init__(self, *largs, **kwargs):
         super(GearmanWorkerCommandHandler, self).__init__(*largs, **kwargs)
     
@@ -89,9 +95,12 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_noop(self):
-        # If we were woken up and we already have a job lock, do nothing
-        # If we don't have a lock, try to grab a lock and grab a job
-        # Otherwise our worker's already locked for work so don't try to pull another one down
+        """Transition from being SLEEP --> AWAITING_JOB / SLEEP
+
+          AWAITING_JOB -> AWAITING_JOB :: Noop transition, we're already awaiting a job
+        SLEEP -> AWAKE -> AWAITING_JOB :: Transition if we can acquire the worker job lock
+        SLEEP -> AWAKE -> SLEEP        :: Transition if we can NOT acquire a worker job lock
+        """
         if self._check_job_lock():
             pass           
         elif self._acquire_job_lock():
@@ -102,12 +111,20 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         return True
 
     def recv_no_job(self):
+        """Transition from being AWAITING_JOB --> SLEEP
+
+        AWAITING_JOB -> SLEEP :: Always transition to sleep if we have nothing to do
+        """
         self._release_job_lock()
         self._sleep()
 
         return True
 
     def recv_job_assign_uniq(self, job_handle, task, unique, data):
+        """Transition from being AWAITING_JOB --> EXECUTE_JOB --> SLEEP
+
+        AWAITING_JOB -> EXECUTE_JOB -> SLEEP :: Always transition once we're given a job
+        """
         assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
@@ -119,11 +136,12 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         # Create a new job
         self.connection_manager.on_job_execute(gearman_job)
 
-        # We'll be greedy on requesting jobs... this'll make sure we're aggressively popping things off the queue
+        # Release the job lock once we're doing and go back to sleep
         self._release_job_lock()
         self._sleep()
 
         return True
 
     def recv_job_assign(self, job_handle, task, data):
+        """JOB_ASSIGN and JOB_ASSIGN_UNIQ are essentially the same"""
         return self.recv_job_assign(job_handle=job_handle, task=task, unique=None, data=data)
