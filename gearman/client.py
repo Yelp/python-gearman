@@ -33,11 +33,11 @@ class GearmanClient(GearmanConnectionManager):
 
     def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
         """Submit a single job to any gearman server"""
-        job_info = dict(task=task, data=data, unique=unique, priority=priority, background=background)
-        completed_job_list = self.submit_multiple_jobs([job_info], wait_until_complete=wait_until_complete, timeout=timeout)
+        job_info = dict(task=task, data=data, unique=unique, priority=priority)
+        completed_job_list = self.submit_multiple_jobs([job_info], background=background, wait_until_complete=wait_until_complete, timeout=timeout)
         return gearman.util.unlist(completed_job_list)
 
-    def submit_multiple_jobs(self, jobs_to_submit, wait_until_complete=False, timeout=None):
+    def submit_multiple_jobs(self, jobs_to_submit, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
         {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}
@@ -45,7 +45,7 @@ class GearmanClient(GearmanConnectionManager):
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
         # Convert all job dicts to job request objects
-        requests_to_submit = [self._create_request_from_dictionary(job_info) for job_info in jobs_to_submit]
+        requests_to_submit = [self._create_request_from_dictionary(job_info, background=background) for job_info in jobs_to_submit]
 
         return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, timeout=timeout)
 
@@ -56,7 +56,7 @@ class GearmanClient(GearmanConnectionManager):
 
         chosen_connections = set()
         for current_request in job_requests:
-            chosen_conn = self.choose_request_connection(current_request)
+            chosen_conn = self._choose_request_connection(current_request)
             chosen_connections.add(chosen_conn)
 
             current_request.bind_connection(chosen_conn)
@@ -162,8 +162,7 @@ class GearmanClient(GearmanConnectionManager):
 
         return submitted_job_connections
 
-    # Begin helpers for submit_multple_jobs / submit_multiple_requests
-    def _create_request_from_dictionary(self, job_info):
+    def _create_request_from_dictionary(self, job_info, background=FOREGROUND_JOB):
         """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')
@@ -173,10 +172,10 @@ class GearmanClient(GearmanConnectionManager):
             job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex')
 
         current_job = GearmanJob(conn=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
-        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=job_info.get('background', FOREGROUND_JOB))
+        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', NO_PRIORITY), background=background)
         return current_request
 
-    def choose_request_connection(self, current_request):
+    def _choose_request_connection(self, current_request):
         """Return a live connection for the given hash"""
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
         rotating_connections = self.request_to_rotating_connection_queue.get(current_request, None)

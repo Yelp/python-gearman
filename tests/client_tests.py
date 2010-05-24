@@ -61,11 +61,11 @@ class ClientTest(_GearmanAbstractTest):
         self.failIf(current_request in self.connection_manager.request_to_rotating_connection_queue)
 
         # Make sure that when we start up, we get our good connection
-        chosen_conn = self.connection_manager.choose_request_connection(current_request)
+        chosen_conn = self.connection_manager._choose_request_connection(current_request)
         self.assertEqual(chosen_conn, good_connection)
 
         # No state changed so we should still go there
-        chosen_conn = self.connection_manager.choose_request_connection(current_request)
+        chosen_conn = self.connection_manager._choose_request_connection(current_request)
         self.assertEqual(chosen_conn, good_connection)
 
         # Pretend like our good connection died so we'll need to choose somethign else
@@ -76,7 +76,7 @@ class ClientTest(_GearmanAbstractTest):
         failed_then_retried_connection._is_connected = True
 
         # Make sure we rotate good_connection and failed_connection out
-        chosen_conn = self.connection_manager.choose_request_connection(current_request)
+        chosen_conn = self.connection_manager._choose_request_connection(current_request)
         self.assertEqual(chosen_conn, failed_then_retried_connection)
 
     def test_no_connections_for_rotation_for_requests(self):
@@ -86,7 +86,7 @@ class ClientTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         # No connections == death
-        self.assertRaises(ServerUnavailable, self.connection_manager.choose_request_connection, current_request)
+        self.assertRaises(ServerUnavailable, self.connection_manager._choose_request_connection, current_request)
 
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
@@ -95,7 +95,7 @@ class ClientTest(_GearmanAbstractTest):
         self.connection_manager.connection_list.append(failed_connection)
 
         # All failed connections == death
-        self.assertRaises(ServerUnavailable, self.connection_manager.choose_request_connection, current_request)
+        self.assertRaises(ServerUnavailable, self.connection_manager._choose_request_connection, current_request)
 
     def test_multiple_fg_job_submission(self):
         submitted_job_count = 5

@@ -79,7 +79,7 @@ class GearmanWorker(GearmanConnectionManager):
 
         # Shuffle our connections after the poll timeout
         while continue_working:
-            worker_connections = self.get_worker_connections()
+            worker_connections = self._get_worker_connections()
             continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
@@ -93,7 +93,7 @@ class GearmanWorker(GearmanConnectionManager):
     ###############################################################
     ## Methods to override when dealing with connection polling ##
     ##############################################################
-    def get_worker_connections(self):
+    def _get_worker_connections(self):
         """Return a shuffled list of connections that are alive,
         and try to reconnect to dead connections if necessary."""
         self.randomized_connections = list(self.connection_list)

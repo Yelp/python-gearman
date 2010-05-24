@@ -114,7 +114,7 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         self.connection_manager.connection_list = [good_connection, failed_then_retried_connection, failed_connection]
 
         # The only alive connections should be the ones that ultimately be connection._is_connected
-        alive_connections = self.connection_manager.get_worker_connections()
+        alive_connections = self.connection_manager._get_worker_connections()
         self.assertTrue(good_connection in alive_connections)
         self.assertTrue(failed_then_retried_connection in alive_connections)
         self.assertFalse(failed_connection in alive_connections)
