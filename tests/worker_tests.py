@@ -110,7 +110,7 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         # Register all our connections
         self.connection_manager.connection_list = [good_connection, failed_then_retried_connection, failed_connection]
 
-        # The only alive connections should be the ones that ultimately be connection._is_connected
+        # The only alive connections should be the ones that ultimately be connection.connected
         alive_connections = self.connection_manager._get_worker_connections()
         self.assertTrue(good_connection in alive_connections)
         self.assertTrue(failed_then_retried_connection in alive_connections)
@@ -126,7 +126,7 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         # We were started with a dead connection, make sure we bail again
         dead_connection = MockGearmanConnection()
         dead_connection._should_fail_on_bind = True
-        dead_connection._is_connected = False
+        dead_connection.connected = False
         self.connection_manager.connection_list = [dead_connection]
 
         self.assertRaises(ServerUnavailable, self.connection_manager.work)
