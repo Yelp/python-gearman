@@ -3,19 +3,19 @@ import random
 import unittest
 
 import gearman.util
-from gearman._command_handler import GearmanCommandHandler
-from gearman._connection import GearmanConnection
-from gearman._connection_manager import GearmanConnectionManager, NoopEncoder
+from gearman.command_handler import GearmanCommandHandler
+from gearman.connection import GearmanConnection
+from gearman.connection_manager import GearmanConnectionManager, NoopEncoder
 
-from gearman.constants import NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY
+from gearman.constants import NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY, DEFAULT_GEARMAN_PORT
 from gearman.errors import ConnectionError
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_QUEUED
 from gearman.protocol import get_command_name
 
 class MockGearmanConnection(GearmanConnection):
-    def __init__(self, *largs, **kwargs):
-        kwargs.setdefault('host', '__testing_host__')
-        super(MockGearmanConnection, self).__init__(*largs, **kwargs)
+    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT):
+        host = host or '__testing_host__'
+        super(MockGearmanConnection, self).__init__(host=host, port=port)
 
         self._should_fail_on_connect = False
         self._should_fail_on_bind = False
@@ -38,7 +38,7 @@ class MockGearmanConnection(GearmanConnection):
 
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s> (%s)' %
-            (self.gearman_host, self.gearman_port, self._is_connected, id(self)))
+            (self.gearman_host, self.gearman_port, self.connected, id(self)))
 
 class MockGearmanConnectionManager(GearmanConnectionManager):
     """Handy mock client base to test Worker/Client/Abstract ClientBases"""

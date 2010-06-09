@@ -6,7 +6,7 @@ import random
 import struct
 import types
 
-from gearman._connection import GearmanConnection
+from gearman.connection import GearmanConnection
 from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
 from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman import protocol

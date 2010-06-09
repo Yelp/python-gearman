@@ -40,15 +40,15 @@ class ClientTest(_GearmanAbstractTest):
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
         failed_connection._should_fail_on_bind = True
-        failed_connection._is_connected = False
+        failed_connection.connected = False
 
         failed_then_retried_connection = MockGearmanConnection()
         failed_then_retried_connection._should_fail_on_connect = True
-        failed_then_retried_connection._is_connected = True
+        failed_then_retried_connection.connected = True
 
         good_connection = MockGearmanConnection()
         good_connection._should_fail_on_bind = False
-        good_connection._is_connected = True
+        failed_then_retried_connection.connected = True
 
         self.connection_manager.connection_list = [failed_connection, failed_then_retried_connection, good_connection]
 
@@ -67,10 +67,10 @@ class ClientTest(_GearmanAbstractTest):
 
         # Pretend like our good connection died so we'll need to choose somethign else
         good_connection._should_fail_on_bind = True
-        good_connection._is_connected = False
+        good_connection.connected = False
 
         failed_then_retried_connection._should_fail_on_connect = False
-        failed_then_retried_connection._is_connected = True
+        failed_then_retried_connection.connected = True
 
         # Make sure we rotate good_connection and failed_connection out
         chosen_conn = self.connection_manager._choose_request_connection(current_request)
@@ -88,7 +88,7 @@ class ClientTest(_GearmanAbstractTest):
         # Spin up a bunch of imaginary gearman connections
         failed_connection = MockGearmanConnection()
         failed_connection._should_fail_on_bind = True
-        failed_connection._is_connected = False
+        failed_connection.connected = False
         self.connection_manager.connection_list.append(failed_connection)
 
         # All failed connections == death
@@ -117,7 +117,7 @@ class ClientTest(_GearmanAbstractTest):
             self.assertEqual(current_request.background, False)
             self.assertEqual(current_request.state, GEARMAN_JOB_STATE_QUEUED)
 
-            self.assertFalse(current_request.is_complete())
+            self.assertFalse(current_request.complete)
 
     def test_single_bg_job_submission(self):
         expected_job = self.generate_job()
@@ -135,7 +135,7 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEqual(job_request.background, True)
         self.assertEqual(job_request.state, GEARMAN_JOB_STATE_QUEUED)
 
-        self.assertTrue(job_request.is_complete())
+        self.assertTrue(job_request.complete)
 
     def test_single_fg_job_submission_timeout(self):
         expected_job = self.generate_job()
@@ -149,7 +149,7 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEqual(job_request.background, False)
         self.assertEqual(job_request.state, GEARMAN_JOB_STATE_PENDING)
 
-        self.assertFalse(job_request.is_complete())
+        self.assertFalse(job_request.complete)
         self.assertTrue(job_request.timed_out)
 
     def test_wait_for_multiple_jobs_to_complete_or_timeout(self):

@@ -97,15 +97,15 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         # Spin up a bunch of imaginary gearman connections
         good_connection = MockGearmanConnection()
         good_connection._should_fail_on_bind = False
-        good_connection._is_connected = True
+        good_connection.connected = True
 
         failed_then_retried_connection = MockGearmanConnection()
         failed_then_retried_connection._should_fail_on_bind = True
-        failed_then_retried_connection._is_connected = True
+        failed_then_retried_connection.connected = True
 
         failed_connection = MockGearmanConnection()
         failed_connection._should_fail_on_bind = True
-        failed_connection._is_connected = False
+        failed_connection.connected = False
 
         # Register all our connections
         self.connection_manager.connection_list = [good_connection, failed_then_retried_connection, failed_connection]
@@ -139,7 +139,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
         expected_abilities = ['function_one', 'function_two', 'function_three']
         expected_client_id = 'my_client_id'
 
-        self.connection._is_connected = False
+        self.connection.connected = False
 
         self.connection_manager.set_client_id(expected_client_id)
         self.connection_manager.unregister_task('__test_ability__')

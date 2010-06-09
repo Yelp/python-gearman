@@ -13,7 +13,6 @@ gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
-    Represents a BLOCKING or NON-BLOCKING socket depending on the blocking_timeout as passed in __init__
 
     Wraps a socket and provides the following functionality:
         Full read/write methods for Gearman BINARY commands and responses

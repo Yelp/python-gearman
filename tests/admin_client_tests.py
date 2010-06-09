@@ -12,8 +12,7 @@ from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManag
 
 class MockGearmanAdminClient(MockGearmanConnectionManager, GearmanAdminClient):
     def __init__(self, *largs, **kwargs):
-        kwargs.setdefault('_is_testing_', True)
-        super(MockGearmanAdminClient, self).__init__(*largs, **kwargs)
+        super(MockGearmanAdminClient, self).__init__(host_list=[], is_testing=True)
 
 class CommandHandlerStateMachineTest(_GearmanAbstractTest):
     """Test the public interface a GearmanWorker may need to call in order to update state on a GearmanWorkerCommandHandler"""

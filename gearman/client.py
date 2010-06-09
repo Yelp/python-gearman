@@ -101,7 +101,7 @@ class GearmanClient(GearmanConnectionManager):
         job_connections = self._get_request_connections(job_requests)
 
         def is_request_incomplete(current_request):
-            return not current_request.is_complete()
+            return not current_request.complete
 
         # Poll until we get responses for all our functions
         def continue_while_jobs_incomplete(any_activity):
