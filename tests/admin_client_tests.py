@@ -1,9 +1,6 @@
 import unittest
 import collections
 
-import sys
-sys.path.insert(0, '/nail/home/mtai/pg/python-gearman')
-
 from gearman.admin_client import GearmanAdminClient
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 

@@ -6,9 +6,9 @@ import time
 
 import gearman.util
 
-from gearman._connection_manager import GearmanConnectionManager
+from gearman.connection_manager import GearmanConnectionManager
 from gearman.client_handler import GearmanClientCommandHandler
-from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
+from gearman.constants import NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
 from gearman.errors import ServerUnavailable, ConnectionError, InvalidClientState
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING
 
@@ -22,22 +22,20 @@ class GearmanClient(GearmanConnectionManager):
     """
     command_handler_class = GearmanClientCommandHandler
 
-    def __init__(self, *args, **kwargs):
-        # By default we should have non-blocking sockets for a GearmanClient
-        kwargs.setdefault('blocking_timeout', 0.0)
-        super(GearmanClient, self).__init__(*args, **kwargs)
+    def __init__(self, host_list=None):
+        super(GearmanClient, self).__init__(host_list=host_list)
 
         # The authoritative copy of all requests that this client knows about
         # Ignores the fact if a request has been bound to a connection or not
         self.request_to_rotating_connection_queue = collections.defaultdict(collections.deque)
 
-    def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
+    def submit_job(self, task, data, unique=None, priority=NO_PRIORITY, background=False, wait_until_complete=False, timeout=None):
         """Submit a single job to any gearman server"""
         job_info = dict(task=task, data=data, unique=unique, priority=priority)
         completed_job_list = self.submit_multiple_jobs([job_info], background=background, wait_until_complete=wait_until_complete, timeout=timeout)
         return gearman.util.unlist(completed_job_list)
 
-    def submit_multiple_jobs(self, jobs_to_submit, background=FOREGROUND_JOB, wait_until_complete=False, timeout=None):
+    def submit_multiple_jobs(self, jobs_to_submit, background=False, wait_until_complete=False, timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
         {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}
@@ -59,7 +57,9 @@ class GearmanClient(GearmanConnectionManager):
             chosen_conn = self._choose_request_connection(current_request)
             chosen_connections.add(chosen_conn)
 
-            current_request.bind_connection(chosen_conn)
+            current_request.connection = chosen_conn
+            current_request.connection_failed = False
+            current_request.timed_out = False
 
             current_command_handler = self.connection_to_handler_map[chosen_conn]
             current_command_handler.send_job_request(current_request)
@@ -129,7 +129,7 @@ class GearmanClient(GearmanConnectionManager):
         for current_request in job_requests:
             current_request.server_status['last_time_received'] = current_request.server_status.get('time_received')
 
-            current_connection = current_request.get_connection()
+            current_connection = current_request.connection
             current_command_handler = self.connection_to_handler_map[current_connection]
 
             current_command_handler.send_get_status_of_job(current_request)
@@ -157,12 +157,12 @@ class GearmanClient(GearmanConnectionManager):
         return job_requests
 
     def _get_request_connections(self, job_requests):
-        submitted_job_connections = set(current_request.get_connection() for current_request in job_requests)
+        submitted_job_connections = set(current_request.connection for current_request in job_requests)
         submitted_job_connections.discard(None)
 
         return submitted_job_connections
 
-    def _create_request_from_dictionary(self, job_info, background=FOREGROUND_JOB):
+    def _create_request_from_dictionary(self, job_info, background=False):
         """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')

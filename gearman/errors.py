@@ -10,6 +10,9 @@ class ServerUnavailable(GearmanError):
 class ProtocolError(GearmanError):
     pass
 
+class UnknownCommandError(GearmanError):
+    pass
+
 class InvalidClientState(GearmanError):
     pass
 

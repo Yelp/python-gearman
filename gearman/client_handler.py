@@ -2,17 +2,17 @@ import collections
 import time
 import logging
 
-from gearman._command_handler import GearmanCommandHandler
+from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import InvalidClientState
 from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
 
-gearman_logger = logging.getLogger('gearman.client')
+gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class GearmanClientCommandHandler(GearmanCommandHandler):
     """Maintains the state of this connection on behalf of a GearmanClient"""
-    def __init__(self, *largs, **kwargs):
-        super(GearmanClientCommandHandler, self).__init__(*largs, **kwargs)
+    def __init__(self, connection_manager=None):
+        super(GearmanClientCommandHandler, self).__init__(connection_manager=connection_manager)
     
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()
@@ -23,7 +23,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
     ##################################################################
     def send_job_request(self, current_request):
         """Register a newly created job request"""
-        gearman_job = current_request.get_job()
+        gearman_job = current_request.job
 
         # Handle the I/O for requesting a job - determine which COMMAND we need to send
         cmd_type = submit_cmd_for_background_priority(current_request.background, current_request.priority)
@@ -34,7 +34,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def send_get_status_of_job(self, current_request):
         """Forward the status of a job"""
-        self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.get_handle())
+        self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.handle)
 
     def get_requests(self):
         """Fetch all requests that this CommandHandler is aware of"""
@@ -47,7 +47,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
     ##################################################################
     def _assert_request_state(self, current_request, expected_state):
         if current_request.state != expected_state:
-            raise InvalidClientState('Expected handle (%s) to be in state %r, got %s' % (current_request.get_handle(), expected_state, current_request.state))
+            raise InvalidClientState('Expected handle (%s) to be in state %r, got %s' % (current_request.handle, expected_state, current_request.state))
 
     def recv_job_created(self, job_handle):
         if not self.requests_awaiting_handles:
@@ -58,7 +58,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         self._assert_request_state(current_request, GEARMAN_JOB_STATE_PENDING)
 
         # Update the state of this request
-        current_request.bind_handle(job_handle)
+        current_request.handle = job_handle
         current_request.state = GEARMAN_JOB_STATE_QUEUED
         self.handle_to_request_map[job_handle] = current_request
 

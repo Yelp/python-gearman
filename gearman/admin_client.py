@@ -2,7 +2,7 @@ import logging
 
 from gearman import util
 
-from gearman._connection_manager import GearmanConnectionManager
+from gearman.connection_manager import GearmanConnectionManager
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 from gearman.errors import InvalidAdminClientState
 from gearman.protocol import GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
@@ -18,22 +18,18 @@ class GearmanAdminClient(GearmanConnectionManager):
     """
     command_handler_class = GearmanAdminClientCommandHandler
 
-    def __init__(self, *largs, **kwargs):
-        host_list = kwargs.get('host_list', [])
-        is_testing = kwargs.pop('_is_testing_', False)
+    def __init__(self, host_list=None, is_testing=False):
         if not is_testing:
             assert len(host_list) == 1, 'Only expected a single host'
 
-        kwargs.setdefault('blocking_timeout', 5.0)
-        super(GearmanAdminClient, self).__init__(*largs, **kwargs)
-
-        self.blocking_timeout = kwargs.get('blocking_timeout')
+        super(GearmanAdminClient, self).__init__(host_list=host_list)
+        self.admin_client_timeout = 5.0
 
         if not is_testing:
-	        self.current_connection = util.unlist(self.connection_list)
-	        self.current_handler = util.unlist(self.handler_to_connection_map.keys())
+            self.current_connection = util.unlist(self.connection_list)
+            self.current_handler = util.unlist(self.handler_to_connection_map.keys())
 
-	        self.current_connection.connect()
+            self.current_connection.connect()
         else:
             self.current_connection = None
             self.current_handler = None
@@ -67,7 +63,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         def continue_while_no_response(any_activity):
             return (not current_handler.has_response())
 
-        self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.blocking_timeout)
+        self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.admin_client_timeout)
         cmd_type, cmd_resp = self.current_handler.pop_response()
 
         if cmd_type != expected_type:

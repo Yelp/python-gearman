@@ -7,7 +7,7 @@ from gearman._command_handler import GearmanCommandHandler
 from gearman._connection import GearmanConnection
 from gearman._connection_manager import GearmanConnectionManager, NoopEncoder
 
-from gearman.constants import BACKGROUND_JOB, FOREGROUND_JOB, NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY
+from gearman.constants import NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY
 from gearman.errors import ConnectionError
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_QUEUED
 from gearman.protocol import get_command_name
@@ -84,7 +84,7 @@ class _GearmanAbstractTest(unittest.TestCase):
         current_job = self.generate_job()
         return current_job.to_dict()
 
-    def generate_job_request(self, priority=NO_PRIORITY, background=FOREGROUND_JOB):
+    def generate_job_request(self, priority=NO_PRIORITY, background=False):
         job_handle = str(random.random())
         current_job = self.job_class(conn=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)

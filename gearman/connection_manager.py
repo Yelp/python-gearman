@@ -3,13 +3,13 @@ import select as select_lib
 import time
 
 import gearman.util
-from gearman._connection import GearmanConnection
+from gearman.connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
 from gearman.protocol import get_command_name
 
-gearman_logger = logging.getLogger('gearman._connection_manager')
+gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class DataEncoder(object):
     @classmethod
@@ -47,11 +47,10 @@ class GearmanConnectionManager(object):
 
     data_encoder = NoopEncoder
 
-    def __init__(self, host_list=None, blocking_timeout=0.0):
+    def __init__(self, host_list=None):
         assert self.command_handler_class is not None, 'GearmanClientBase did not receive a command handler class'
 
         self.connection_list = []
-        self.blocking_timeout = blocking_timeout
 
         host_list = host_list or []
         for hostport_tuple in host_list:
@@ -75,7 +74,7 @@ class GearmanConnectionManager(object):
         """Add a new connection to this connection manager"""
         gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
 
-        client_connection = self.connection_class(host=gearman_host, port=gearman_port, blocking_timeout=self.blocking_timeout)
+        client_connection = self.connection_class(host=gearman_host, port=gearman_port)
         self.connection_list.append(client_connection)
 
         return client_connection
@@ -83,7 +82,7 @@ class GearmanConnectionManager(object):
     def attempt_connect(self, current_connection):
         """Attempt to connect... if not previously connected, create a new CommandHandler to manage this connection's state"""
         assert current_connection in self.connection_list, "Unknown connection - %r" % current_connection
-        was_connected = current_connection.is_connected()
+        was_connected = current_connection.connected
 
         try:
             current_connection.connect()
@@ -105,7 +104,7 @@ class GearmanConnectionManager(object):
 
     def poll_connections_once(self, submitted_connections, timeout=None):
         """Does a single robust select, catching socket errors"""
-        select_connections = set(current_connection for current_connection in submitted_connections if current_connection.is_connected())
+        select_connections = set(current_connection for current_connection in submitted_connections if current_connection.connected)
 
         rd_connections = set()
         wr_connections = set()
@@ -140,6 +139,8 @@ class GearmanConnectionManager(object):
                         wr_connections.discard(conn_to_test)
                         ex_connections.add(conn_to_test)
 
+                        gearman_logger.error('select error: %r' % conn_to_test)
+
         if _DEBUG_MODE_:
             gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', \
                 len(select_connections), len(rd_connections), len(wr_connections), len(ex_connections))
@@ -148,26 +149,27 @@ class GearmanConnectionManager(object):
 
     def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
         """Process all connection activity... executes all handle_* callbacks"""
-        actual_rd_connections = set(rd_connections)
-        actual_wr_connections = set(wr_connections)
-        actual_ex_connections = set(ex_connections)
-
-        for current_connection in actual_rd_connections:
+        dead_connections = []
+        for current_connection in rd_connections:
             try:
                 self.handle_read(current_connection)
             except ConnectionError:
-                actual_ex_connections.add(current_connection)
+                dead_connections.append(current_connection)
 
-        for current_connection in actual_wr_connections:
+        for current_connection in wr_connections:
             try:
                 self.handle_write(current_connection)
             except ConnectionError:
-                actual_ex_connections.add(current_connection)
+                dead_connections.append(current_connection)
 
-        for current_connection in actual_ex_connections:
+        for current_connection in ex_connections:
             self.handle_error(current_connection)
 
-        return actual_rd_connections, actual_wr_connections, actual_ex_connections
+        for current_connection in dead_connections:
+            self.handle_error(current_connection)
+
+        failed_connections = ex_connections + dead_connections
+        return rd_connections, wr_connections, failed_connections
 
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
         """Continue to poll our connections until we receive a stopping condition"""
@@ -175,7 +177,7 @@ class GearmanConnectionManager(object):
 
         any_activity = False
         callback_ok = callback_fxn(any_activity)
-        connection_ok = any(current_connection.is_connected() for current_connection in submitted_connections)
+        connection_ok = any(current_connection.connected for current_connection in submitted_connections)
 
         while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
@@ -187,7 +189,7 @@ class GearmanConnectionManager(object):
             self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
             any_activity = any([read_connections, write_connections, dead_connections])
-            connection_ok = any(current_connection.is_connected() for current_connection in submitted_connections)
+            connection_ok = any(current_connection.connected for current_connection in submitted_connections)
             callback_ok = callback_fxn(any_activity)
 
         # We should raise here if we have no alive connections (don't go into a select polling loop with no connections

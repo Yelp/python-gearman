@@ -1,21 +1,23 @@
 import logging
+from gearman.errors import UnknownCommandError
 from gearman.protocol import get_command_name
 
-gearman_logger = logging.getLogger('gearman._command_handler')
+gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class GearmanCommandHandler(object):
     """A command handler manages the state which we should be in given a certain stream of commands
 
     GearmanCommandHandler does no I/O and only understands sending/receiving commands
     """
-    def __init__(self, connection_manager):
+    def __init__(self, connection_manager=None):
         self.connection_manager = connection_manager
 
     def initial_state(self, *largs, **kwargs):
+        """Called by a Connection Manager after we've been instantiated and we're ready to send off commands"""
         pass
 
     def fetch_commands(self):
-        """Called by a Connection Mananger to notify us that we have pending commands"""
+        """Called by a Connection Manager to notify us that we have pending commands"""
         continue_working = True
         while continue_working:
             cmd_tuple = self.connection_manager.read_command(self)
@@ -45,7 +47,7 @@ class GearmanCommandHandler(object):
         if not cmd_callback:
             missing_callback_msg = 'Could not handle command: %r - %r' % (get_command_name(cmd_type), cmd_args)
             gearman_logger.error(missing_callback_msg)
-            raise ValueError(missing_callback_msg)
+            raise UnknownCommandError(missing_callback_msg)
 
         # Expand the arguments as passed by the protocol
         # This must match the parameter names as defined in the command handler
@@ -54,4 +56,4 @@ class GearmanCommandHandler(object):
 
     def recv_error(self, error_code, error_text):
         """When we receive an error from the server, notify the connection manager that we have a gearman error"""
-        return self.connection_manager.on_gearman_error(error_code, error_test)
+        return self.connection_manager.on_gearman_error(error_code, error_text)

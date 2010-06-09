@@ -1,5 +1,5 @@
 import struct
-from gearman.constants import FOREGROUND_JOB, BACKGROUND_JOB, NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
+from gearman.constants import NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
 from gearman.errors import ProtocolError
 
 # Protocol specific constants
@@ -154,12 +154,12 @@ def get_command_name(cmd_type):
 
 def submit_cmd_for_background_priority(background, priority):
     cmd_type_lookup = {
-        (BACKGROUND_JOB, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_BG,
-        (BACKGROUND_JOB, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
-        (BACKGROUND_JOB, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
-        (FOREGROUND_JOB, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB,
-        (FOREGROUND_JOB, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
-        (FOREGROUND_JOB, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH
+        (True, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_BG,
+        (True, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
+        (True, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
+        (False, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB,
+        (False, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
+        (False, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH
     }
     lookup_tuple = (background, priority)
     cmd_type = cmd_type_lookup[lookup_tuple]
@@ -183,8 +183,8 @@ def parse_binary_command(in_buffer, is_response=True):
     # By default, we'll assume we're dealing with a gearman command
     magic, cmd_type, cmd_len = struct.unpack('!4sII', in_buffer[:COMMAND_HEADER_SIZE])
 
-    received_bad_response = bool(is_response) and bool(magic != MAGIC_RES_STRING)
-    received_bad_request = bool(not is_response) and bool(magic != MAGIC_REQ_STRING)
+    received_bad_response = is_response and bool(magic != MAGIC_RES_STRING)
+    received_bad_request = not is_response and bool(magic != MAGIC_REQ_STRING)
     if received_bad_response or received_bad_request:
         raise ProtocolError('Malformed Magic')
 

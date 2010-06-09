@@ -1,11 +1,11 @@
 import logging
 
-from gearman._command_handler import GearmanCommandHandler
+from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import InvalidWorkerState
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
 
-gearman_logger = logging.getLogger('gearman.worker_handler')
+gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class GearmanWorkerCommandHandler(GearmanCommandHandler):
     """GearmanWorker state machine on a per connection basis
@@ -16,8 +16,8 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
         EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
     """
-    def __init__(self, *largs, **kwargs):
-        super(GearmanWorkerCommandHandler, self).__init__(*largs, **kwargs)
+    def __init__(self, connection_manager=None):
+        super(GearmanWorkerCommandHandler, self).__init__(connection_manager=connection_manager)
     
         self._handler_abilities = []
         self._client_id = None

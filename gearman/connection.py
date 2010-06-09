@@ -4,12 +4,12 @@ import logging
 import socket
 import struct
 
-from gearman.errors import ConnectionError, ProtocolError
+from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
 from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
-gearman_logger = logging.getLogger('gearman._connection')
+gearman_logger = logging.getLogger('gearman.%s' % __name__)
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
@@ -24,22 +24,20 @@ class GearmanConnection(object):
 
     All I/O and buffering should be done in this class
     """
-    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT, blocking_timeout=0.0):
+    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = host
         self.gearman_port = port
 
-        assert host is not None, "No host specified"
-
-        # If blocking_timeout == 0.0, this connection becomes a NON-blocking socket
-        self.blocking_timeout = blocking_timeout
+        if host is None:
+            raise ServerUnavailable("No host specified")
 
         self._reset_connection()
 
     def _reset_connection(self):
         """Reset the state of this connection"""
         self.gearman_socket = None
-        self._is_connected = False
+        self.connected = False
 
         self._is_client_side = None
         self._is_server_side = None
@@ -65,22 +63,22 @@ class GearmanConnection(object):
 
     def writable(self):
         """Returns True if we have data to write"""
-        return self._is_connected and bool(self._outgoing_commands or self._outgoing_buffer)
+        return self.connected and bool(self._outgoing_commands or self._outgoing_buffer)
 
     def readable(self):
         """Returns True if we might have data to read"""
-        return self._is_connected
+        return self.connected
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        if self._is_connected:
+        if self.connected:
             return
 
         self._reset_connection()
 
         self.bind_client_socket()
 
-        self._is_connected = True
+        self.connected = True
         self._is_client_side = True
         self._is_server_side = False
 
@@ -99,17 +97,11 @@ class GearmanConnection(object):
         if self.gearman_socket is not None:
             raise ConnectionError("Attempted to bind a socket on a connection that's already connected")
 
-        if self.blocking_timeout != 0.0:
-            current_socket.setblocking(1)
-        else:
-            current_socket.setblocking(0)
-
-        current_socket.settimeout(self.blocking_timeout)
+        current_socket.setblocking(0)
+        current_socket.settimeout(0.0)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
         self.gearman_socket = current_socket
 
-    def is_connected(self):
-        return self._is_connected
 
     def read_command(self):
         """Reads a single command from the command queue"""
@@ -137,7 +129,7 @@ class GearmanConnection(object):
 
     def read_data_from_socket(self, bytes_to_read=4096):
         """Reads data from socket --> buffer"""
-        assert self._is_connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
+        assert self.connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
 
         recv_buffer = ''
         try:
@@ -145,8 +137,10 @@ class GearmanConnection(object):
         except socket.error, exc:
             if exc.args[0] == errno.ECONNRESET:
                 raise ConnectionError('connection reset died')
+            elif exc.args[0] == errno.EINTR:
+                raise ConnectionError('function interrupted')
 
-            # We should never get here... Gearman API users should never get socket.error's
+            # Gearman API users shouldn't get socket.error's
             # If you run into this, please forward along the error to the __author__
             raise
 
@@ -198,7 +192,7 @@ class GearmanConnection(object):
 
         Returns remaining size of the output buffer
         """
-        assert self._is_connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
+        assert self.connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
 
         if not self._outgoing_buffer:
             return 0
@@ -247,4 +241,4 @@ class GearmanConnection(object):
 
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s>' %
-            (self.gearman_host, self.gearman_port, self._is_connected))
+            (self.gearman_host, self.gearman_port, self.connected))

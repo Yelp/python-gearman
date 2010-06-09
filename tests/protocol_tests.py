@@ -6,11 +6,7 @@ import random
 import struct
 import types
 
-import sys
-sys.path.insert(0, '/nail/home/mtai/pg/python-gearman')
-
 from gearman._connection import GearmanConnection
-from gearman.constants import BACKGROUND_JOB
 from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
 from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman import protocol

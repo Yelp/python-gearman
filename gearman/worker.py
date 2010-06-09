@@ -2,8 +2,7 @@ import logging
 import random
 import sys
 
-from gearman._connection_manager import GearmanConnectionManager
-from gearman.errors import ConnectionError
+from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
 gearman_logger = logging.getLogger('gearman.worker')
@@ -19,10 +18,8 @@ class GearmanWorker(GearmanConnectionManager):
     """
     command_handler_class = GearmanWorkerCommandHandler
 
-    def __init__(self, *args, **kwargs):
-        # By default we should have non-blocking sockets for a GearmanWorker
-        kwargs.setdefault('blocking_timeout', 0.0)
-        super(GearmanWorker, self).__init__(*args, **kwargs)
+    def __init__(self, host_list=None):
+        super(GearmanWorker, self).__init__(host_list=host_list)
 
         self.randomized_connections = None
 
@@ -88,7 +85,7 @@ class GearmanWorker(GearmanConnectionManager):
 
     def shutdown(self):
         self.command_handler_holding_job_lock = None
-        super(GearmanWorker, self).shutdown(current_connection)
+        super(GearmanWorker, self).shutdown()
 
     ###############################################################
     ## Methods to override when dealing with connection polling ##
@@ -102,7 +99,7 @@ class GearmanWorker(GearmanConnectionManager):
         output_connections = []
         for current_connection in self.randomized_connections:
             self.attempt_connect(current_connection)
-            if current_connection.is_connected():
+            if current_connection.connected:
                 output_connections.append(current_connection)
 
         return output_connections
