@@ -9,7 +9,7 @@ from gearman.errors import ConnectionError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
 from gearman.protocol import get_command_name
 
-gearman_logger = logging.getLogger('gearman.%s' % __name__)
+gearman_logger = logging.getLogger(__name__)
 
 class DataEncoder(object):
     @classmethod

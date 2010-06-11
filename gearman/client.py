@@ -12,7 +12,7 @@ from gearman.constants import NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
 from gearman.errors import ServerUnavailable, ConnectionError, InvalidClientState
 from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_PENDING
 
-gearman_logger = logging.getLogger('gearman.client')
+gearman_logger = logging.getLogger(__name__)
 
 RANDOM_UNIQUE_BYTES = 8
 

@@ -5,7 +5,7 @@ import sys
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
-gearman_logger = logging.getLogger('gearman.worker')
+gearman_logger = logging.getLogger(__name__)
 
 POLL_TIMEOUT_IN_SECONDS = 60.0
 

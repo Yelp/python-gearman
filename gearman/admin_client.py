@@ -7,7 +7,7 @@ from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 from gearman.errors import InvalidAdminClientState
 from gearman.protocol import GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
-gearman_logger = logging.getLogger('gearman.admin_client')
+gearman_logger = logging.getLogger(__name__)
 
 class GearmanAdminClient(GearmanConnectionManager):
     """Connects to a single server and sends TEXT based administrative commands.

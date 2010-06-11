@@ -7,7 +7,7 @@ from gearman.errors import InvalidClientState
 from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
 
-gearman_logger = logging.getLogger('gearman.%s' % __name__)
+gearman_logger = logging.getLogger(__name__)
 
 class GearmanClientCommandHandler(GearmanCommandHandler):
     """Maintains the state of this connection on behalf of a GearmanClient"""

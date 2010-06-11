@@ -9,7 +9,7 @@ from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
-gearman_logger = logging.getLogger('gearman.%s' % __name__)
+gearman_logger = logging.getLogger(__name__)
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
