@@ -13,21 +13,28 @@ gearman_logger = logging.getLogger(__name__)
 
 class DataEncoder(object):
     @classmethod
-    def dumps(cls, encodable_object):
+    def encode(cls, encodable_object):
         raise NotImplementedError
 
     @classmethod
-    def loads(cls, decodable_string):
+    def decode(cls, decodable_string):
         raise NotImplementedError
 
 class NoopEncoder(DataEncoder):
     """Provide common object dumps for all communications over gearman"""
     @classmethod
-    def dumps(cls, encodable_object):
+    def _enforce_byte_string(cls, given_object):
+        if type(given_object) != str:
+            raise TypeError("Expecting byte string, got %r" % type(given_object))
+
+    @classmethod
+    def encode(cls, encodable_object):
+        cls._enforce_byte_string(encodable_object)
         return encodable_object
 
     @classmethod
-    def loads(cls, decodable_string):
+    def decode(cls, decodable_string):
+        cls._enforce_byte_string(decodable_string)
         return decodable_string
 
 class GearmanConnectionManager(object):
@@ -232,33 +239,23 @@ class GearmanConnectionManager(object):
         """CommandHandlers call this function to fetch pending commands
 
         NOTE: CommandHandlers have NO knowledge as to which connection they're representing
-              ConnectionManagers must fetch and forward commands to CommandHandlers
+              ConnectionManagers must forward inbound commands to CommandHandlers
         """
-        # Fetch a command on our CommandHandler's behalf
         gearman_connection = self.handler_to_connection_map[command_handler]
         cmd_tuple = gearman_connection.read_command()
         if cmd_tuple is None:
             return cmd_tuple
 
-        # Automatically serialize our data field and forward this on to our CommandHandler
         cmd_type, cmd_args = cmd_tuple
-        if 'data' in cmd_args:
-            cmd_args['data'] = self.data_encoder.loads(cmd_args['data'])
-
         return cmd_type, cmd_args
 
     def send_command(self, command_handler, cmd_type, cmd_args):
         """CommandHandlers call this function to send pending commands
 
         NOTE: CommandHandlers have NO knowledge as to which connection they're representing
-              ConnectionManagers must forward outbounb commands to Connections
+              ConnectionManagers must forward outbound commands to Connections
         """
-        # Assume the CommandHandler doesn't try to do anything funny with our data fields
-        # Automatically serialize any data objects for transfer over the wire
         gearman_connection = self.handler_to_connection_map[command_handler]
-        if 'data' in cmd_args:
-            cmd_args['data'] = self.data_encoder.dumps(cmd_args['data'])
-
         gearman_connection.send_command(cmd_type, cmd_args)
 
     def on_gearman_error(self, error_code, error_text):

@@ -11,3 +11,4 @@ from gearman.client import GearmanClient
 from gearman.worker import GearmanWorker
 
 from gearman.connection_manager import DataEncoder
+from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH, JOB_PENDING, JOB_QUEUED, JOB_FAILED, JOB_COMPLETE

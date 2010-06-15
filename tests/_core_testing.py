@@ -7,9 +7,9 @@ from gearman.command_handler import GearmanCommandHandler
 from gearman.connection import GearmanConnection
 from gearman.connection_manager import GearmanConnectionManager, NoopEncoder
 
-from gearman.constants import NO_PRIORITY, HIGH_PRIORITY, LOW_PRIORITY, DEFAULT_GEARMAN_PORT
+from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, DEFAULT_GEARMAN_PORT
 from gearman.errors import ConnectionError
-from gearman.job import GearmanJob, GearmanJobRequest, GEARMAN_JOB_STATE_QUEUED
+from gearman.job import GearmanJob, GearmanJobRequest, JOB_QUEUED
 from gearman.protocol import get_command_name
 
 class MockGearmanConnection(GearmanConnection):
@@ -84,13 +84,13 @@ class _GearmanAbstractTest(unittest.TestCase):
         current_job = self.generate_job()
         return current_job.to_dict()
 
-    def generate_job_request(self, priority=NO_PRIORITY, background=False):
+    def generate_job_request(self, priority=PRIORITY_NONE, background=False):
         job_handle = str(random.random())
-        current_job = self.job_class(conn=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        current_job = self.job_class(connection=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
          # Start this off as someone being queued
-        current_request.state = GEARMAN_JOB_STATE_QUEUED
+        current_request.state = JOB_QUEUED
 
         return current_request
 

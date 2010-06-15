@@ -10,7 +10,7 @@ setup(
     description = 'Gearman API - Client, worker, and admin client interfaces',
     author = 'Matthew Tai',
     author_email = 'mtai@yelp.com',
-    url = 'http://github.com/mtai/py-gearman/tree/master',
+    url = 'http://github.com/mtai/yelp-gearman/tree/master',
     packages = ['gearman'],
     classifiers = [
         'Intended Audience :: Developers',

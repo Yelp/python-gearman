@@ -16,6 +16,14 @@ class GearmanCommandHandler(object):
         """Called by a Connection Manager after we've been instantiated and we're ready to send off commands"""
         pass
 
+    def decode_data(self, data):
+        """Convenience function :: handle binary string -> object unpacking"""
+        return self.connection_manager.data_encoder.decode(data)
+
+    def encode_data(self, data):
+        """Convenience function :: handle object -> binary string packing"""
+        return self.connection_manager.data_encoder.encode(data)
+
     def fetch_commands(self):
         """Called by a Connection Manager to notify us that we have pending commands"""
         continue_working = True

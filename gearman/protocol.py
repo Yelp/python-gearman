@@ -1,5 +1,5 @@
 import struct
-from gearman.constants import NO_PRIORITY, LOW_PRIORITY, HIGH_PRIORITY
+from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH
 from gearman.errors import ProtocolError
 
 # Protocol specific constants
@@ -154,12 +154,12 @@ def get_command_name(cmd_type):
 
 def submit_cmd_for_background_priority(background, priority):
     cmd_type_lookup = {
-        (True, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_BG,
-        (True, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
-        (True, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
-        (False, NO_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB,
-        (False, LOW_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
-        (False, HIGH_PRIORITY): GEARMAN_COMMAND_SUBMIT_JOB_HIGH
+        (True, PRIORITY_NONE): GEARMAN_COMMAND_SUBMIT_JOB_BG,
+        (True, PRIORITY_LOW): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
+        (True, PRIORITY_HIGH): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
+        (False, PRIORITY_NONE): GEARMAN_COMMAND_SUBMIT_JOB,
+        (False, PRIORITY_LOW): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
+        (False, PRIORITY_HIGH): GEARMAN_COMMAND_SUBMIT_JOB_HIGH
     }
     lookup_tuple = (background, priority)
     cmd_type = cmd_type_lookup[lookup_tuple]
@@ -218,7 +218,9 @@ def parse_binary_command(in_buffer, is_response=True):
 
 
 def pack_binary_command(cmd_type, cmd_args, is_response=False):
-    """Packs the given command using the parameter ordering specified in GEARMAN_PARAMS_FOR_COMMAND"""
+    """Packs the given command using the parameter ordering specified in GEARMAN_PARAMS_FOR_COMMAND.
+    *NOTE* Expects that all arguments in cmd_args are already str's.
+    """
     expected_cmd_params = GEARMAN_PARAMS_FOR_COMMAND.get(cmd_type, None)
     if expected_cmd_params is None or cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
         raise ProtocolError('Received unknown binary command: %s' % get_command_name(cmd_type))
@@ -236,7 +238,10 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
 
     # !NOTE! str should be replaced with bytes in Python 3.x
     # We will iterate in ORDER and str all our command arguments
-    data_items = [str(cmd_args[param]) for param in expected_cmd_params]
+    if any(type(param_value) != str for param_value in cmd_args.itervalues()):
+        raise ProtocolError('Received non-binary arguments: %r' % cmd_args)
+
+    data_items = [cmd_args[param] for param in expected_cmd_params]
     binary_payload = NULL_CHAR.join(data_items)
 
     # Pack the header in the !4sII format then append the binary payload

@@ -1,16 +1,11 @@
 import collections
-from gearman.constants import NO_PRIORITY
+from gearman.constants import PRIORITY_NONE, JOB_PENDING, JOB_QUEUED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ConnectionError
-
-GEARMAN_JOB_STATE_PENDING = 'PENDING'
-GEARMAN_JOB_STATE_QUEUED = 'QUEUED'
-GEARMAN_JOB_STATE_FAILED = 'FAILED'
-GEARMAN_JOB_STATE_COMPLETE = 'COMPLETE'
 
 class GearmanJob(object):
     """Represents the basics of a job... used in GearmanClient / GearmanWorker to represent job states"""
-    def __init__(self, conn, handle, task, unique, data):
-        self.conn = conn
+    def __init__(self, connection, handle, task, unique, data):
+        self.connection = connection
         self.handle = handle
 
         self.task = task
@@ -21,11 +16,11 @@ class GearmanJob(object):
         return dict(task=self.task, job_handle=self.handle, unique=self.unique, data=self.data)
 
     def __repr__(self):
-        return '<GearmanJob conn/handle=(%r, %r), task=%s, unique=%s, data=%r>' % (self.conn, self.handle, self.task, self.unique, self.data)
+        return '<GearmanJob connection/handle=(%r, %r), task=%s, unique=%s, data=%r>' % (self.connection, self.handle, self.task, self.unique, self.data)
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient to represent job states"""
-    def __init__(self, gearman_job, initial_priority=NO_PRIORITY, background=False, max_retries=0):
+    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, max_retries=0):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
@@ -51,7 +46,7 @@ class GearmanJobRequest(object):
         # Holds STATUS_REQ responses
         self.server_status = {}
 
-        self.state = GEARMAN_JOB_STATE_PENDING
+        self.state = JOB_PENDING
         self.timed_out = False
         self.connection_failed = False
 
@@ -60,33 +55,14 @@ class GearmanJobRequest(object):
         self.connection = None
         self.handle = None
 
-    def _get_connection(self):
-        return self.gearman_job and self.gearman_job.conn
-
-    def _set_connection(self, conn):
-        if self.gearman_job.conn is not None and conn is not None:
-            raise ConnectionError('Request has already been assigned to connection: %r' % self.gearman_job.conn)
-
-        self.gearman_job.conn = conn
-
-    connection = property(_get_connection, _set_connection)
-
-    def _get_handle(self):
-        return self.gearman_job and self.gearman_job.handle
-
-    def _set_handle(self, handle):
-        self.gearman_job.handle = handle
-
-    handle = property(_get_handle, _set_handle)
-
     @property
     def job(self):
         return self.gearman_job
 
     @property
     def complete(self):
-        background_complete = bool(self.background and self.state in (GEARMAN_JOB_STATE_QUEUED))
-        foreground_complete = bool(not self.background and self.state in (GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE))
+        background_complete = bool(self.background and self.state in (JOB_QUEUED))
+        foreground_complete = bool(not self.background and self.state in (JOB_FAILED, JOB_COMPLETE))
 
         actually_complete = background_complete or foreground_complete
         return actually_complete

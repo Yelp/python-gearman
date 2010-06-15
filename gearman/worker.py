@@ -91,8 +91,7 @@ class GearmanWorker(GearmanConnectionManager):
     ## Methods to override when dealing with connection polling ##
     ##############################################################
     def _get_worker_connections(self):
-        """Return a shuffled list of connections that are alive,
-        and try to reconnect to dead connections if necessary."""
+        """Return a shuffled list of connections that are alive, and try to reconnect to dead connections if necessary."""
         self.randomized_connections = list(self.connection_list)
         random.shuffle(self.randomized_connections)
 
@@ -120,7 +119,7 @@ class GearmanWorker(GearmanConnectionManager):
     ## Public methods so Gearman jobs can send Gearman updates ##
     #############################################################
     def _get_handler_for_job(self, current_job):
-        return self.connection_to_handler_map[current_job.conn]
+        return self.connection_to_handler_map[current_job.connection]
 
     def send_job_status(self, current_job, numerator, denominator):
         current_handler = self._get_handler_for_job(current_job)

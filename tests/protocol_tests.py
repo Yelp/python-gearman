@@ -7,8 +7,8 @@ import struct
 import types
 
 from gearman.connection import GearmanConnection
+from gearman.constants import JOB_PENDING, JOB_QUEUED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
-from gearman.job import GEARMAN_JOB_STATE_PENDING, GEARMAN_JOB_STATE_QUEUED, GEARMAN_JOB_STATE_FAILED, GEARMAN_JOB_STATE_COMPLETE
 from gearman import protocol
 
 from tests._core_testing import _GearmanAbstractTest
@@ -125,6 +125,16 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         # Assert we get arg mismatch (name), got 1, expecting 1
         cmd_type = protocol.GEARMAN_COMMAND_JOB_CREATED
         cmd_args = dict(extra='arguments')
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
+        # Assert we get a non-string argument
+        cmd_type = protocol.GEARMAN_COMMAND_JOB_CREATED
+        cmd_args = dict(job_handle=12345)
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
+        # Assert we get a non-string argument (expecting BYTES)
+        cmd_type = protocol.GEARMAN_COMMAND_JOB_CREATED
+        cmd_args = dict(job_handle=unicode(12345))
         self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
 
     def test_packing_response(self):

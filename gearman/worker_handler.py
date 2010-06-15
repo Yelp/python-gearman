@@ -18,7 +18,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     """
     def __init__(self, connection_manager=None):
         super(GearmanWorkerCommandHandler, self).__init__(connection_manager=connection_manager)
-    
+
         self._handler_abilities = []
         self._client_id = None
 
@@ -51,11 +51,11 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def send_job_status(self, current_job, numerator, denominator):
         assert type(numerator) in (int, float), 'Numerator must be a numeric value'
         assert type(denominator) in (int, float), 'Denominator must be a numeric value'
-        self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=numerator, denominator=denominator)
+        self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=str(numerator), denominator=str(denominator))
 
     def send_job_complete(self, current_job, data):
         """Removes a job from the queue if its backgrounded"""
-        self.send_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=data)
+        self.send_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=self.encode_data(data))
 
     def send_job_failure(self, current_job):
         """Removes a job from the queue if its backgrounded"""
@@ -65,13 +65,13 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
         # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
         #
-        self.send_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data=data)
+        self.send_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data=self.encode_data(data))
 
     def send_job_data(self, current_job, data):
-        self.send_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data=data)
+        self.send_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data=self.encode_data(data))
 
     def send_job_warning(self, current_job, data):
-        self.send_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data=data)
+        self.send_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data=self.encode_data(data))
 
     ###########################################################
     ### Callbacks when we receive a command from the server ###
@@ -131,7 +131,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         if not self.connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, data)
+        gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, self.decode_data(data))
 
         # Create a new job
         self.connection_manager.on_job_execute(gearman_job)

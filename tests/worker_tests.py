@@ -17,7 +17,7 @@ class MockGearmanWorker(MockGearmanConnectionManager, GearmanWorker):
         self.worker_job_queues = collections.defaultdict(collections.deque)
 
     def on_job_execute(self, current_job):
-        current_handler = self.connection_to_handler_map[current_job.conn]
+        current_handler = self.connection_to_handler_map[current_job.connection]
         self.worker_job_queues[current_handler].append(current_job)
 
 class _GearmanAbstractWorkerTest(_GearmanAbstractTest):
@@ -182,7 +182,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.command_handler.send_job_status(current_job, 0, 1)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=0, denominator=1)
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator='0', denominator='1')
 
         # Test GEARMAN_COMMAND_WORK_COMPLETE
         self.command_handler.send_job_complete(current_job, 'completion data')
