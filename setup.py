@@ -5,7 +5,7 @@ from distutils.core import setup
 from gearman import __version__ as version
 
 setup(
-    name = 'yelp-gearman',
+    name = 'gearman',
     version = version,
     author = 'Matthew Tai',
     author_email = 'mtai@yelp.com',
