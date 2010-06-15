@@ -1,5 +1,5 @@
 ==============
-yelp-gearman
+python-gearman
 ==============
 
 Description
