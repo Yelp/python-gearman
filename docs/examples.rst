@@ -86,10 +86,16 @@ Client Examples
     # For our timed out requests, lets wait a little longer until they're complete
     retried_timed_out_requests = gm_client.submit_multiple_requests(timed_out_requests, wait_until_complete=True, timeout=4.0)
 
-5) Extending the client with a different data encoder and logging options
--------------------------------------------------------------------------
+5) Extending the client to send/receive Python objects (not just byte strings)
+------------------------------------------------------------------------------
 ::
 
+    # By default, GearmanClient's can only send off byte-strings
+    # If we want to be able to send out Python objects, we can specify a data encoder
+    # This will automatically convert byte strings <-> Python objects for ALL commands that have the 'data' field
+    #
+    # See http://gearman.org/index.php?id=protocol for Client commands that send/receive 'opaque data'
+    #
     import cPickle as pickle
     
     class PickleDataEncoder(gearman.DataEncoder)
@@ -101,14 +107,8 @@ Client Examples
         def decode(cls, decodable_string):
             return pickle.loads(decodable_string)
     
-    class LoggingPickleExampleClient(gearman.GearmanClient):
+    class PickleExampleClient(gearman.GearmanClient):
         data_encoder = PickleDataEncoder
-    
-        def wait_until_jobs_completed(self, job_requests, timeout=None):
-            self.log.info("Waiting for jobs to complete...")
-            output_results = super(LoggingPickleExampleClient, self).wait_until_jobs_completed(job_requests, timeout=timeout)
-            self.log.info("Finished waiting for jobs to complete...")
-            return output_results
 
 Worker Examples
 ===============
@@ -130,10 +130,16 @@ Worker Examples
     # Enter our work loop and call gm_worker.after_poll() after each time we timeout/see socket activity
     gm_worker.work()
 
-2) Extending the worker with a different data encoder and polling behavior
---------------------------------------------------------------------------
+2) Extending the worker to send/receive Python objects and do work between polls
+--------------------------------------------------------------------------------
 ::
 
+    # By default, GearmanWorker's can only send off byte-strings
+    # If we want to be able to send out Python objects, we can specify a data encoder
+    # This will automatically convert byte strings <-> Python objects for ALL commands that have the 'data' field
+    #
+    # See http://gearman.org/index.php?id=protocol for Worker commands that send/receive 'opaque data'
+    #
     import json # Or similarly styled library
     class JSONDataEncoder(gearman.DataEncoder)
         @classmethod
