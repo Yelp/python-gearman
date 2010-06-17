@@ -104,7 +104,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
 
         # Label our fields and make the results Python friendly
         task, queued_count, running_count, worker_count = split_tokens
-        
+
         status_dict = {}
         status_dict['task'] = task
         status_dict['queued'] = int(queued_count)

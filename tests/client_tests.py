@@ -101,7 +101,7 @@ class ClientTest(_GearmanAbstractTest):
                 self.command_handler.recv_command(GEARMAN_COMMAND_JOB_CREATED, job_handle=current_job.handle)
 
             return rx_conns, wr_conns, ex_conns
- 
+
         self.connection_manager.handle_connection_activity = mark_jobs_created
 
         job_dictionaries = [current_job.to_dict() for current_job in expected_job_list]

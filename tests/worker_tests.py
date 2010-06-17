@@ -31,7 +31,7 @@ class _GearmanAbstractWorkerTest(_GearmanAbstractTest):
 
     def assert_sent_abilities(self, expected_abilities):
         observed_abilities = set()
-    
+
         self.assert_sent_command(GEARMAN_COMMAND_RESET_ABILITIES)
         for ability in expected_abilities:
             cmd_type, cmd_args = self.connection._outgoing_commands.popleft()

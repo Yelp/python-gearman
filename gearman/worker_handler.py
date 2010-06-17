@@ -102,7 +102,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         SLEEP -> AWAKE -> SLEEP        :: Transition if we can NOT acquire a worker job lock
         """
         if self._check_job_lock():
-            pass           
+            pass
         elif self._acquire_job_lock():
             self._grab_job()
         else:
