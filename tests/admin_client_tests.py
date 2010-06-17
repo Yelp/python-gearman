@@ -1,11 +1,11 @@
 import unittest
 import collections
 
-from gearman.admin_client import GearmanAdminClient
+from gearman.admin_client import GearmanAdminClient, ECHO_STRING
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 
 from gearman.errors import InvalidAdminClientState, ProtocolError
-from gearman.protocol import GEARMAN_COMMAND_TEXT_COMMAND, \
+from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ, GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
@@ -25,6 +25,15 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
 
     def test_send_illegal_server_commands(self):
         self.assertRaises(ProtocolError, self.send_server_command, "This is not a server command")
+
+    def test_ping_server(self):
+        self.command_handler.send_echo_request(ECHO_STRING)
+        self.assert_sent_command(GEARMAN_COMMAND_ECHO_REQ, data=ECHO_STRING)
+        self.assertEqual(self.command_handler._sent_commands[0], GEARMAN_COMMAND_ECHO_REQ)
+
+        self.command_handler.recv_command(GEARMAN_COMMAND_ECHO_RES, data=ECHO_STRING)
+        server_response = self.pop_response(GEARMAN_COMMAND_ECHO_REQ)
+        self.assertEquals(server_response, ECHO_STRING)
 
     def test_state_and_protocol_errors_for_status(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_STATUS)

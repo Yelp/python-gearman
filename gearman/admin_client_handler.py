@@ -3,7 +3,7 @@ import logging
 
 from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import ProtocolError, InvalidAdminClientState
-from gearman.protocol import GEARMAN_COMMAND_TEXT_COMMAND, \
+from gearman.protocol import GEARMAN_COMMAND_ECHO_REQ, GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
 gearman_logger = logging.getLogger(__name__)
@@ -27,7 +27,8 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
     ##### Public interface methods to be called by GearmanAdminClient #####
     #######################################################################
 
-    def has_response(self):
+    @property
+    def response_ready(self):
         return bool(self._recv_responses)
 
     def pop_response(self):
@@ -54,9 +55,19 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         output_text = '%s\n' % command_line
         self.send_command(GEARMAN_COMMAND_TEXT_COMMAND, raw_text=output_text)
 
+    def send_echo_request(self, echo_string):
+        """Send our administrative text command"""
+        self._sent_commands.append(GEARMAN_COMMAND_ECHO_REQ)
+
+        self.send_command(GEARMAN_COMMAND_ECHO_REQ, data=echo_string)
+
     ###########################################################
     ### Callbacks when we receive a command from the server ###
     ###########################################################
+
+    def recv_echo_res(self, data):
+        self._recv_responses.append(data)
+        return False
 
     def recv_text_command(self, raw_text):
         """Catch GEARMAN_COMMAND_TEXT_COMMAND's and forward them onto their respective recv_server_* callbacks"""
@@ -139,7 +150,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
             raise ProtocolError("Expected 'OK', received: %s" % raw_text)
 
         self._recv_responses.append(raw_text)
-        return True
+        return False
 
     def recv_server_shutdown(self, raw_text):
         """Shutdown response is a simple passthrough"""

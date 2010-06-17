@@ -104,7 +104,9 @@ class GearmanWorker(GearmanConnectionManager):
         return output_connections
 
     def after_poll(self, any_activity):
-        """Polling callback to notify any outside listeners whats going on with the GearmanWorker"""
+        """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
+
+        Return True to continue polling, False to exit the work loop"""
         return True
 
     def handle_error(self, current_connection):
@@ -155,7 +157,7 @@ class GearmanWorker(GearmanConnectionManager):
     ##### Callback methods for GearmanWorkerHandler #####
     #####################################################
     def create_job(self, command_handler, job_handle, task, unique, data):
-        """"""
+        """Create a new job using our self.job_class"""
         current_connection = self.handler_to_connection_map[command_handler]
         return self.job_class(current_connection, job_handle, task, unique, data)
 

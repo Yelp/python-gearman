@@ -1,13 +1,17 @@
 import logging
+import time
 
 from gearman import util
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 from gearman.errors import InvalidAdminClientState
-from gearman.protocol import GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
+from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
 gearman_logger = logging.getLogger(__name__)
+
+ECHO_STRING = "ping? pong!"
+DEFAULT_ADMIN_CLIENT_TIMEOUT = 5.0
 
 class GearmanAdminClient(GearmanConnectionManager):
     """Connects to a single server and sends TEXT based administrative commands.
@@ -18,12 +22,26 @@ class GearmanAdminClient(GearmanConnectionManager):
     """
     command_handler_class = GearmanAdminClientCommandHandler
 
-    def __init__(self, host_list=None, admin_client_timeout=5.0):
+    def __init__(self, host_list=None, timeout=DEFAULT_ADMIN_CLIENT_TIMEOUT):
         super(GearmanAdminClient, self).__init__(host_list=host_list)
-        self.admin_client_timeout = admin_client_timeout
+        self.admin_client_timeout = timeout
 
         self.current_connection = util.unlist(self.connection_list)
         self.current_handler = util.unlist(self.handler_to_connection_map.keys())
+
+    def ping_server(self):
+        """Sends off a basic debugging string to check the responsiveness of the Gearman server"""
+        self.current_connection.connect()
+
+        start_time = time.time()
+
+        self.current_handler.send_echo_request(ECHO_STRING)
+        server_response = self.wait_until_server_responds(GEARMAN_COMMAND_ECHO_REQ)
+        if server_response != ECHO_STRING:
+            raise InvalidAdminClientState("Echo string mismatch: got %s, expected %s" % (server_response, ECHO_STRING))
+
+        elapsed_time = time.time() - start_time
+        return elapsed_time
 
     def send_maxqueue(self, task, max_size):
         self.current_connection.connect()
@@ -62,10 +80,10 @@ class GearmanAdminClient(GearmanConnectionManager):
     def wait_until_server_responds(self, expected_type):
         current_handler = self.current_handler
         def continue_while_no_response(any_activity):
-            return (not current_handler.has_response())
+            return (not current_handler.response_ready)
 
         self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.admin_client_timeout)
-        if not current_connection.has_response():
+        if not current_connection.response_ready:
             raise InvalidAdminClientState('Admin client timed out after %f second(s)' % self.admin_client_timeout)
 
         cmd_type, cmd_resp = self.current_handler.pop_response()
