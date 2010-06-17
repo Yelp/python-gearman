@@ -156,18 +156,18 @@ class GearmanConnectionManager(object):
 
     def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
         """Process all connection activity... executes all handle_* callbacks"""
-        dead_connections = []
+        dead_connections = set()
         for current_connection in rd_connections:
             try:
                 self.handle_read(current_connection)
             except ConnectionError:
-                dead_connections.append(current_connection)
+                dead_connections.add(current_connection)
 
         for current_connection in wr_connections:
             try:
                 self.handle_write(current_connection)
             except ConnectionError:
-                dead_connections.append(current_connection)
+                dead_connections.add(current_connection)
 
         for current_connection in ex_connections:
             self.handle_error(current_connection)
@@ -175,7 +175,7 @@ class GearmanConnectionManager(object):
         for current_connection in dead_connections:
             self.handle_error(current_connection)
 
-        failed_connections = ex_connections + dead_connections
+        failed_connections = ex_connections | dead_connections
         return rd_connections, wr_connections, failed_connections
 
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):

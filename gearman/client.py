@@ -14,7 +14,7 @@ from gearman.job import GearmanJob, GearmanJobRequest
 
 gearman_logger = logging.getLogger(__name__)
 
-RANDOM_UNIQUE_BYTES = 8
+RANDOM_UNIQUE_BYTES = 16
 
 class GearmanClient(GearmanConnectionManager):
     """
@@ -24,8 +24,10 @@ class GearmanClient(GearmanConnectionManager):
     """
     command_handler_class = GearmanClientCommandHandler
 
-    def __init__(self, host_list=None):
+    def __init__(self, host_list=None, random_unique_bytes=RANDOM_UNIQUE_BYTES):
         super(GearmanClient, self).__init__(host_list=host_list)
+
+        self.random_unique_bytes = random_unique_bytes
 
         # The authoritative copy of all requests that this client knows about
         # Ignores the fact if a request has been bound to a connection or not
@@ -60,28 +62,26 @@ class GearmanClient(GearmanConnectionManager):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         stopwatch = gearman.util.Stopwatch(timeout)
 
-        chosen_connections = set()
         for current_request in job_requests:
-            chosen_conn = self._choose_request_connection(current_request)
-            chosen_connections.add(chosen_conn)
+            chosen_connection = self._choose_request_connection(current_request)
 
-            current_request.job.connection = chosen_conn
+            current_request.job.connection = chosen_connection
             current_request.connection_failed = False
             current_request.timed_out = False
 
-            current_command_handler = self.connection_to_handler_map[chosen_conn]
+            current_command_handler = self.connection_to_handler_map[chosen_connection]
             current_command_handler.send_job_request(current_request)
 
         # We should always wait until our job is accepted, this should be fast
         time_remaining = stopwatch.get_time_remaining()
-        out_requests = self.wait_until_jobs_accepted(job_requests, timeout=time_remaining)
+        processed_requests = self.wait_until_jobs_accepted(job_requests, timeout=time_remaining)
 
         # Optionally, we'll allow a user to wait until all jobs are complete with the same timeout
         time_remaining = stopwatch.get_time_remaining()
         if wait_until_complete and bool(time_remaining != 0.0):
-            out_requests = self.wait_until_jobs_completed(out_requests, timeout=time_remaining)
+            processed_requests = self.wait_until_jobs_completed(processed_requests, timeout=time_remaining)
 
-        return out_requests
+        return processed_requests
 
     def wait_until_jobs_accepted(self, job_requests, timeout=None):
         """Go into a select loop until all our jobs have moved to STATE_PENDING"""
@@ -177,10 +177,10 @@ class GearmanClient(GearmanConnectionManager):
         if job_unique == '-':
             job_unique = job_info['data']
         elif not job_unique:
-            job_unique = os.urandom(RANDOM_UNIQUE_BYTES).encode('hex')
+            job_unique = os.urandom(self.random_unique_bytes).encode('hex')
 
-        current_job = GearmanJob(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
-        current_request = GearmanJobRequest(current_job, initial_priority=job_info.get('priority', PRIORITY_NONE), background=background)
+        current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
+        current_request = self.job_request_class(current_job, initial_priority=job_info.get('priority', PRIORITY_NONE), background=background)
         return current_request
 
     def _choose_request_connection(self, current_request):
