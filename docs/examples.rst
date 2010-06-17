@@ -24,8 +24,8 @@ Function available to all examples
 
 Client Examples
 ===============
-1) Single job - blocking
-------------------------
+1) Single job - blocking call
+-----------------------------
 ::
 
     gm_client = gearman.GearmanClient(['localhost:4730', 'otherhost:4730'])
@@ -35,8 +35,8 @@ Client Examples
     completed_job_request = gm_client.submit_job("task_name", "arbitrary binary data", wait_until_complete=True)
     check_request_status(completed_job_request)
 
-2) Single job - high priority, background, blocking
----------------------------------------------------
+2) Single job - high priority, background, blocking call
+--------------------------------------------------------
 ::
 
     gm_client = gearman.GearmanClient(['localhost:4730', 'otherhost:4730'])
@@ -46,8 +46,8 @@ Client Examples
     
     check_request_status(submitted_job_request)
 
-3) Multiple jobs - non-blocking (wait_until_complete=False)
------------------------------------------------------------
+3) Multiple jobs - non-blocking call (wait_until_complete=False)
+----------------------------------------------------------------
 ::
 
     import time
@@ -60,7 +60,7 @@ Client Examples
     # Similar to multithreading and doing a join except this is all done in a single process
     time.sleep(1.0)
     
-    # Wait at most 3 seconds before timing out incomplete requests
+    # Wait at most 5 seconds before timing out incomplete requests
     completed_requests = gm_client.wait_until_jobs_completed(submitted_requests, timeout=5.0)
     for completed_job_request in completed_results:
         check_request_status(completed_job_request)
@@ -109,6 +109,10 @@ Client Examples
     
     class PickleExampleClient(gearman.GearmanClient):
         data_encoder = PickleDataEncoder
+
+    gm_client = PickleExampleClient(['localhost:4730'])
+    gm_client.submit_job("task_name", <Python object to be pickled>)
+
 
 Worker Examples
 ===============
@@ -170,3 +174,10 @@ Admin Client Examples
     status_response = gm_admin_client.get_status()
     version_response = gm_admin_client.get_version()
     workers_response = gm_admin_client.get_workers()
+
+2) Pinging a server to get gearman server response times
+--------------------------------------------------------
+::
+
+    gm_admin_client = gearman.GearmanAdminClient(['localhost:4730'])
+    response_time = gm_admin_client.ping_server()

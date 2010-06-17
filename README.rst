@@ -21,5 +21,8 @@ Status
 Links
 =====
 
-* `source <http://github.com/mtai/python-gearman/>`_
-* `documentation <http://github.com/mtai/python-gearman/docs/>`_
+* `2.x source <http://github.com/mtai/python-gearman/>`_
+* `2.x documentation <http://github.com/mtai/python-gearman/tree/master/docs/>`_
+
+* `1.x source <http://github.com/samuel/python-gearman/>`_
+* `1.x documentation <http://github.com/samuel/python-gearman/tree/master/docs/>`_
