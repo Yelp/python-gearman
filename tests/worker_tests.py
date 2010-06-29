@@ -1,5 +1,5 @@
-import unittest
 import collections
+import unittest
 
 from gearman.worker import GearmanWorker
 from gearman.worker_handler import GearmanWorkerCommandHandler

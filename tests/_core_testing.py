@@ -7,7 +7,7 @@ from gearman.command_handler import GearmanCommandHandler
 from gearman.connection import GearmanConnection
 from gearman.connection_manager import GearmanConnectionManager, NoopEncoder
 
-from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, DEFAULT_GEARMAN_PORT, JOB_UNSENT, JOB_ACCEPTED
+from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, DEFAULT_GEARMAN_PORT, JOB_UNKNOWN, JOB_CREATED
 from gearman.errors import ConnectionError
 from gearman.job import GearmanJob, GearmanJobRequest
 from gearman.protocol import get_command_name
@@ -89,8 +89,8 @@ class _GearmanAbstractTest(unittest.TestCase):
         current_job = self.job_class(connection=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
-        self.assertEqual(current_request.state, JOB_UNSENT)
-        current_request.state = JOB_ACCEPTED
+        self.assertEqual(current_request.state, JOB_UNKNOWN)
+        current_request.state = JOB_CREATED
 
         return current_request
 

@@ -170,7 +170,7 @@ Worker Examples
     gm_worker = gearman.GearmanWorker(['localhost:4730'])
 
     # See gearman/job.py to see attributes on the GearmanJob
-    # Send back a reversed version of the 'data' string
+    # Send back a reversed version of the 'data' string through WORK_DATA instead of WORK_COMPLETE
     def task_listener_reverse_inflight(gearman_worker, gearman_job):
         reversed_data = reversed(gearman_job.data)
         total_chars = len(reversed_data)
@@ -178,6 +178,8 @@ Worker Examples
         for idx, character in enumerate(reversed_data):
             gearman_worker.send_job_data(gearman_job, str(character))
             gearman_worker.send_job_status(gearman_job, idx + 1, total_chars)
+
+        return None
 
     # gm_worker.set_client_id is optional
     gm_worker.register_task('reverse', task_listener_reverse_inflight)

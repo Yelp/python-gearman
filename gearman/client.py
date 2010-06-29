@@ -47,8 +47,7 @@ class GearmanClient(GearmanConnectionManager):
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
         # Convert all job dicts to job request objects
-        max_attempts = max_retries + 1
-        requests_to_submit = [self._create_request_from_dictionary(job_info, background=background, max_attempts=max_attempts) for job_info in jobs_to_submit]
+        requests_to_submit = [self._create_request_from_dictionary(job_info, background=background, max_retries=max_retries) for job_info in jobs_to_submit]
 
         return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, timeout=timeout)
 
@@ -165,7 +164,7 @@ class GearmanClient(GearmanConnectionManager):
 
         return job_requests
 
-    def _create_request_from_dictionary(self, job_info, background=False, max_attempts=1):
+    def _create_request_from_dictionary(self, job_info, background=False, max_retries=0):
         """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')
@@ -175,6 +174,8 @@ class GearmanClient(GearmanConnectionManager):
             job_unique = os.urandom(self.random_unique_bytes).encode('hex')
 
         current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
+
+        max_attempts = max_retries + 1
         current_request = self.job_request_class(current_job, initial_priority=job_info.get('priority', PRIORITY_NONE), background=background, max_attempts=max_attempts)
         return current_request
 

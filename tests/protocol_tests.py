@@ -1,15 +1,11 @@
-import logging
-import os, sys, signal, threading
-import unittest, time
-import collections
-import random
 import struct
-import types
+import unittest
+
+from gearman import protocol
 
 from gearman.connection import GearmanConnection
 from gearman.constants import JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
-from gearman import protocol
 
 from tests._core_testing import _GearmanAbstractTest
 

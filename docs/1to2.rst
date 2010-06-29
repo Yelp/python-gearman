@@ -1,0 +1,99 @@
+==============
+python-gearman
+==============
+
+Description
+===========
+Python Gearman API - Client, worker, and admin client interfaces
+
+For information on the Gearman protocol and a C Gearman server, see http://www.gearman.org/
+
+python-gearman 1.x to 2.x migration
+===================================
+Worker
+------
+::
+
+    # python-gearman 1.x
+    class WorkerHook(object):
+        def start(self, current_job):
+            print "Job started"
+        
+        def fail(self, current_job, exc_info):
+            print "Job failed, can't stop last gasp GEARMAN_COMMAND_WORK_FAIL"
+
+        def complete(self, current_job, result):
+            print "Job complete, can't stop last gasp GEARMAN_COMMAND_WORK_COMPLETE"
+
+    def callback_fxn(idle, last_job_time):
+        return False
+
+    old_worker = gearman.GearmanWorker(['localhost:4730'])
+    old_worker.register_function("echo", lambda job:job.arg)
+    old_worker.work(stop_if=callback_fxn, hooks=WorkerHook())
+
+
+    # python-gearman 2.x
+    class CustomGearmanWorker(gearman.GearmanWorker):
+        def on_job_execute(self, current_job):
+            print "Job started"
+            return super(CustomGearmanWorker, self).on_job_execute(current_job)
+
+        def on_job_exception(self, current_job, exc_info):
+            print "Job failed, CAN stop last gasp GEARMAN_COMMAND_WORK_FAIL"
+            return super(CustomGearmanWorker, self).on_job_exception(current_job, exc_info)
+
+        def on_job_complete(self, current_job, job_result):
+            print "Job failed, CAN stop last gasp GEARMAN_COMMAND_WORK_FAIL"
+            return super(CustomGearmanWorker, self).send_job_complete(current_job, job_result)
+
+        def after_poll(self, any_activity):
+            # Return True if you want to continue polling, replaces callback_fxn
+            return True
+
+    def task_callback(gearman_worker, job):
+        return job.data
+
+    new_worker = CustomGearmanWorker(['localhost:4730'])
+    new_worker.register_task("echo", task_callback)
+    new_worker.work()
+
+Client (single task)
+--------------------
+::
+
+    # python-gearman 1.x
+    old_client = gearman.GearmanClient(['localhost:4730'])
+    old_result = old_client.do_task(Task("echo", "foo"))
+
+
+    # python-gearman 2.x
+    new_client = gearman.GearmanClient(['localhost:4730'])
+    current_request = new_client.submit_job('echo', 'foo')
+    new_result = current_request.result
+
+Client (multiple tasks)
+-----------------------
+::
+
+    # python-gearman 1.x
+    old_client = gearman.GearmanClient(['localhost:4730'])
+    ts = Taskset([
+        Task(func="echo", arg="foo"),
+        Task(func="echo", arg="bar"),
+    ])
+    old_client.do_taskset(ts)
+    for task in ts.values():
+        assert task.result == task.arg
+
+
+    # python-gearman 2.x
+    new_client = gearman.GearmanClient(['localhost:4730'])
+    new_jobs = [
+        dict(task='echo', data='foo'),
+        dict(task='echo', data='bar'),
+    ]
+
+    completed_requests = new_client.submit_multiple_jobs(new_jobs)
+    for current_request in completed_requests:
+        assert current_request.result == current_request.job.data

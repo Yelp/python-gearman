@@ -10,7 +10,7 @@ setup(
     author = 'Matthew Tai',
     author_email = 'mtai@yelp.com',
     description = 'Gearman API - Client, worker, and admin client interfaces',
-    long_description=open('README.txt').read(),
+    long_description=open('README.rst').read(),
     url = 'http://github.com/mtai/python-gearman/',
     packages = ['gearman'],
     license='LICENSE.txt',
