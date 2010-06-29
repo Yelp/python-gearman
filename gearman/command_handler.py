@@ -16,6 +16,9 @@ class GearmanCommandHandler(object):
         """Called by a Connection Manager after we've been instantiated and we're ready to send off commands"""
         pass
 
+    def on_io_error(self):
+        pass
+
     def decode_data(self, data):
         """Convenience function :: handle binary string -> object unpacking"""
         return self.connection_manager.data_encoder.decode(data)

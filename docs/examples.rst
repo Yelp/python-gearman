@@ -19,7 +19,7 @@ Function available to all examples
             print "Job %s finished!  Result: %s - %s" % (job_request.job.unique, job_request.state, job_request.result)
         elif job_request.timed_out:
             print "Job %s timed out!" % job_request.unique
-        elif job_request.connection_failed:
+        elif job_request.state == JOB_UNKNOWN:
             print "Job %s connection failed!" % job_request.unique
 
 Client Examples
@@ -31,8 +31,8 @@ Client Examples
     gm_client = gearman.GearmanClient(['localhost:4730', 'otherhost:4730'])
     
     # See gearman/job.py to see attributes on the GearmanJobRequest
-    # Defaults to PRIORITY_NONE, background=False (synchronous task), wait_until_complete=False
-    completed_job_request = gm_client.submit_job("task_name", "arbitrary binary data", wait_until_complete=True)
+    # Defaults to PRIORITY_NONE, background=False (synchronous task), wait_until_complete=True
+    completed_job_request = gm_client.submit_job("task_name", "arbitrary binary data")
     check_request_status(completed_job_request)
 
 2) Single job - high priority, background, blocking call
@@ -42,7 +42,7 @@ Client Examples
     gm_client = gearman.GearmanClient(['localhost:4730', 'otherhost:4730'])
     
     # See gearman/job.py to see attributes on the GearmanJobRequest
-    submitted_job_request = gm_client.submit_job("task_name", "arbitrary binary data", priority=gearman.PRIORITY_HIGH, background=True, wait_until_complete=True)
+    submitted_job_request = gm_client.submit_job("task_name", "arbitrary binary data", priority=gearman.PRIORITY_HIGH, background=True)
     
     check_request_status(submitted_job_request)
 
@@ -54,7 +54,7 @@ Client Examples
     gm_client = gearman.GearmanClient(['localhost:4730'])
     
     list_of_jobs = [dict(task="task_name", data="binary data"), dict(task="other_task", data="other binary data")]
-    submitted_requests = gm_client.submit_multiple_jobs(list_of_jobs, background=False)
+    submitted_requests = gm_client.submit_multiple_jobs(list_of_jobs, background=False, wait_until_complete=False)
     
     # Once we know our jobs are accepted, we can do other stuff and wait for results later in the function
     # Similar to multithreading and doing a join except this is all done in a single process
@@ -76,7 +76,7 @@ Client Examples
     failed_requests = gm_client.submit_multiple_jobs(list_of_jobs, background=False)
     
     # Let's pretend our assigned requests' Gearman servers all failed
-    assert all(request.connection_failed for request in failed_requests), "All connections didn't fail!"
+    assert all(request.state == JOB_UNKNOWN for request in failed_requests), "All connections didn't fail!"
     
     # Let's pretend our assigned requests' don't fail but some simply timeout
     retried_connection_failed_requests = gm_client.submit_multiple_requests(failed_requests, wait_until_complete=True, timeout=1.0)
@@ -124,7 +124,7 @@ Worker Examples
     
     # See gearman/job.py to see attributes on the GearmanJob
     # Send back a reversed version of the 'data' string
-    def task_listener_reverse(gearman_job):
+    def task_listener_reverse(gearman_worker, gearman_job):
         return reversed(gearman_job.data)
     
     # gm_worker.set_client_id is optional
@@ -162,6 +162,29 @@ Worker Examples
             continue_working = True
             self.db_connections.rollback()
             return continue_working
+
+3) Sending inflight job updates
+-------------------------------
+::
+
+    gm_worker = gearman.GearmanWorker(['localhost:4730'])
+
+    # See gearman/job.py to see attributes on the GearmanJob
+    # Send back a reversed version of the 'data' string
+    def task_listener_reverse_inflight(gearman_worker, gearman_job):
+        reversed_data = reversed(gearman_job.data)
+        total_chars = len(reversed_data)
+
+        for idx, character in enumerate(reversed_data):
+            gearman_worker.send_job_data(gearman_job, str(character))
+            gearman_worker.send_job_status(gearman_job, idx + 1, total_chars)
+
+    # gm_worker.set_client_id is optional
+    gm_worker.register_task('reverse', task_listener_reverse_inflight)
+
+    # Enter our work loop and call gm_worker.after_poll() after each time we timeout/see socket activity
+    gm_worker.work()
+
 
 Admin Client Examples
 =====================

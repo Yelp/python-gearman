@@ -28,7 +28,9 @@ class GearmanAdminClient(GearmanConnectionManager):
         self.admin_client_timeout = timeout
 
         self.current_connection = util.unlist(self.connection_list)
+        self.current_handler = None
 
+    def establish_connection(self):
         if not self.attempt_connect(self.current_connection):
             raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
@@ -38,6 +40,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         """Sends off a basic debugging string to check the responsiveness of the Gearman server"""
         start_time = time.time()
 
+        self.establish_connection()
         self.current_handler.send_echo_request(ECHO_STRING)
         server_response = self.wait_until_server_responds(GEARMAN_COMMAND_ECHO_REQ)
         if server_response != ECHO_STRING:
@@ -47,6 +50,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         return elapsed_time
 
     def send_maxqueue(self, task, max_size):
+        self.establish_connection()
         self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, task, max_size))
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MAXQUEUE)
 
@@ -55,18 +59,22 @@ class GearmanAdminClient(GearmanConnectionManager):
         if graceful:
             actual_command += ' graceful'
 
+        self.establish_connection()
         self.current_handler.send_text_command(actual_command)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHUTDOWN)
 
     def get_status(self):
+        self.establish_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_STATUS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_STATUS)
 
     def get_version(self):
+        self.establish_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_VERSION)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_VERSION)
 
     def get_workers(self):
+        self.establish_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_WORKERS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_WORKERS)
 

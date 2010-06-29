@@ -7,7 +7,7 @@ import struct
 import types
 
 from gearman.connection import GearmanConnection
-from gearman.constants import JOB_PENDING, JOB_QUEUED, JOB_FAILED, JOB_COMPLETE
+from gearman.constants import JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
 from gearman import protocol
 

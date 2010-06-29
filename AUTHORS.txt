@@ -1,0 +1,18 @@
+python-gearman 2.x:
+========================================
+Primary authors:
+
+* Matthew Tai <mtai@yelp.com>
+
+python-gearman 1.x
+========================================
+Primary authors:
+
+* Samuel Stauffer <samuel@descolada.com>
+
+Contributors:
+
+* Justin Azoff
+* Kristopher <kris.tate@gmail.com>
+* Eric Sumner <eric@justin.tv>
+

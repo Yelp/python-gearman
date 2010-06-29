@@ -226,9 +226,11 @@ class GearmanConnectionManager(object):
         current_connection.send_data_to_socket()
 
     def handle_error(self, current_connection):
-        dead_handler    = self.connection_to_handler_map.pop(current_connection, None)
-        dead_connection = self.handler_to_connection_map.pop(dead_handler, None)
+        dead_handler = self.connection_to_handler_map.pop(current_connection, None)
+        if dead_handler:
+            dead_handler.on_io_error()
 
+        self.handler_to_connection_map.pop(dead_handler, None)
         current_connection.close()
 
     ##################################

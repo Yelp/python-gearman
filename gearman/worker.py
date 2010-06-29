@@ -164,7 +164,7 @@ class GearmanWorker(GearmanConnectionManager):
     def on_job_execute(self, current_job):
         try:
             function_callback = self.worker_abilities[current_job.task]
-            job_result = function_callback(current_job)
+            job_result = function_callback(self, current_job)
         except Exception:
             return self.on_job_exception(current_job, sys.exc_info())
 

@@ -1,5 +1,5 @@
 import collections
-from gearman.constants import PRIORITY_NONE, JOB_PENDING, JOB_QUEUED, JOB_FAILED, JOB_COMPLETE
+from gearman.constants import PRIORITY_NONE, JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ConnectionError
 
 class GearmanJob(object):
@@ -20,14 +20,14 @@ class GearmanJob(object):
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient to represent job states"""
-    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, max_retries=0):
+    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, max_attempts=1):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
         self.background = background
 
-        self.retries_attempted = 0
-        self.retries_max = max_retries
+        self.connection_attempts = 0
+        self.max_connection_attempts = max_attempts
 
         self.initialize_request()
 
@@ -46,9 +46,8 @@ class GearmanJobRequest(object):
         # Holds STATUS_REQ responses
         self.server_status = {}
 
-        self.state = JOB_PENDING
+        self.state = JOB_UNKNOWN
         self.timed_out = False
-        self.connection_failed = False
 
     def reset(self):
         self.initialize_request()
@@ -61,8 +60,12 @@ class GearmanJobRequest(object):
 
     @property
     def complete(self):
-        background_complete = bool(self.background and self.state in (JOB_QUEUED))
+        background_complete = bool(self.background and self.state in (JOB_CREATED))
         foreground_complete = bool(not self.background and self.state in (JOB_FAILED, JOB_COMPLETE))
 
         actually_complete = background_complete or foreground_complete
         return actually_complete
+
+    def __repr__(self):
+        formatted_representation = '<GearmanJobRequest task=%r, unique=%r, priority=%r, background=%r, state=%r, timed_out=%r>'
+        return formatted_representation % (self.job.task, self.job.unique, self.priority, self.background, self.state, self.timed_out)

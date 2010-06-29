@@ -13,6 +13,9 @@ class ProtocolError(GearmanError):
 class UnknownCommandError(GearmanError):
     pass
 
+class ExceededConnectionAttempts(GearmanError):
+    pass
+
 class InvalidClientState(GearmanError):
     pass
 

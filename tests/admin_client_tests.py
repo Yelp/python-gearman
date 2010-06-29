@@ -10,7 +10,7 @@ from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ,
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
 
-class MockGearmanAdminClient(MockGearmanConnectionManager, GearmanAdminClient):
+class MockGearmanAdminClient(GearmanAdminClient, MockGearmanConnectionManager):
     pass
 
 class CommandHandlerStateMachineTest(_GearmanAbstractTest):
