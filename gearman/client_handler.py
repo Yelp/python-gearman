@@ -54,7 +54,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
     ##################################################################
     def _assert_request_state(self, current_request, expected_state):
         if current_request.state != expected_state:
-            raise InvalidClientState('Expected handle (%s) to be in state %r, got %s' % (current_request.job.handle, expected_state, current_request.state))
+            raise InvalidClientState('Expected handle (%s) to be in state %r, got %r' % (current_request.job.handle, expected_state, current_request.state))
 
     def recv_job_created(self, job_handle):
         if not self.requests_awaiting_handles:

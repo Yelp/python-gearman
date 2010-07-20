@@ -4,6 +4,7 @@ import sys
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
+from gearman.errors import ConnectionError
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class GearmanWorker(GearmanConnectionManager):
 
         # Shuffle our connections after the poll timeout
         while continue_working:
-            worker_connections = self._get_worker_connections()
+            worker_connections = self.establish_worker_connections()
             continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
@@ -90,16 +91,18 @@ class GearmanWorker(GearmanConnectionManager):
     ###############################################################
     ## Methods to override when dealing with connection polling ##
     ##############################################################
-    def _get_worker_connections(self):
+    def establish_worker_connections(self):
         """Return a shuffled list of connections that are alive, and try to reconnect to dead connections if necessary."""
         self.randomized_connections = list(self.connection_list)
         random.shuffle(self.randomized_connections)
 
         output_connections = []
         for current_connection in self.randomized_connections:
-            self.attempt_connect(current_connection)
-            if current_connection.connected:
-                output_connections.append(current_connection)
+            try:
+                valid_connection = self.establish_connection(current_connection)
+                output_connections.append(valid_connection)
+            except ConnectionError:
+                pass
 
         return output_connections
 

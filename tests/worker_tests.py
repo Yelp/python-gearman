@@ -90,33 +90,31 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         self.assertEqual(self.connection_manager.worker_client_id, new_client_id)
         self.assertEqual(self.command_handler._client_id, new_client_id)
 
-    def test_mixed_worker_connections(self):
+    def test_establish_worker_connections(self):
         self.connection_manager.connection_list = []
         self.connection_manager.command_handlers = {}
 
         # Spin up a bunch of imaginary gearman connections
         good_connection = MockGearmanConnection()
-        good_connection._should_fail_on_bind = False
-        good_connection.connected = True
+        good_connection.connect()
+        good_connection._fail_on_bind = False
 
         failed_then_retried_connection = MockGearmanConnection()
-        failed_then_retried_connection._should_fail_on_bind = True
-        failed_then_retried_connection.connected = True
+        failed_then_retried_connection._fail_on_bind = False
 
         failed_connection = MockGearmanConnection()
-        failed_connection._should_fail_on_bind = True
-        failed_connection.connected = False
+        failed_connection._fail_on_bind = True
 
         # Register all our connections
         self.connection_manager.connection_list = [good_connection, failed_then_retried_connection, failed_connection]
 
         # The only alive connections should be the ones that ultimately be connection.connected
-        alive_connections = self.connection_manager._get_worker_connections()
+        alive_connections = self.connection_manager.establish_worker_connections()
         self.assertTrue(good_connection in alive_connections)
         self.assertTrue(failed_then_retried_connection in alive_connections)
         self.assertFalse(failed_connection in alive_connections)
 
-    def test_work_with_no_live_connections(self):
+    def test_establish_worker_connections_dead(self):
         self.connection_manager.connection_list = []
         self.connection_manager.command_handlers = {}
 
@@ -125,7 +123,7 @@ class WorkerTest(_GearmanAbstractWorkerTest):
 
         # We were started with a dead connection, make sure we bail again
         dead_connection = MockGearmanConnection()
-        dead_connection._should_fail_on_bind = True
+        dead_connection._fail_on_bind = True
         dead_connection.connected = False
         self.connection_manager.connection_list = [dead_connection]
 
@@ -147,7 +145,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
             self.connection_manager.register_task(task, None)
 
         # We were disconnected, connect and wipe pending commands
-        self.connection_manager.attempt_connect(self.connection)
+        self.connection_manager.establish_connection(self.connection)
 
         # When we attempt a new connection, make sure we get a new command handler
         self.assertNotEquals(self.command_handler, self.connection_manager.connection_to_handler_map[self.connection])
@@ -277,7 +275,7 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
     def test_worker_already_locked(self):
         other_connection = MockGearmanConnection()
         self.connection_manager.connection_list.append(other_connection)
-        self.connection_manager.attempt_connect(other_connection)
+        self.connection_manager.establish_connection(other_connection)
 
         other_handler = self.connection_manager.connection_to_handler_map[other_connection]
         other_handler.recv_command(GEARMAN_COMMAND_NOOP)

@@ -94,7 +94,7 @@ Client Examples
     # If we want to be able to send out Python objects, we can specify a data encoder
     # This will automatically convert byte strings <-> Python objects for ALL commands that have the 'data' field
     #
-    # See http://gearman.org/index.php?id=protocol for Client commands that send/receive 'opaque data'
+    # See http://gearman.org/index.php?id=protocol for client commands that send/receive 'opaque data'
     #
     import cPickle as pickle
     
@@ -145,7 +145,7 @@ Worker Examples
     # See http://gearman.org/index.php?id=protocol for Worker commands that send/receive 'opaque data'
     #
     import json # Or similarly styled library
-    class JSONDataEncoder(gearman.DataEncoder)
+    class JSONDataEncoder(gearman.DataEncoder):
         @classmethod
         def encode(cls, encodable_object):
             return json.dumps(encodable_object)

@@ -35,8 +35,8 @@ class GearmanConnection(object):
 
     def _reset_connection(self):
         """Reset the state of this connection"""
-        self.gearman_socket = None
         self.connected = False
+        self.gearman_socket = None
 
         self._is_client_side = None
         self._is_server_side = None
@@ -52,7 +52,7 @@ class GearmanConnection(object):
     def fileno(self):
         """Implements fileno() for use with select.select()"""
         if not self.gearman_socket:
-            raise ConnectionError('No socket set')
+            self.throw_exception(message='no socket set')
 
         return self.gearman_socket.fileno()
 
@@ -70,8 +70,12 @@ class GearmanConnection(object):
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        if self.connected:
-            return
+        try:
+            # If we're already connected, we should throw a ConnectionError exception
+            self.assert_connected()
+            self.throw_exception(message='connection already established')
+        except AssertionError:
+            pass
 
         self._reset_connection()
 
@@ -86,21 +90,20 @@ class GearmanConnection(object):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             client_socket.connect((self.gearman_host, self.gearman_port))
-        except socket.error, exc:
-            raise ConnectionError(str(exc))
+        except socket.error, socket_exception:
+            self.throw_exception(exception=socket_exception)
 
         self.bind_socket(client_socket)
 
     def bind_socket(self, current_socket):
         """Setup common options for all Gearman-related sockets"""
-        if self.gearman_socket is not None:
-            raise ConnectionError("Attempted to bind a socket on a connection that's already connected")
+        if self.gearman_socket:
+            self.throw_exception(message='socket already bound')
 
         current_socket.setblocking(0)
         current_socket.settimeout(0.0)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
         self.gearman_socket = current_socket
-
 
     def read_command(self):
         """Reads a single command from the command queue"""
@@ -128,23 +131,16 @@ class GearmanConnection(object):
 
     def read_data_from_socket(self, bytes_to_read=4096):
         """Reads data from socket --> buffer"""
-        assert self.connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
+        self.assert_connected()
 
         recv_buffer = ''
         try:
             recv_buffer = self.gearman_socket.recv(bytes_to_read)
-        except socket.error, exc:
-            if exc.args[0] == errno.ECONNRESET:
-                raise ConnectionError('connection reset died')
-            elif exc.args[0] == errno.EINTR:
-                raise ConnectionError('function interrupted')
-
-            # Gearman API users shouldn't get socket.error's
-            # If you run into this, please forward along the error to the __author__
-            raise
+        except socket.error, socket_exception:
+            self.throw_exception(exception=socket_exception)
 
         if len(recv_buffer) == 0:
-            raise ConnectionError('remote disconnected')
+            self.throw_exception(message='remote disconnected')
 
         self._incoming_buffer += recv_buffer
         return len(self._incoming_buffer)
@@ -191,24 +187,18 @@ class GearmanConnection(object):
 
         Returns remaining size of the output buffer
         """
-        assert self.connected and self.gearman_socket, "Cannot receive data if we don't have a connection"
+        self.assert_connected()
 
         if not self._outgoing_buffer:
             return 0
 
         try:
             bytes_sent = self.gearman_socket.send(self._outgoing_buffer)
-        except socket.error, exc:
-            if exc.args[0] == errno.EWOULDBLOCK:
-                return len(self._outgoing_buffer)
-            elif exc.args[0] == errno.ECONNRESET:
-                raise ConnectionError('connection reset died')
-            # We should never get here... Gearman API users should never get socket.error's
-            # If you run into this, please forward along the error to the __author__
-            raise
+        except socket.error, socket_exception:
+            self.throw_exception(exception=socket_exception)
 
         if bytes_sent == 0:
-            raise ConnectionError('remote disconnected')
+            self.throw_exception(message='remote disconnected')
 
         self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
         return len(self._outgoing_buffer)
@@ -237,6 +227,24 @@ class GearmanConnection(object):
             pass
 
         self._reset_connection()
+
+    def assert_connected(self):
+        assert self.connected and self.gearman_socket, 'disconnected or missing socket'
+
+    def throw_exception(self, message=None, exception=None):
+        # Mark us as disconnected but do NOT call self._reset_connection()
+        # Allows catchers of ConnectionError a chance to inspect the last state of this connection
+        self.connected = False
+
+        if exception:
+            if exception.args[0] == errno.EINTR:
+                message = 'function interrupted'
+            elif exception.args[0] == errno.ECONNRESET:
+                message = 'connection reset died'
+            else:
+                message = str(exception)
+
+        raise ConnectionError(message)
 
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s>' %

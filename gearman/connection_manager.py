@@ -86,27 +86,26 @@ class GearmanConnectionManager(object):
 
         return client_connection
 
-    def attempt_connect(self, current_connection):
-        """Attempt to connect... if not previously connected, create a new CommandHandler to manage this connection's state"""
+    def establish_connection(self, current_connection):
+        """Attempt to connect... if not previously connected, create a new CommandHandler to manage this connection's state
+        !NOTE! This function can throw a ConnectionError which deriving ConnectionManagers should catch
+        """
         assert current_connection in self.connection_list, "Unknown connection - %r" % current_connection
-        was_connected = current_connection.connected
+        if current_connection.connected:
+            return current_connection
 
-        try:
-            current_connection.connect()
-        except ConnectionError:
-            return None
+        # !NOTE! May throw a ConnectionError
+        current_connection.connect()
 
-        if not was_connected:
-            # Initiate a new command handler every time we start a new connection
-            current_handler = self.command_handler_class(connection_manager=self)
+        # Initiate a new command handler every time we start a new connection
+        current_handler = self.command_handler_class(connection_manager=self)
 
-            # Handler to connection map for CommandHandler -> Connection interactions
-            # Connection to handler map for Connection -> CommandHandler interactions
-            self.handler_to_connection_map[current_handler] = current_connection
-            self.connection_to_handler_map[current_connection] = current_handler
+        # Handler to connection map for CommandHandler -> Connection interactions
+        # Connection to handler map for Connection -> CommandHandler interactions
+        self.handler_to_connection_map[current_handler] = current_connection
+        self.connection_to_handler_map[current_connection] = current_handler
 
-            current_handler.initial_state(**self.handler_initial_state)
-
+        current_handler.initial_state(**self.handler_initial_state)
         return current_connection
 
     def poll_connections_once(self, submitted_connections, timeout=None):

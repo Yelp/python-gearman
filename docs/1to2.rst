@@ -18,7 +18,7 @@ Worker
     class WorkerHook(object):
         def start(self, current_job):
             print "Job started"
-        
+
         def fail(self, current_job, exc_info):
             print "Job failed, can't stop last gasp GEARMAN_COMMAND_WORK_FAIL"
 

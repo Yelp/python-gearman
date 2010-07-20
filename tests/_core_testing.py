@@ -17,24 +17,21 @@ class MockGearmanConnection(GearmanConnection):
         host = host or '__testing_host__'
         super(MockGearmanConnection, self).__init__(host=host, port=port)
 
-        self._should_fail_on_connect = False
-        self._should_fail_on_bind = False
-
-    def connect(self):
-        if self._should_fail_on_connect:
-            raise ConnectionError('Mock connect failure')
-
-        super(MockGearmanConnection, self).connect()
+        self._fail_on_bind = False
+        self._fail_on_read = False
+        self._fail_on_write = False
 
     def bind_client_socket(self):
-        if self._should_fail_on_bind:
-            raise ConnectionError('Mock bind failure')
+        if self._fail_on_bind:
+            self.throw_exception(message='mock bind failure')
 
     def read_data_from_socket(self):
-        pass
+        if self._fail_on_read:
+            self.throw_exception(message='mock read failure')
 
     def send_data_to_socket(self):
-        pass
+        if self._fail_on_write:
+            self.throw_exception(message='mock write failure')
 
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s> (%s)' %
@@ -44,10 +41,6 @@ class MockGearmanConnectionManager(GearmanConnectionManager):
     """Handy mock client base to test Worker/Client/Abstract ClientBases"""
     def poll_connections_once(self, connections, timeout=None):
         return set(), set(), set()
-
-    def handle_error(self, gearman_connection):
-        pass
-
 
 class _GearmanAbstractTest(unittest.TestCase):
     connection_class = MockGearmanConnection
@@ -74,7 +67,7 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.connection_manager.connection_list = [self.connection]
 
     def setup_command_handler(self):
-        self.connection_manager.attempt_connect(self.connection)
+        self.connection_manager.establish_connection(self.connection)
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
@@ -90,7 +83,6 @@ class _GearmanAbstractTest(unittest.TestCase):
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
         self.assertEqual(current_request.state, JOB_UNKNOWN)
-        current_request.state = JOB_CREATED
 
         return current_request
 

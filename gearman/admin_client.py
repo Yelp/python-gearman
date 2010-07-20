@@ -5,7 +5,7 @@ from gearman import util
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
-from gearman.errors import InvalidAdminClientState, ServerUnavailable
+from gearman.errors import ConnectionError, InvalidAdminClientState, ServerUnavailable
 from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
 
@@ -25,13 +25,15 @@ class GearmanAdminClient(GearmanConnectionManager):
 
     def __init__(self, host_list=None, timeout=DEFAULT_ADMIN_CLIENT_TIMEOUT):
         super(GearmanAdminClient, self).__init__(host_list=host_list)
-        self.admin_client_timeout = timeout
+        self.poll_timeout = timeout
 
         self.current_connection = util.unlist(self.connection_list)
         self.current_handler = None
 
-    def establish_connection(self):
-        if not self.attempt_connect(self.current_connection):
+    def establish_admin_connection(self):
+        try:
+            self.establish_connection(self.current_connection)
+        except ConnectionError:
             raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
         self.current_handler = self.connection_to_handler_map[self.current_connection]
@@ -40,7 +42,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         """Sends off a basic debugging string to check the responsiveness of the Gearman server"""
         start_time = time.time()
 
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_echo_request(ECHO_STRING)
         server_response = self.wait_until_server_responds(GEARMAN_COMMAND_ECHO_REQ)
         if server_response != ECHO_STRING:
@@ -50,7 +52,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         return elapsed_time
 
     def send_maxqueue(self, task, max_size):
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, task, max_size))
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MAXQUEUE)
 
@@ -59,22 +61,22 @@ class GearmanAdminClient(GearmanConnectionManager):
         if graceful:
             actual_command += ' graceful'
 
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_text_command(actual_command)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHUTDOWN)
 
     def get_status(self):
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_STATUS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_STATUS)
 
     def get_version(self):
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_VERSION)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_VERSION)
 
     def get_workers(self):
-        self.establish_connection()
+        self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_WORKERS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_WORKERS)
 
@@ -83,7 +85,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         def continue_while_no_response(any_activity):
             return (not current_handler.response_ready)
 
-        self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.admin_client_timeout)
+        self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.poll_timeout)
         if not self.current_handler.response_ready:
             raise InvalidAdminClientState('Admin client timed out after %f second(s)' % self.admin_client_timeout)
 
