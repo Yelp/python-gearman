@@ -70,12 +70,8 @@ class GearmanConnection(object):
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        try:
-            # If we're already connected, we should throw a ConnectionError exception
-            self.assert_connected()
+        if self.connected:
             self.throw_exception(message='connection already established')
-        except AssertionError:
-            pass
 
         self._reset_connection()
 
@@ -131,7 +127,8 @@ class GearmanConnection(object):
 
     def read_data_from_socket(self, bytes_to_read=4096):
         """Reads data from socket --> buffer"""
-        self.assert_connected()
+        if not self.connected:
+            self.throw_exception(message='disconnected')
 
         recv_buffer = ''
         try:
@@ -187,7 +184,8 @@ class GearmanConnection(object):
 
         Returns remaining size of the output buffer
         """
-        self.assert_connected()
+        if not self.connected:
+            self.throw_exception(message='disconnected')
 
         if not self._outgoing_buffer:
             return 0
@@ -228,23 +226,16 @@ class GearmanConnection(object):
 
         self._reset_connection()
 
-    def assert_connected(self):
-        assert self.connected and self.gearman_socket, 'disconnected or missing socket'
-
     def throw_exception(self, message=None, exception=None):
         # Mark us as disconnected but do NOT call self._reset_connection()
         # Allows catchers of ConnectionError a chance to inspect the last state of this connection
         self.connected = False
 
         if exception:
-            if exception.args[0] == errno.EINTR:
-                message = 'function interrupted'
-            elif exception.args[0] == errno.ECONNRESET:
-                message = 'connection reset died'
-            else:
-                message = str(exception)
+            message = repr(exception)
 
-        raise ConnectionError(message)
+        rewritten_message = "<%s:%d> %s" % (self.gearman_host, self.gearman_port, message)
+        raise ConnectionError(rewritten_message)
 
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s>' %

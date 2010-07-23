@@ -61,7 +61,7 @@ Client Examples
     time.sleep(1.0)
     
     # Wait at most 5 seconds before timing out incomplete requests
-    completed_requests = gm_client.wait_until_jobs_completed(submitted_requests, timeout=5.0)
+    completed_requests = gm_client.wait_until_jobs_completed(submitted_requests, poll_timeout=5.0)
     for completed_job_request in completed_results:
         check_request_status(completed_job_request)
 
@@ -79,12 +79,12 @@ Client Examples
     assert all(request.state == JOB_UNKNOWN for request in failed_requests), "All connections didn't fail!"
     
     # Let's pretend our assigned requests' don't fail but some simply timeout
-    retried_connection_failed_requests = gm_client.submit_multiple_requests(failed_requests, wait_until_complete=True, timeout=1.0)
+    retried_connection_failed_requests = gm_client.submit_multiple_requests(failed_requests, wait_until_complete=True, poll_timeout=1.0)
     
     timed_out_requests = [job_request for job_request in retried_requests if job_request.timed_out]
     
     # For our timed out requests, lets wait a little longer until they're complete
-    retried_timed_out_requests = gm_client.submit_multiple_requests(timed_out_requests, wait_until_complete=True, timeout=4.0)
+    retried_timed_out_requests = gm_client.submit_multiple_requests(timed_out_requests, wait_until_complete=True, poll_timeout=4.0)
 
 5) Extending the client to send/receive Python objects (not just byte strings)
 ------------------------------------------------------------------------------
