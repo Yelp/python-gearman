@@ -3,6 +3,7 @@ import errno
 import logging
 import socket
 import struct
+import time
 
 from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
 from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
@@ -23,6 +24,8 @@ class GearmanConnection(object):
 
     All I/O and buffering should be done in this class
     """
+    connect_cooldown_seconds = 1.0
+
     def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = host
@@ -37,6 +40,8 @@ class GearmanConnection(object):
         """Reset the state of this connection"""
         self.connected = False
         self.gearman_socket = None
+
+        self.allowed_connect_time = 0.0
 
         self._is_client_side = None
         self._is_server_side = None
@@ -72,6 +77,12 @@ class GearmanConnection(object):
         """Connect to the server. Raise ConnectionError if connection fails."""
         if self.connected:
             self.throw_exception(message='connection already established')
+
+        current_time = time.time()
+        if current_time < self.allowed_connect_time:
+            self.throw_exception(message='attempted to connect before required cooldown')
+
+        self.allowed_connect_time = current_time + self.connect_cooldown_seconds
 
         self._reset_connection()
 
