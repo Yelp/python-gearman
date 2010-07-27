@@ -23,9 +23,9 @@ class GearmanAdminClient(GearmanConnectionManager):
     """
     command_handler_class = GearmanAdminClientCommandHandler
 
-    def __init__(self, host_list=None, timeout=DEFAULT_ADMIN_CLIENT_TIMEOUT):
+    def __init__(self, host_list=None, poll_timeout=DEFAULT_ADMIN_CLIENT_TIMEOUT):
         super(GearmanAdminClient, self).__init__(host_list=host_list)
-        self.poll_timeout = timeout
+        self.poll_timeout = poll_timeout
 
         self.current_connection = util.unlist(self.connection_list)
         self.current_handler = None
@@ -87,7 +87,7 @@ class GearmanAdminClient(GearmanConnectionManager):
 
         self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.poll_timeout)
         if not self.current_handler.response_ready:
-            raise InvalidAdminClientState('Admin client timed out after %f second(s)' % self.admin_client_timeout)
+            raise InvalidAdminClientState('Admin client timed out after %f second(s)' % self.poll_timeout)
 
         cmd_type, cmd_resp = self.current_handler.pop_response()
         if cmd_type != expected_type:
