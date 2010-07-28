@@ -4,6 +4,10 @@ Primary authors:
 
 * Matthew Tai <mtai@yelp.com>
 
+Contributors:
+
+* Julian Krause <juliank@yelp.com>
+
 python-gearman 1.x
 ========================================
 Primary authors:
