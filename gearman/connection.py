@@ -1,5 +1,4 @@
 import collections
-import errno
 import logging
 import socket
 import struct

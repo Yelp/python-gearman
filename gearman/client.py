@@ -2,15 +2,13 @@ import collections
 import logging
 import os
 import random
-import time
 
 import gearman.util
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.client_handler import GearmanClientCommandHandler
 from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH, JOB_UNKNOWN, JOB_PENDING
-from gearman.errors import ConnectionError, ExceededConnectionAttempts, InvalidClientState, ServerUnavailable
-from gearman.job import GearmanJob, GearmanJobRequest
+from gearman.errors import ConnectionError, ExceededConnectionAttempts, ServerUnavailable
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -146,7 +144,8 @@ class GearmanClient(GearmanConnectionManager):
         """Go into a select loop until we received statuses on all our requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         def is_status_not_updated(current_request):
-            return bool(current_request.server_status.get('time_received') == current_request.server_status.get('last_time_received'))
+            current_status = current_request.server_status
+            return bool(current_status.get('time_received') == current_status.get('last_time_received'))
 
         # Poll to make sure we send out our request for a status update
         def continue_while_status_not_updated(any_activity):
@@ -175,8 +174,9 @@ class GearmanClient(GearmanConnectionManager):
 
         current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
 
+        initial_priority = job_info.get('priority', PRIORITY_NONE)
         max_attempts = max_retries + 1
-        current_request = self.job_request_class(current_job, initial_priority=job_info.get('priority', PRIORITY_NONE), background=background, max_attempts=max_attempts)
+        current_request = self.job_request_class(current_job, initial_priority=initial_priority, background=background, max_attempts=max_attempts)
         return current_request
 
     def establish_request_connection(self, current_request):

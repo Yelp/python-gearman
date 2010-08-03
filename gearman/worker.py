@@ -70,7 +70,7 @@ class GearmanWorker(GearmanConnectionManager):
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely working tasks from all connections."""
         continue_working = True
-        live_connections = []
+        worker_connections = []
 
         def continue_while_connections_alive(any_activity):
             return self.after_poll(any_activity)
@@ -81,7 +81,7 @@ class GearmanWorker(GearmanConnectionManager):
             continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
-        for current_connection in live_connections:
+        for current_connection in worker_connections:
             current_connection.close()
 
     def shutdown(self):

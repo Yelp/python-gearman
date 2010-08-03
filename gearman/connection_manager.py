@@ -1,13 +1,11 @@
 import logging
 import select as select_lib
-import time
 
 import gearman.util
 from gearman.connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
-from gearman.protocol import get_command_name
 
 gearman_logger = logging.getLogger(__name__)
 

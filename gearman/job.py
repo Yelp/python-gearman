@@ -1,6 +1,5 @@
 import collections
 from gearman.constants import PRIORITY_NONE, JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
-from gearman.errors import ConnectionError
 
 class GearmanJob(object):
     """Represents the basics of a job... used in GearmanClient / GearmanWorker to represent job states"""
