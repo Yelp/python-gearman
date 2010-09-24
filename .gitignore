@@ -1,6 +1,7 @@
 # Ignore temporary files left behind by TextMate
 ._*
 docs/._*
+docs/_build
 gearman/._*
 
 # Ignore compiled python files

@@ -1,17 +1,49 @@
-==============
-python-gearman
-==============
+==============================================
+Transitioning from python-gearman 1.x to 2.0.0
+==============================================
 
-Description
-===========
-Python Gearman API - Client, worker, and admin client interfaces
+Client (single task)
+====================
+::
 
-For information on the Gearman protocol and a C Gearman server, see http://www.gearman.org/
+    # python-gearman 1.x
+    old_client = gearman.GearmanClient(['localhost:4730'])
+    old_result = old_client.do_task(Task("echo", "foo"))
 
-python-gearman 1.x to 2.x migration
-===================================
+
+    # python-gearman 2.x
+    new_client = gearman.GearmanClient(['localhost:4730'])
+    current_request = new_client.submit_job('echo', 'foo')
+    new_result = current_request.result
+
+Client (multiple tasks)
+=======================
+::
+
+    # python-gearman 1.x
+    old_client = gearman.GearmanClient(['localhost:4730'])
+    ts = Taskset([
+        Task(func="echo", arg="foo"),
+        Task(func="echo", arg="bar"),
+    ])
+    old_client.do_taskset(ts)
+    for task in ts.values():
+        assert task.result == task.arg
+
+
+    # python-gearman 2.x
+    new_client = gearman.GearmanClient(['localhost:4730'])
+    new_jobs = [
+        dict(task='echo', data='foo'),
+        dict(task='echo', data='bar'),
+    ]
+
+    completed_requests = new_client.submit_multiple_jobs(new_jobs)
+    for current_request in completed_requests:
+        assert current_request.result == current_request.job.data
+
 Worker
-------
+======
 ::
 
     # python-gearman 1.x
@@ -57,43 +89,3 @@ Worker
     new_worker = CustomGearmanWorker(['localhost:4730'])
     new_worker.register_task("echo", task_callback)
     new_worker.work()
-
-Client (single task)
---------------------
-::
-
-    # python-gearman 1.x
-    old_client = gearman.GearmanClient(['localhost:4730'])
-    old_result = old_client.do_task(Task("echo", "foo"))
-
-
-    # python-gearman 2.x
-    new_client = gearman.GearmanClient(['localhost:4730'])
-    current_request = new_client.submit_job('echo', 'foo')
-    new_result = current_request.result
-
-Client (multiple tasks)
------------------------
-::
-
-    # python-gearman 1.x
-    old_client = gearman.GearmanClient(['localhost:4730'])
-    ts = Taskset([
-        Task(func="echo", arg="foo"),
-        Task(func="echo", arg="bar"),
-    ])
-    old_client.do_taskset(ts)
-    for task in ts.values():
-        assert task.result == task.arg
-
-
-    # python-gearman 2.x
-    new_client = gearman.GearmanClient(['localhost:4730'])
-    new_jobs = [
-        dict(task='echo', data='foo'),
-        dict(task='echo', data='bar'),
-    ]
-
-    completed_requests = new_client.submit_multiple_jobs(new_jobs)
-    for current_request in completed_requests:
-        assert current_request.result == current_request.job.data

@@ -13,9 +13,9 @@ POLL_TIMEOUT_IN_SECONDS = 60.0
 class GearmanWorker(GearmanConnectionManager):
     """GearmanWorkers manage connections and CommandHandlers
 
-    This is the public facing gearman interface that most users should be instantiating
-    All I/O will be handled by the GearmanWorker
-    All state machine operations are handled on the CommandHandler
+    * Public facing gearman interface that most users should be instantiating
+    * All I/O will be handled by the GearmanWorker
+    * All state machine operations are handled on the CommandHandler
     """
     command_handler_class = GearmanWorkerCommandHandler
 
@@ -38,7 +38,11 @@ class GearmanWorker(GearmanConnectionManager):
     ##### Public methods for general GearmanWorker use #####
     ########################################################
     def register_task(self, task, callback_function):
-        """Register a function with gearman"""
+        """Register a function with this worker
+
+        def function_callback(calling_gearman_worker, current_job):
+            return current_job.data
+        """
         self.worker_abilities[task] = callback_function
         self._update_initial_state()
 
@@ -48,7 +52,7 @@ class GearmanWorker(GearmanConnectionManager):
         return task
 
     def unregister_task(self, task):
-        """Unregister a function with gearman"""
+        """Unregister a function with worker"""
         self.worker_abilities.pop(task, None)
         self._update_initial_state()
 
@@ -58,7 +62,7 @@ class GearmanWorker(GearmanConnectionManager):
         return task
 
     def set_client_id(self, client_id):
-        """Set a pretty client ID"""
+        """Notify the server that we should be identified as this client ID"""
         self.worker_client_id = client_id
         self._update_initial_state()
 
@@ -68,7 +72,7 @@ class GearmanWorker(GearmanConnectionManager):
         return client_id
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
-        """Loop indefinitely working tasks from all connections."""
+        """Loop indefinitely, complete tasks from all connections."""
         continue_working = True
         worker_connections = []
 
@@ -127,6 +131,7 @@ class GearmanWorker(GearmanConnectionManager):
         return self.connection_to_handler_map[current_job.connection]
 
     def send_job_status(self, current_job, numerator, denominator):
+        """Send a Gearman JOB_STATUS update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_status(current_job, numerator=numerator, denominator=denominator)
 
@@ -149,10 +154,12 @@ class GearmanWorker(GearmanConnectionManager):
         current_handler.send_job_failure(current_job)
 
     def send_job_data(self, current_job, data):
+        """Send a Gearman JOB_DATA update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_data(current_job, data=data)
 
     def send_job_warning(self, current_job, data):
+        """Send a Gearman JOB_WARNING update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_warning(current_job, data=data)
 

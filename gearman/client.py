@@ -18,8 +18,6 @@ RANDOM_UNIQUE_BYTES = 16
 class GearmanClient(GearmanConnectionManager):
     """
     GearmanClient :: Interface to submit jobs to a Gearman server
-
-    Submits a single/multiple jobs to a gearman server
     """
     command_handler_class = GearmanClientCommandHandler
 

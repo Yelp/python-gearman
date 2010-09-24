@@ -40,7 +40,7 @@ class GearmanAdminClient(GearmanConnectionManager):
         self.current_handler = self.connection_to_handler_map[self.current_connection]
 
     def ping_server(self):
-        """Sends off a basic debugging string to check the responsiveness of the Gearman server"""
+        """Sends off a debugging string to execute an application ping on the Gearman server"""
         start_time = time.time()
 
         self.establish_admin_connection()
@@ -53,11 +53,14 @@ class GearmanAdminClient(GearmanConnectionManager):
         return elapsed_time
 
     def send_maxqueue(self, task, max_size):
+        """Sends a request to change the maximum queue size for a given task"""
+
         self.establish_admin_connection()
         self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, task, max_size))
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MAXQUEUE)
 
     def send_shutdown(self, graceful=True):
+        """Sends a request to shutdown the connected gearman server"""
         actual_command = GEARMAN_SERVER_COMMAND_SHUTDOWN
         if graceful:
             actual_command += ' graceful'
@@ -67,16 +70,19 @@ class GearmanAdminClient(GearmanConnectionManager):
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHUTDOWN)
 
     def get_status(self):
+        """Retrieves a list of all registered tasks and reports how many items/workers are in the queue"""
         self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_STATUS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_STATUS)
 
     def get_version(self):
+        """Retrieves the version number of the Gearman server"""
         self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_VERSION)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_VERSION)
 
     def get_workers(self):
+        """Retrieves a list of workers and reports what tasks they're operating on"""
         self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_WORKERS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_WORKERS)
