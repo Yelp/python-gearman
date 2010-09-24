@@ -3,6 +3,7 @@ python-gearman 2.x:
 Primary authors:
 
 * Matthew Tai <mtai@yelp.com>
+* Eskil Olsen <eskil@yelp.com>
 
 Contributors:
 
