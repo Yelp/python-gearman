@@ -1,5 +1,4 @@
 import unittest
-import collections
 
 from gearman.admin_client import GearmanAdminClient, ECHO_STRING
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler

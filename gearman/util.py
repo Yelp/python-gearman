@@ -5,6 +5,7 @@ Gearman Client Utils
 import errno
 import select as select_lib
 import time
+
 from gearman.constants import DEFAULT_GEARMAN_PORT
 
 class Stopwatch(object):
