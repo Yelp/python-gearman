@@ -11,7 +11,7 @@ setup(
     author_email = 'mtai@yelp.com',
     description = 'Gearman API - Client, worker, and admin client interfaces',
     long_description=open('README.rst').read(),
-    url = 'http://github.com/mtai/python-gearman/',
+    url = 'http://github.com/Yelp/python-gearman/',
     packages = ['gearman'],
     license='LICENSE.txt',
     classifiers = [
