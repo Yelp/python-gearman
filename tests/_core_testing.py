@@ -21,7 +21,7 @@ class MockGearmanConnection(GearmanConnection):
         self._fail_on_read = False
         self._fail_on_write = False
 
-    def bind_client_socket(self):
+    def _create_client_socket(self):
         if self._fail_on_bind:
             self.throw_exception(message='mock bind failure')
 

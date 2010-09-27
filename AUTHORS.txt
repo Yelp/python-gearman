@@ -3,11 +3,11 @@ python-gearman 2.x:
 Primary authors:
 
 * Matthew Tai <mtai@yelp.com>
-* Eskil Olsen <eskil@yelp.com>
 
 Contributors:
 
-* Julian Krause <juliank@yelp.com>
+* Eskil Olsen <eskil@yelp.com> :: Connection fixes
+* Julian Krause <juliank@yelp.com> :: Architectural design
 
 python-gearman 1.x
 ========================================
