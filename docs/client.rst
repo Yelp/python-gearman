@@ -5,7 +5,7 @@
 
 Function available to all examples::
 
-    def check_request_status(job_request)
+    def check_request_status(job_request):
         if job_request.complete:
             print "Job %s finished!  Result: %s - %s" % (job_request.job.unique, job_request.state, job_request.result)
         elif job_request.timed_out:
@@ -54,7 +54,7 @@ Submitting jobs
 
         # Wait at most 5 seconds before timing out incomplete requests
         completed_requests = gm_client.wait_until_jobs_completed(submitted_requests, poll_timeout=5.0)
-        for completed_job_request in completed_results:
+        for completed_job_request in completed_requests:
             check_request_status(completed_job_request)
 
 
@@ -93,27 +93,28 @@ Extending the client
 --------------------
 .. autoattribute:: GearmanClient.data_encoder
 
-    Send/receive Python objects (not just byte strings)::
+Send/receive Python objects (not just byte strings)::
 
-        # By default, GearmanClient's can only send off byte-strings
-        # If we want to be able to send out Python objects, we can specify a data encoder
-        # This will automatically convert byte strings <-> Python objects for ALL commands that have the 'data' field
-        #
-        # See http://gearman.org/index.php?id=protocol for client commands that send/receive 'opaque data'
-        #
-        import cPickle as pickle
+    # By default, GearmanClient's can only send off byte-strings
+    # If we want to be able to send out Python objects, we can specify a data encoder
+    # This will automatically convert byte strings <-> Python objects for ALL commands that have the 'data' field
+    #
+    # See http://gearman.org/index.php?id=protocol for client commands that send/receive 'opaque data'
+    import pickle
 
-        class PickleDataEncoder(gearman.DataEncoder)
-            @classmethod
-            def encode(cls, encodable_object):
-                return pickle.dumps(encodable_object)
+    class PickleDataEncoder(gearman.DataEncoder):
+        @classmethod
+        def encode(cls, encodable_object):
+            return pickle.dumps(encodable_object)
 
-            @classmethod
-            def decode(cls, decodable_string):
-                return pickle.loads(decodable_string)
+        @classmethod
+        def decode(cls, decodable_string):
+            return pickle.loads(decodable_string)
 
-        class PickleExampleClient(gearman.GearmanClient):
-            data_encoder = PickleDataEncoder
+    class PickleExampleClient(gearman.GearmanClient):
+        data_encoder = PickleDataEncoder
 
-        gm_client = PickleExampleClient(['localhost:4730'])
-        gm_client.submit_job("task_name", <Python object to be pickled>)
+    my_python_object = {'hello': 'there'}
+
+    gm_client = PickleExampleClient(['localhost:4730'])
+    gm_client.submit_job("task_name", my_python_object)

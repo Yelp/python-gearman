@@ -4,8 +4,9 @@ Primary authors:
 
 * Matthew Tai <mtai@yelp.com>
 
-Contributors:
+Contributors (in order of contribution, latest first):
 
+* Khaled alHabache <khellls@gmail.com> :: python 2.4 backward compatibility
 * Eskil Olsen <eskil@yelp.com> :: Connection fixes
 * Julian Krause <juliank@yelp.com> :: Architectural design
 

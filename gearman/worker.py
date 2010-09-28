@@ -11,11 +11,8 @@ gearman_logger = logging.getLogger(__name__)
 POLL_TIMEOUT_IN_SECONDS = 60.0
 
 class GearmanWorker(GearmanConnectionManager):
-    """GearmanWorkers manage connections and CommandHandlers
-
-    * Public facing gearman interface that most users should be instantiating
-    * All I/O will be handled by the GearmanWorker
-    * All state machine operations are handled on the CommandHandler
+    """
+    GearmanWorker :: Interface to accept jobs from a Gearman server
     """
     command_handler_class = GearmanWorkerCommandHandler
 

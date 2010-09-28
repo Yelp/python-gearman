@@ -1,0 +1,4 @@
+Requested features (contributions welcome)
+==========================================
+* Update ConnectionManager code to play well with Twisted
+* Update Worker to handle multiple jobs at once instead of processing one at a time

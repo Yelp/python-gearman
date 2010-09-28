@@ -16,7 +16,8 @@ ECHO_STRING = "ping? pong!"
 DEFAULT_ADMIN_CLIENT_TIMEOUT = 10.0
 
 class GearmanAdminClient(GearmanConnectionManager):
-    """Connects to a single server and sends TEXT based administrative commands.
+    """GearmanAdminClient :: Interface to send/receive administrative commands to a Gearman server
+
     This client acts as a BLOCKING client and each call will poll until it receives a satisfactory server response
 
     http://gearman.org/index.php?id=protocol

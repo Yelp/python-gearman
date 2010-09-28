@@ -63,7 +63,7 @@ Tracking job progress
 ^^^^^^^^^^^^^^^^^^^^^
 .. attribute:: GearmanJobRequest.result
 
-    :const:`binary` - Job's returned binary payload
+    :const:`binary` - Job's returned binary payload - Populated if and only if JOB_COMPLETE
 
 .. attribute:: GearmanJobRequest.exception
 
@@ -87,7 +87,7 @@ Tracking job progress
 
 Tracking in-flight job updates
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Certain GearmanJob's may send back data prior to actually completing.  :const:`GearmanClient` uses these queues to keep track of what/when we received certain updates.k
+Certain GearmanJob's may send back data prior to actually completing.  :const:`GearmanClient` uses these queues to keep track of what/when we received certain updates.
 
 .. attribute:: GearmanJobRequest.warning_updates
 
