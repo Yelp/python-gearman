@@ -94,8 +94,8 @@ class GearmanConnection(object):
     def _create_client_socket(self):
         """Creates a client side socket and subsequently binds/configures our socket options"""
         try:
-			client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			client_socket.connect((self.gearman_host, self.gearman_port))
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((self.gearman_host, self.gearman_port))
         except socket.error, socket_exception:
             self.throw_exception(exception=socket_exception)
 
