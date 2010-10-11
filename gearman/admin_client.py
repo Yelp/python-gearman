@@ -30,21 +30,29 @@ class GearmanAdminClient(GearmanConnectionManager):
         self.poll_timeout = poll_timeout
 
         self.current_connection = util.unlist(self.connection_list)
-        self.current_handler = None
-
-    def establish_admin_connection(self):
-        try:
-            self.establish_connection(self.current_connection)
-        except ConnectionError:
-            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
-
         self.current_handler = self.connection_to_handler_map[self.current_connection]
+
+    def wait_until_connection_established(self, poll_timeout=None):
+        # Poll to make sure we send out our request for a status update
+        def continue_while_not_connected(any_activity):
+            already_connected = False
+            for current_connection in self.connection_list:
+                if current_connection.connected:
+                    already_connected = True
+                elif not current_connection.connecting:
+                    self.establish_connection(current_connection)
+
+            return bool(not already_connected)
+
+        self.poll_connections_until_stopped(self.connection_list, continue_while_not_connected, timeout=poll_timeout)
+        if not any(current_connection.connected for current_connection in self.connection_list):
+            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_list)
 
     def ping_server(self):
         """Sends off a debugging string to execute an application ping on the Gearman server"""
         start_time = time.time()
 
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_echo_request(ECHO_STRING)
         server_response = self.wait_until_server_responds(GEARMAN_COMMAND_ECHO_REQ)
         if server_response != ECHO_STRING:
@@ -56,7 +64,7 @@ class GearmanAdminClient(GearmanConnectionManager):
     def send_maxqueue(self, task, max_size):
         """Sends a request to change the maximum queue size for a given task"""
 
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_text_command('%s %s %s' % (GEARMAN_SERVER_COMMAND_MAXQUEUE, task, max_size))
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MAXQUEUE)
 
@@ -66,25 +74,25 @@ class GearmanAdminClient(GearmanConnectionManager):
         if graceful:
             actual_command += ' graceful'
 
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_text_command(actual_command)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHUTDOWN)
 
     def get_status(self):
         """Retrieves a list of all registered tasks and reports how many items/workers are in the queue"""
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_STATUS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_STATUS)
 
     def get_version(self):
         """Retrieves the version number of the Gearman server"""
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_VERSION)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_VERSION)
 
     def get_workers(self):
         """Retrieves a list of workers and reports what tasks they're operating on"""
-        self.establish_admin_connection()
+        self.wait_until_connection_established(poll_timeout=self.poll_timeout)
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_WORKERS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_WORKERS)
 

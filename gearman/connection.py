@@ -1,4 +1,5 @@
 import collections
+import errno
 import logging
 import socket
 import struct
@@ -10,6 +11,12 @@ from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_CO
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
 gearman_logger = logging.getLogger(__name__)
+
+ERRNO_DISCONNECTED = -1
+
+STATE_DISCONNECTED = 'disconnected'
+STATE_CONNECTING = 'connecting'
+STATE_CONNECTED = 'connected'
 
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
@@ -33,13 +40,13 @@ class GearmanConnection(object):
         if host is None:
             raise ServerUnavailable("No host specified")
 
+        self.gearman_socket = None
+        self._socket_state = STATE_DISCONNECTED
+
         self._reset_connection()
 
     def _reset_connection(self):
         """Reset the state of this connection"""
-        self.connected = False
-        self.gearman_socket = None
-
         self.allowed_connect_time = 0.0
 
         self._is_client_side = None
@@ -66,7 +73,9 @@ class GearmanConnection(object):
 
     def writable(self):
         """Returns True if we have data to write"""
-        return self.connected and bool(self._outgoing_commands or self._outgoing_buffer)
+        connected_and_pending_writes = self.connected and bool(self._outgoing_commands or self._outgoing_buffer)
+        connecting_in_progress = self.connecting
+        return bool(connected_and_pending_writes or connecting_in_progress)
 
     def readable(self):
         """Returns True if we might have data to read"""
@@ -74,7 +83,9 @@ class GearmanConnection(object):
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        if self.connected:
+        if self.connecting:
+            self.throw_exception(message='connection in progress')
+        elif self.connected:
             self.throw_exception(message='connection already established')
 
         current_time = time.time()
@@ -83,33 +94,51 @@ class GearmanConnection(object):
 
         self.allowed_connect_time = current_time + self.connect_cooldown_seconds
 
-        self._reset_connection()
-
-        self._create_client_socket()
-
-        self.connected = True
-        self._is_client_side = True
-        self._is_server_side = False
-
-    def _create_client_socket(self):
-        """Creates a client side socket and subsequently binds/configures our socket options"""
+        # Attempt to do an asynchronous connect
+        self.gearman_socket = self.create_socket()
         try:
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((self.gearman_host, self.gearman_port))
+            connect_code = self.gearman_socket.connect_ex((self.gearman_host, self.gearman_port))
         except socket.error, socket_exception:
             self.throw_exception(exception=socket_exception)
 
-        self.set_socket(client_socket)
+        self.update_connection_status(connect_code)
 
-    def set_socket(self, current_socket):
-        """Setup common options for all Gearman-related sockets"""
+        self._is_client_side = True
+        self._is_server_side = False
+
+    @property
+    def connected(self):
+        return bool(self._socket_state == STATE_CONNECTED)
+
+    @property
+    def connecting(self):
+        return bool(self._socket_state == STATE_CONNECTING)
+
+    def check_connection_status(self):
+        # See "man connect"
         if self.gearman_socket:
-            self.throw_exception(message='socket already bound')
+            return self.gearman_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
 
+        return ERRNO_DISCONNECTED
+
+    def update_connection_status(self, error_number):
+        """Asynchronous call to determine if our socket's already connected"""
+        if error_number == 0:
+            self._socket_state = STATE_CONNECTED
+        elif error_number == errno.EINPROGRESS:
+            self._socket_state = STATE_CONNECTING
+        else:
+            self._socket_state = STATE_DISCONNECTED
+            self._reset_connection()
+
+        print "Error number :: %d :: %s" % (error_number, self._socket_state)
+
+    def create_socket(self):
+        current_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         current_socket.setblocking(0)
         current_socket.settimeout(0.0)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
-        self.gearman_socket = current_socket
+        return current_socket
 
     def read_command(self):
         """Reads a single command from the command queue"""
@@ -234,12 +263,13 @@ class GearmanConnection(object):
         except socket.error:
             pass
 
+        self._socket_state = STATE_DISCONNECTED
         self._reset_connection()
 
     def throw_exception(self, message=None, exception=None):
         # Mark us as disconnected but do NOT call self._reset_connection()
         # Allows catchers of ConnectionError a chance to inspect the last state of this connection
-        self.connected = False
+        self._socket_state = STATE_DISCONNECTED
 
         if exception:
             message = repr(exception)
@@ -248,5 +278,5 @@ class GearmanConnection(object):
         raise ConnectionError(rewritten_message)
 
     def __repr__(self):
-        return ('<GearmanConnection %s:%d connected=%s>' %
-            (self.gearman_host, self.gearman_port, self.connected))
+        return ('<GearmanConnection %s:%d state=%s>' %
+            (self.gearman_host, self.gearman_port, self._socket_state))
