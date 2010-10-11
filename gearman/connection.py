@@ -6,7 +6,7 @@ import struct
 import time
 
 from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
-from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
+from gearman.constants import DEFAULT_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
@@ -19,264 +19,211 @@ STATE_CONNECTING = 'connecting'
 STATE_CONNECTED = 'connected'
 
 class GearmanConnection(object):
-    """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
+    """Provide a nice wrapper around an asynchronous socket:
 
-    Wraps a socket and provides the following functionality:
-        Full read/write methods for Gearman BINARY commands and responses
-        Full read/write methods for Gearman SERVER commands and responses (using GEARMAN_COMMAND_TEXT_COMMAND)
-
-        Manages raw data buffers for socket-level operations
-        Manages command buffers for gearman-level operations
-
-    All I/O and buffering should be done in this class
+    * Reconnect-able with a given host (unlike a socket)
+    * Python-buffered socket for use in asynchronous applications
     """
-    connect_cooldown_seconds = 1.0
+    reconnect_cooldown_seconds = 1.0
+    bytes_to_read = 4096
 
-    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT):
-        port = port or DEFAULT_GEARMAN_PORT
-        self.gearman_host = host
-        self.gearman_port = port
-
+    def __init__(self, host=None, port=DEFAULT_PORT):
+        port = port or DEFAULT_PORT
         if host is None:
             raise ServerUnavailable("No host specified")
 
-        self.gearman_socket = None
-        self._socket_state = STATE_DISCONNECTED
+        self._host = host
+        self._port = port
 
-        self._reset_connection()
+        self._socket = None
 
-    def _reset_connection(self):
-        """Reset the state of this connection"""
-        self.allowed_connect_time = 0.0
+        self._update_state(ERRNO_DISCONNECTED)
 
-        self._is_client_side = None
-        self._is_server_side = None
+    ########################################################
+    ##### Public methods to masquerade like a socket #######
+    ########################################################
+    def accept(self):
+        raise NotImplementedError
 
-        # Reset all our raw data buffers
-        self._incoming_buffer = ''
-        self._outgoing_buffer = ''
+    def bind(self, socket_address):
+        raise NotImplementedError
 
-        # Toss all commands we may have sent or received
-        self._incoming_commands = collections.deque()
-        self._outgoing_commands = collections.deque()
+    def close(self):
+        """Shutdown our existing socket and reset all of our connection data"""
+        if not self._socket:
+            self._throw_exception(message='no socket')
 
-    def fileno(self):
-        """Implements fileno() for use with select.select()"""
-        if not self.gearman_socket:
-            self.throw_exception(message='no socket set')
+        try:
+           self._socket.close()
+        except socket.error:
+            pass
 
-        return self.gearman_socket.fileno()
-
-    def get_address(self):
-        """Returns the host and port"""
-        return (self.gearman_host, self.gearman_port)
-
-    def writable(self):
-        """Returns True if we have data to write"""
-        connected_and_pending_writes = self.connected and bool(self._outgoing_commands or self._outgoing_buffer)
-        connecting_in_progress = self.connecting
-        return bool(connected_and_pending_writes or connecting_in_progress)
-
-    def readable(self):
-        """Returns True if we might have data to read"""
-        return self.connected
+        self._reset_state()
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
         if self.connecting:
-            self.throw_exception(message='connection in progress')
+            self._throw_exception(message='connection in progress')
         elif self.connected:
-            self.throw_exception(message='connection already established')
+            self._throw_exception(message='connection already established')
 
         current_time = time.time()
-        if current_time < self.allowed_connect_time:
-            self.throw_exception(message='attempted to connect before required cooldown')
+        if current_time < self._reconnect_time:
+            self._throw_exception(message='attempted to reconnect too quickly')
 
-        self.allowed_connect_time = current_time + self.connect_cooldown_seconds
+        self._reconnect_time = current_time + self.reconnect_cooldown_seconds
 
         # Attempt to do an asynchronous connect
-        self.gearman_socket = self.create_socket()
+        self._socket = self._create_socket()
         try:
-            connect_code = self.gearman_socket.connect_ex((self.gearman_host, self.gearman_port))
+            socket_address = self.getpeername()
+            connect_errno = self._socket.connect_ex(socket_address)
         except socket.error, socket_exception:
-            self.throw_exception(exception=socket_exception)
+            self._throw_exception(exception=socket_exception)
 
-        self.update_connection_status(connect_code)
+        self._update_state(connect_errno)
 
-        self._is_client_side = True
-        self._is_server_side = False
+    def fileno(self):
+        """Implements fileno() for use with select.select()"""
+        if not self._socket:
+            self._throw_exception(message='no socket')
 
+        return self._socket.fileno()
+
+    def getpeername(self):
+        """Returns the host and port as if this where a AF_INET socket"""
+        return (self._host, self._port)
+
+    def peek(self, bufsize=None):
+        """Reads data seen on this socket WITHOUT the buffer advancing.  Akin to socket.recv(bufsize, socket.MSG_PEEK)"""
+        if bufsize is None:
+            return self._incoming_buffer
+        else:
+            return self._incoming_buffer[:bufsize]
+
+    def recv(self, bufsize=None):
+        """Reads data seen on this socket WITH the buffer advancing.  Akin to socket.recv(bufsize)"""
+        recv_buffer = self.peek(bufsize)
+
+        recv_bytes = len(recv_buffer)
+        if recv_bytes:
+            self._incoming_buffer = self._incoming_buffer[recv_bytes:]
+
+        return recv_buffer
+
+    def send(self, string):
+        """Returns the data read on this buffer and advances the buffer.  Akin to socket.recv(bufsize)"""
+        self._outgoing_buffer += string
+        return len(string)
+
+    ########################################################
+    ##### Public methods - checking connection state #####
+    ########################################################
     @property
     def connected(self):
-        return bool(self._socket_state == STATE_CONNECTED)
+        return bool(self._state == STATE_CONNECTED)
 
     @property
     def connecting(self):
-        return bool(self._socket_state == STATE_CONNECTING)
+        return bool(self._state == STATE_CONNECTING)
 
-    def check_connection_status(self):
-        # See "man connect"
-        if self.gearman_socket:
-            return self.gearman_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+    def readable(self):
+        """Returns True if we might have data to read"""
+        return bool(self.connected)
 
-        return ERRNO_DISCONNECTED
+    def writable(self):
+        """Returns True if we have data to write"""
+        connected_and_pending_writes = self.connected and bool(self._outgoing_buffer)
+        connecting_in_progress = self.connecting
+        return bool(connected_and_pending_writes or connecting_in_progress)
 
-    def update_connection_status(self, error_number):
-        """Asynchronous call to determine if our socket's already connected"""
-        if error_number == 0:
-            self._socket_state = STATE_CONNECTED
-        elif error_number == errno.EINPROGRESS:
-            self._socket_state = STATE_CONNECTING
-        else:
-            self._socket_state = STATE_DISCONNECTED
-            self._reset_connection()
-
-        print "Error number :: %d :: %s" % (error_number, self._socket_state)
-
-    def create_socket(self):
-        current_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        current_socket.setblocking(0)
-        current_socket.settimeout(0.0)
-        current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
-        return current_socket
-
-    def read_command(self):
-        """Reads a single command from the command queue"""
-        if not self._incoming_commands:
-            return None
-
-        return self._incoming_commands.popleft()
-
-    def read_commands_from_buffer(self):
-        """Reads data from buffer --> command_queue"""
-        received_commands = 0
-        while True:
-            cmd_type, cmd_args, cmd_len = self._unpack_command(self._incoming_buffer)
-            if not cmd_len:
-                break
-
-            received_commands += 1
-
-            # Store our command on the command queue
-            # Move the self._incoming_buffer forward by the number of bytes we just read
-            self._incoming_commands.append((cmd_type, cmd_args))
-            self._incoming_buffer = self._incoming_buffer[cmd_len:]
-
-        return received_commands
-
-    def read_data_from_socket(self, bytes_to_read=4096):
+    def handle_read(self):
         """Reads data from socket --> buffer"""
+        if self.connecting:
+            self._throw_exception(message='connection in progress')
+
+        self._recv_data()
+
+    def handle_write(self):
+        if self.connecting:
+            # Check our socket to see what error number we have - See "man connect"
+            connect_errno = self._socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+
+            self._update_state(connect_errno)
+        else:
+            # Transfer command from command queue -> buffer
+            self._send_data()
+
+    def _recv_data(self):
+        """Read data from socket -> buffer"""
         if not self.connected:
-            self.throw_exception(message='disconnected')
+            self._throw_exception(message='disconnected')
 
         recv_buffer = ''
         try:
-            recv_buffer = self.gearman_socket.recv(bytes_to_read)
+            recv_buffer = self._socket.recv(self.bytes_to_read)
         except socket.error, socket_exception:
-            self.throw_exception(exception=socket_exception)
+            self._throw_exception(exception=socket_exception)
 
         if len(recv_buffer) == 0:
-            self.throw_exception(message='remote disconnected')
+            self._throw_exception(message='remote disconnected')
 
         self._incoming_buffer += recv_buffer
         return len(self._incoming_buffer)
 
-    def _unpack_command(self, given_buffer):
-        """Conditionally unpack a binary command or a text based server command"""
-        assert self._is_client_side is not None, "Ambiguous connection state"
-
-        if not given_buffer:
-            cmd_type = None
-            cmd_args = None
-            cmd_len = 0
-        elif given_buffer[0] == NULL_CHAR:
-            # We'll be expecting a response if we know we're a client side command
-            is_response = bool(self._is_client_side)
-            cmd_type, cmd_args, cmd_len = parse_binary_command(given_buffer, is_response=is_response)
-        else:
-            cmd_type, cmd_args, cmd_len = parse_text_command(given_buffer)
-
-        if _DEBUG_MODE_ and cmd_type is not None:
-            gearman_logger.debug('%s - Recv - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
-
-        return cmd_type, cmd_args, cmd_len
-
-    def send_command(self, cmd_type, cmd_args):
-        """Adds a single gearman command to the outgoing command queue"""
-        self._outgoing_commands.append((cmd_type, cmd_args))
-
-    def send_commands_to_buffer(self):
-        """Sends and packs commands -> buffer"""
-        if not self._outgoing_commands:
-            return
-
-        packed_data = [self._outgoing_buffer]
-        while self._outgoing_commands:
-            cmd_type, cmd_args = self._outgoing_commands.popleft()
-            packed_command = self._pack_command(cmd_type, cmd_args)
-            packed_data.append(packed_command)
-
-        self._outgoing_buffer = ''.join(packed_data)
-
-    def send_data_to_socket(self):
+    def _send_data(self):
         """Send data from buffer -> socket
 
         Returns remaining size of the output buffer
         """
         if not self.connected:
-            self.throw_exception(message='disconnected')
+            self._throw_exception(message='disconnected')
 
         if not self._outgoing_buffer:
             return 0
 
         try:
-            bytes_sent = self.gearman_socket.send(self._outgoing_buffer)
+            bytes_sent = self._socket.send(self._outgoing_buffer)
         except socket.error, socket_exception:
-            self.throw_exception(exception=socket_exception)
+            self._throw_exception(exception=socket_exception)
 
         if bytes_sent == 0:
-            self.throw_exception(message='remote disconnected')
+            self._throw_exception(message='remote disconnected')
 
         self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
         return len(self._outgoing_buffer)
 
-    def _pack_command(self, cmd_type, cmd_args):
-        """Converts a command to its raw binary format"""
-        if cmd_type not in GEARMAN_PARAMS_FOR_COMMAND:
-            raise ProtocolError('Unknown command: %r' % get_command_name(cmd_type))
+    ########################################################
+    ############### Private support methods  ###############
+    ########################################################
+    def _create_socket(self):
+        current_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        current_socket.setblocking(0)
+        current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
+        return current_socket
 
-        if _DEBUG_MODE_:
-            gearman_logger.debug('%s - Send - %s - %r', hex(id(self)), get_command_name(cmd_type), cmd_args)
-
-        if cmd_type == GEARMAN_COMMAND_TEXT_COMMAND:
-            return pack_text_command(cmd_type, cmd_args)
+    def _update_state(self, error_number):
+        """Update our connection state based on 'errno'  """
+        if error_number == 0:
+            self._state = STATE_CONNECTED
+        elif error_number == errno.EINPROGRESS:
+            self._state = STATE_CONNECTING
         else:
-            # We'll be sending a response if we know we're a server side command
-            is_response = bool(self._is_server_side)
-            return pack_binary_command(cmd_type, cmd_args, is_response)
+            self._state = STATE_DISCONNECTED
+            self._reconnect_time = 0.0
 
-    def close(self):
-        """Shutdown our existing socket and reset all of our connection data"""
-        try:
-            if self.gearman_socket:
-                self.gearman_socket.close()
-        except socket.error:
-            pass
+            # Reset all our raw data buffers
+            self._incoming_buffer = ''
+            self._outgoing_buffer = ''
 
-        self._socket_state = STATE_DISCONNECTED
-        self._reset_connection()
-
-    def throw_exception(self, message=None, exception=None):
-        # Mark us as disconnected but do NOT call self._reset_connection()
-        # Allows catchers of ConnectionError a chance to inspect the last state of this connection
-        self._socket_state = STATE_DISCONNECTED
+    def _throw_exception(self, message=None, exception=None):
+        self._update_state(ERRNO_DISCONNECTED)
 
         if exception:
             message = repr(exception)
 
-        rewritten_message = "<%s:%d> %s" % (self.gearman_host, self.gearman_port, message)
+        rewritten_message = "<%s:%d> %s" % (self._host, self._port, message)
         raise ConnectionError(rewritten_message)
 
     def __repr__(self):
-        return ('<GearmanConnection %s:%d state=%s>' %
-            (self.gearman_host, self.gearman_port, self._socket_state))
+        return ('<GearmanConnection %s:%d state=%s>' % (self._host, self._port, self._state))
