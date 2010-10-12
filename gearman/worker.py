@@ -4,7 +4,7 @@ import sys
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
-from gearman.errors import ConnectionError
+from gearman.connection import ConnectionError
 
 gearman_logger = logging.getLogger(__name__)
 

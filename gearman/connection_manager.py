@@ -71,7 +71,10 @@ class GearmanConnectionManager(object):
     def shutdown(self):
         # Shutdown all our connections one by one
         for gearman_connection in self.connection_list:
-            gearman_connection.close()
+            try:
+                gearman_connection.close()
+            except ConnectionError:
+                pass
 
     ###################################
     # Connection management functions #
@@ -220,30 +223,13 @@ class GearmanConnectionManager(object):
         """Handle all our pending socket data"""
         current_connection = self.fd_to_connection_map[current_fd]
 
-        current_handler = self.connection_to_handler_map[current_connection]
-
         # Transfer data from socket -> buffer
-        current_connection.read_data_from_socket()
-
-        # Transfer command from buffer -> command queue
-        current_connection.read_commands_from_buffer()
-
-        # Notify the handler that we have commands to fetch
-        current_handler.fetch_commands()
+        current_connection.handle_read()
 
     def handle_write(self, current_fd):
         current_connection = self.fd_to_connection_map[current_fd]
 
-        if current_connection.connecting:
-            connection_errno = current_connection.check_connection_status()
-
-            current_connection.update_connection_status(connection_errno)
-        else:
-            # Transfer command from command queue -> buffer
-            current_connection.send_commands_to_buffer()
-
-            # Transfer data from buffer -> socket
-            current_connection.send_data_to_socket()
+        current_connection.handle_write()
 
     def handle_error(self, current_fd):
         current_connection = self.fd_to_connection_map[current_fd]
