@@ -131,7 +131,7 @@ class GearmanClient(GearmanConnectionManager):
         """Fetch the job status of a multiple requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         for current_request in job_requests:
-            current_request.server_status['last_time_received'] = current_request.server_status.get('time_received')
+            current_request.status['last_time_received'] = current_request.status.get('time_received')
 
             current_connection = current_request.job.connection
             current_command_handler = self.connection_to_handler_map[current_connection]
@@ -144,7 +144,7 @@ class GearmanClient(GearmanConnectionManager):
         """Go into a select loop until we received statuses on all our requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         def is_status_not_updated(current_request):
-            current_status = current_request.server_status
+            current_status = current_request.status
             return bool(current_status.get('time_received') == current_status.get('last_time_received'))
 
         # Poll to make sure we send out our request for a status update
@@ -158,7 +158,7 @@ class GearmanClient(GearmanConnectionManager):
         self.poll_connections_until_stopped(self.connection_list, continue_while_status_not_updated, timeout=poll_timeout)
 
         for current_request in job_requests:
-            current_request.server_status = current_request.server_status or {}
+            current_request.status = current_request.status or {}
             current_request.timed_out = is_status_not_updated(current_request)
 
         return job_requests

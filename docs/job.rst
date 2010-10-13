@@ -91,9 +91,32 @@ Certain GearmanJob's may send back data prior to actually completing.  :const:`G
 
 .. attribute:: GearmanJobRequest.warning_updates
 
+    :const:`collections.deque` - Job's warning binary payloads
+
 .. attribute:: GearmanJobRequest.data_updates
+
+    :const:`collections.deque` - Job's data binary payloads
+
+.. attribute:: GearmanJobRequest.status
+
+    :const:`dictionary` - Job's status
+
+    * `handle` - :const:`string` - Job handle
+    * `known` - :const:`boolean` - Is the server aware of this request?
+    * `running` - :const:`boolean` - Is the request currently being processed by a worker?
+    * `numerator` - :const:`float`
+    * `denominator` - :const:`float`
+    * `time_received` - :const:`integer` - Time last updated
+
+.. versionadded:: 2.0.1
+   Replaces GearmanJobRequest.status_updates and GearmanJobRquest.server_status
 
 .. attribute:: GearmanJobRequest.status_updates
 
+.. deprecated:: 2.0.1
+   Replaced by GearmanJobRequest.status
+
 .. attribute:: GearmanJobRequest.server_status
 
+.. deprecated:: 2.0.1
+   Replaced by GearmanJobRequest.status

@@ -37,13 +37,12 @@ class GearmanJobRequest(object):
         # Holds WORK_EXCEPTION responses
         self.exception = None
 
-        # Queues to hold WORK_WARNING, WORK_DATA, WORK_STATUS responses
+        # Queues to hold WORK_WARNING, WORK_DATA responses
         self.warning_updates = collections.deque()
         self.data_updates = collections.deque()
-        self.status_updates = collections.deque()
 
-        # Holds STATUS_REQ responses
-        self.server_status = {}
+        # Holds WORK_STATUS / STATUS_REQ responses
+        self.status = {}
 
         self.state = JOB_UNKNOWN
         self.timed_out = False
@@ -52,6 +51,20 @@ class GearmanJobRequest(object):
         self.initialize_request()
         self.connection = None
         self.handle = None
+
+    @property
+    def status_updates(self):
+        """Deprecated since 2.0.1, removing in next major release"""
+        output_queue = collections.deque()
+        if self.status:
+            output_queue.append((self.status.get('numerator', 0), self.status.get('denominator', 0)))
+
+        return output_queue
+
+    @property
+    def server_status(self):
+        """Deprecated since 2.0.1, removing in next major release"""
+        return self.status
 
     @property
     def job(self):

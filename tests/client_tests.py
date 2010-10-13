@@ -245,18 +245,18 @@ class ClientTest(_GearmanAbstractTest):
         single_request.state = JOB_CREATED
 
         def retrieve_status(rx_conns, wr_conns, ex_conns):
-            self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=single_request.job.handle, known='1', running='0', numerator='0.0', denominator='1.0')
+            self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=single_request.job.handle, known='1', running='0', numerator='0', denominator='1')
             return rx_conns, wr_conns, ex_conns
 
         self.connection_manager.handle_connection_activity = retrieve_status
 
         job_request = self.connection_manager.get_job_status(single_request)
-        request_status = job_request.server_status
+        request_status = job_request.status
         self.failUnless(request_status)
         self.assertTrue(request_status['known'])
         self.assertFalse(request_status['running'])
-        self.assertEqual(request_status['numerator'], 0.0)
-        self.assertEqual(request_status['denominator'], 1.0)
+        self.assertEqual(request_status['numerator'], 0)
+        self.assertEqual(request_status['denominator'], 1)
         self.assertFalse(job_request.timed_out)
 
     def test_get_job_status_timeout(self):
@@ -364,7 +364,7 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
 
             self.assertRaises(InvalidClientState, self.command_handler.recv_command, GEARMAN_COMMAND_WORK_WARNING, job_handle=job_handle, data=new_data)
 
-            self.assertRaises(InvalidClientState, self.command_handler.recv_command, GEARMAN_COMMAND_WORK_STATUS, job_handle=job_handle, numerator=0.0, denominator=1.0)
+            self.assertRaises(InvalidClientState, self.command_handler.recv_command, GEARMAN_COMMAND_WORK_STATUS, job_handle=job_handle, numerator=0, denominator=1)
 
             self.assertRaises(InvalidClientState, self.command_handler.recv_command, GEARMAN_COMMAND_WORK_COMPLETE, job_handle=job_handle, data=new_data)
 
@@ -387,9 +387,9 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertEqual(current_request.state, JOB_CREATED)
 
         # Test WORK_STATUS
-        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=job_handle, numerator=0.0, denominator=1.0)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=job_handle, numerator=0, denominator=1)
 
-        self.assertEqual(current_request.status_updates.popleft(), (0.0, 1.0))
+        self.assertEqual(current_request.status_updates.popleft(), (0, 1))
         self.assertEqual(current_request.state, JOB_CREATED)
 
     def test_work_complete(self):
@@ -416,15 +416,15 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
 
         job_handle = current_request.job.handle
 
-        self.assertEqual(current_request.server_status, {})
+        self.assertEqual(current_request.status, {})
 
         self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=job_handle, known='1', running='1', numerator='0', denominator='1')
 
-        self.assertEqual(current_request.server_status['handle'], job_handle)
-        self.assertTrue(current_request.server_status['known'])
-        self.assertTrue(current_request.server_status['running'])
-        self.assertEqual(current_request.server_status['numerator'], 0.0)
-        self.assertEqual(current_request.server_status['denominator'], 1.0)
+        self.assertEqual(current_request.status['handle'], job_handle)
+        self.assertTrue(current_request.status['known'])
+        self.assertTrue(current_request.status['running'])
+        self.assertEqual(current_request.status['numerator'], 0)
+        self.assertEqual(current_request.status['denominator'], 1)
 
 if __name__ == '__main__':
     unittest.main()

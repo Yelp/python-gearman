@@ -95,10 +95,15 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         self._assert_request_state(current_request, JOB_CREATED)
 
         # The protocol spec is ambiguous as to what type the numerator and denominator is...
-        # For now, let's cast to a float as I its safe to assume that we need to get a number back here
-        status_tuple = (float(numerator), float(denominator))
-        current_request.status_updates.append(status_tuple)
-
+        # But according to Eskil, gearmand interprets these as integers
+        current_request.status = {
+            'handle': job_handle,
+            'known': True,
+            'running': True,
+            'numerator': int(numerator),
+            'denominator': int(denominator),
+            'time_received': time.time()
+        }
         return True
 
     def recv_work_complete(self, job_handle, data):
@@ -136,13 +141,13 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         current_request = self.handle_to_request_map[job_handle]
         self._assert_request_state(current_request, JOB_CREATED)
 
-        # Make our server_status response Python friendly
-        current_request.server_status = {
+        # Make our status response Python friendly
+        current_request.status = {
             'handle': job_handle,
             'known': bool(known == '1'),
             'running': bool(running == '1'),
-            'numerator': float(numerator),
-            'denominator': float(denominator),
+            'numerator': int(numerator),
+            'denominator': int(denominator),
             'time_received': time.time()
         }
         return True
