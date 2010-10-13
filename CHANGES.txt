@@ -1,6 +1,7 @@
 v2.0.1, 2010-10-12 -- Minor bug fix release
  * GearmanJobRequest - Combined `server_status` and `status_updates` into a shared `status` field
  * GearmanJobRequest.status - `numerator` and `denominator` are now cast to integers
+ * GearmanWorker.send_* - Updated to immediately send commands instead of waiting for the work select loop
 
 v2.0.0, 2010-09-28 -- Initial release
 v2.0.0.beta, 2010-06-15 -- Beta release
