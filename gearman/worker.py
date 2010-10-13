@@ -2,6 +2,7 @@ import logging
 import random
 import sys
 
+from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.errors import ConnectionError
@@ -127,21 +128,34 @@ class GearmanWorker(GearmanConnectionManager):
     def _get_handler_for_job(self, current_job):
         return self.connection_to_handler_map[current_job.connection]
 
-    def send_job_status(self, current_job, numerator, denominator):
+    def wait_until_updates_sent(self, multiple_gearman_jobs, poll_timeout=None):
+        connection_set = set([current_job.connection for current_job in multiple_gearman_jobs])
+        def continue_while_updates_pending(any_activity):
+            return compat.any(current_connection.writable() for current_connection in connection_set)
+
+        self.poll_connections_until_stopped(connection_set, continue_while_updates_pending, timeout=poll_timeout)
+
+    def send_job_status(self, current_job, numerator, denominator, poll_timeout=None):
         """Send a Gearman JOB_STATUS update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_status(current_job, numerator=numerator, denominator=denominator)
 
-    def send_job_complete(self, current_job, data):
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_complete(self, current_job, data, poll_timeout=None):
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_complete(current_job, data=data)
 
-    def send_job_failure(self, current_job):
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_failure(self, current_job, poll_timeout=None):
         """Removes a job from the queue if its backgrounded"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_failure(current_job)
 
-    def send_job_exception(self, current_job, data):
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_exception(self, current_job, data, poll_timeout=None):
         """Removes a job from the queue if its backgrounded"""
         # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
         # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
@@ -150,15 +164,21 @@ class GearmanWorker(GearmanConnectionManager):
         current_handler.send_job_exception(current_job, data=data)
         current_handler.send_job_failure(current_job)
 
-    def send_job_data(self, current_job, data):
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_data(self, current_job, data, poll_timeout=None):
         """Send a Gearman JOB_DATA update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_data(current_job, data=data)
 
-    def send_job_warning(self, current_job, data):
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_warning(self, current_job, data, poll_timeout=None):
         """Send a Gearman JOB_WARNING update for an inflight job"""
         current_handler = self._get_handler_for_job(current_job)
         current_handler.send_job_warning(current_job, data=data)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
 
     #####################################################
     ##### Callback methods for GearmanWorkerHandler #####
