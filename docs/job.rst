@@ -104,8 +104,8 @@ Certain GearmanJob's may send back data prior to actually completing.  :const:`G
     * `handle` - :const:`string` - Job handle
     * `known` - :const:`boolean` - Is the server aware of this request?
     * `running` - :const:`boolean` - Is the request currently being processed by a worker?
-    * `numerator` - :const:`float`
-    * `denominator` - :const:`float`
+    * `numerator` - :const:`integer`
+    * `denominator` - :const:`integer`
     * `time_received` - :const:`integer` - Time last updated
 
 .. versionadded:: 2.0.1
