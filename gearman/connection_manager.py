@@ -59,9 +59,6 @@ class GearmanConnectionManager(object):
         self.fd_to_connection_map = {}
         self.connection_list = []
 
-        self.handler_to_connection_map = {}
-        self.connection_to_handler_map = {}
-
         self.handler_initial_state = {}
 
         host_list = host_list or []
@@ -102,11 +99,6 @@ class GearmanConnectionManager(object):
 
         # Initiate a new command handler every time we start a new connection
         current_handler = self.command_handler_class(connection_manager=self)
-
-        # Handler to connection map for CommandHandler -> Connection interactions
-        # Connection to handler map for Connection -> CommandHandler interactions
-        self.handler_to_connection_map[current_handler] = current_connection
-        self.connection_to_handler_map[current_connection] = current_handler
 
         current_handler.initial_state(**self.handler_initial_state)
         return current_connection
@@ -238,36 +230,4 @@ class GearmanConnectionManager(object):
         if dead_handler:
             dead_handler.on_io_error()
 
-        self.handler_to_connection_map.pop(dead_handler, None)
         current_connection.close()
-
-    ##################################
-    # Callbacks for Command Handlers #
-    ##################################
-
-    def read_command(self, command_handler):
-        """CommandHandlers call this function to fetch pending commands
-
-        NOTE: CommandHandlers have NO knowledge as to which connection they're representing
-              ConnectionManagers must forward inbound commands to CommandHandlers
-        """
-        gearman_connection = self.handler_to_connection_map[command_handler]
-        cmd_tuple = gearman_connection.read_command()
-        if cmd_tuple is None:
-            return cmd_tuple
-
-        cmd_type, cmd_args = cmd_tuple
-        return cmd_type, cmd_args
-
-    def send_command(self, command_handler, cmd_type, cmd_args):
-        """CommandHandlers call this function to send pending commands
-
-        NOTE: CommandHandlers have NO knowledge as to which connection they're representing
-              ConnectionManagers must forward outbound commands to Connections
-        """
-        gearman_connection = self.handler_to_connection_map[command_handler]
-        gearman_connection.send_command(cmd_type, cmd_args)
-
-    def on_gearman_error(self, error_code, error_text):
-        gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
-        return False

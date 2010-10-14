@@ -9,8 +9,12 @@ class GearmanCommandHandler(object):
 
     GearmanCommandHandler does no I/O and only understands sending/receiving commands
     """
-    def __init__(self, connection_manager=None):
-        self.connection_manager = connection_manager
+    def __init__(self, data_encoder=None, on_outgoing_command=None):
+        self.data_encoder = data_encoder
+
+        # Takes cmd_type and **cmd_args
+        self.on_outgoing_command = on_outgoing_command
+        self._command_callback_map = {}
 
     def initial_state(self, *largs, **kwargs):
         """Called by a Connection Manager after we've been instantiated and we're ready to send off commands"""
@@ -21,31 +25,32 @@ class GearmanCommandHandler(object):
 
     def decode_data(self, data):
         """Convenience function :: handle binary string -> object unpacking"""
-        return self.connection_manager.data_encoder.decode(data)
+        return self.data_encoder.decode(data)
 
     def encode_data(self, data):
         """Convenience function :: handle object -> binary string packing"""
-        return self.connection_manager.data_encoder.encode(data)
-
-    def fetch_commands(self):
-        """Called by a Connection Manager to notify us that we have pending commands"""
-        continue_working = True
-        while continue_working:
-            cmd_tuple = self.connection_manager.read_command(self)
-            if cmd_tuple is None:
-                break
-
-            cmd_type, cmd_args = cmd_tuple
-            continue_working = self.recv_command(cmd_type, **cmd_args)
+        return self.data_encoder.encode(data)
 
     def send_command(self, cmd_type, **cmd_args):
         """Hand off I/O to the connection mananger"""
-        self.connection_manager.send_command(self, cmd_type, cmd_args)
+        self.on_outgoing_command(cmd_type, cmd_args)
 
     def recv_command(self, cmd_type, **cmd_args):
         """Maps any command to a recv_* callback function"""
         completed_work = None
 
+        # Cache our callback code so we can get improved QPS
+        cmd_callback = self._command_callback_map.get(cmd_type)
+        if cmd_callback is None:
+            cmd_callback = self._locate_command_callback(cmd_type, cmd_args)
+            self._command_callback_map[cmd_type] = cmd_callback
+
+        # Expand the arguments as passed by the protocol
+        # This must match the parameter names as defined in the command handler
+        completed_work = cmd_callback(**cmd_args)
+        return completed_work
+
+    def _locate_command_callback(self, cmd_type, cmd_args):
         gearman_command_name = get_command_name(cmd_type)
         if bool(gearman_command_name == cmd_type) or not gearman_command_name.startswith('GEARMAN_COMMAND_'):
             unknown_command_msg = 'Could not handle command: %r - %r' % (gearman_command_name, cmd_args)
@@ -60,11 +65,8 @@ class GearmanCommandHandler(object):
             gearman_logger.error(missing_callback_msg)
             raise UnknownCommandError(missing_callback_msg)
 
-        # Expand the arguments as passed by the protocol
-        # This must match the parameter names as defined in the command handler
-        completed_work = cmd_callback(**cmd_args)
-        return completed_work
+        return cmd_callback
 
     def recv_error(self, error_code, error_text):
         """When we receive an error from the server, notify the connection manager that we have a gearman error"""
-        return self.connection_manager.on_gearman_error(error_code, error_text)
+        gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
