@@ -15,12 +15,19 @@ from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_CO
 gearman_logger = logging.getLogger(__name__)
 
 class GearmanConnection(Connection):
-    def __init__(self, host=None, port=None, on_incoming_command=None):
+    def __init__(self, host=None, port=None):
         port = port or DEFAULT_PORT
         super(GearmanConnection, self).__init__(host=host, port=port)
 
+        self._on_command_recv_callback = None
+        self._on_connect_callback = None
+
+    def set_on_command_recv_callback(self, command_recv_callback):
         # On readable command callback takes cmd_type, and a bunch of keyword arguments
-        self.on_incoming_command = on_incoming_command
+        self._on_command_recv_callback = command_recv_callback
+
+    def set_on_connect_callback(self, connect_callback):
+        self._on_connect_callback = connect_callback
 
     def handle_read(self):
         """Reads data from socket --> buffer"""
@@ -32,7 +39,13 @@ class GearmanConnection(Connection):
                 break
 
             cmd_type, cmd_args = cmd_tuple
-            self.on_incoming_command(cmd_type, cmd_args)
+            self._recv_command_callback(cmd_type, cmd_args)
+
+    def handle_write(self):
+        was_connecting = self.connecting
+        super(GearmanConnection, self).handle_write()
+        if was_connecting and self.connected:
+            self._on_connect_callback()
 
     def recv_command(self):
         io_buffer = self.peek()

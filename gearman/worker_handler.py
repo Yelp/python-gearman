@@ -22,10 +22,9 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         self._handler_abilities = []
         self._client_id = None
 
-    def initial_state(self, abilities=None, client_id=None):
-        self.set_client_id(client_id)
-        self.set_abilities(abilities)
-
+    def on_connect(self):
+        self.send_client_id(self._client_id)
+        self.send_abilities(self._handler_abilities)
         self._sleep()
 
     ##################################################################
@@ -35,22 +34,23 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         assert type(connection_abilities_list) in (list, tuple)
         self._handler_abilities = connection_abilities_list
 
-        self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
-        for task in self._handler_abilities:
-            self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
-
     def set_client_id(self, client_id):
         self._client_id = client_id
-
-        if self._client_id is not None:
-            self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=self._client_id)
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
     ###############################################################
+    def send_abilties(self, list_of_abilities):
+        self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
+        for task in list_of_abilities:
+            self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
+
+    def send_client_id(self, client_id):
+        self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=client_id)
+
     def send_job_status(self, current_job, numerator, denominator):
-        assert type(numerator) in (int, float), 'Numerator must be a numeric value'
-        assert type(denominator) in (int, float), 'Denominator must be a numeric value'
+        assert type(numerator) == int, 'Numerator must be a numeric value'
+        assert type(denominator) == int, 'Denominator must be a numeric value'
         self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=str(numerator), denominator=str(denominator))
 
     def send_job_complete(self, current_job, data):

@@ -14,7 +14,7 @@ class GearmanWorker(GearmanConnectionManager):
     """
     GearmanWorker :: Interface to accept jobs from a Gearman server
     """
-    command_handler_class = GearmanWorkerCommandHandler
+    current_handler_class = GearmanWorkerCommandHandler
 
     def __init__(self, host_list=None):
         super(GearmanWorker, self).__init__(host_list=host_list)
@@ -23,13 +23,7 @@ class GearmanWorker(GearmanConnectionManager):
 
         self.worker_abilities = {}
         self.worker_client_id = None
-        self.command_handler_holding_job_lock = None
-
-        self._update_initial_state()
-
-    def _update_initial_state(self):
-        self.handler_initial_state['abilities'] = self.worker_abilities.keys()
-        self.handler_initial_state['client_id'] = self.worker_client_id
+        self.current_handler_holding_job_lock = None
 
     ########################################################
     ##### Public methods for general GearmanWorker use #####
@@ -41,32 +35,35 @@ class GearmanWorker(GearmanConnectionManager):
             return current_job.data
         """
         self.worker_abilities[task] = callback_function
-        self._update_initial_state()
+        for current_handler in self.connection_to_handler_map.iteritems():
+            current_handler.set_abilities(self.worker_abilities.keys())
+            if 
 
-        for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.handler_initial_state['abilities'])
+        for current_handler in self.connection_to_handler_map.itervalues():
+            current_handler.set_abilities(self.worker_abilities.keys())
 
         return task
 
     def unregister_task(self, task):
         """Unregister a function with worker"""
         self.worker_abilities.pop(task, None)
-        self._update_initial_state()
-
-        for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.handler_initial_state['abilities'])
+        for current_handler in self.connection_to_handler_map.itervalues():
+            current_handler.set_abilities(self.handler_initial_state['abilities'])
 
         return task
 
     def set_client_id(self, client_id):
         """Notify the server that we should be identified as this client ID"""
         self.worker_client_id = client_id
-        self._update_initial_state()
-
-        for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_client_id(self.handler_initial_state['client_id'])
+        for current_handler in self.connection_to_handler_map.itervalues():
+            current_handler.set_client_id(self.handler_initial_state['client_id'])
 
         return client_id
+
+    def on_connect(self):
+        self.send_client_id(self._client_id)
+        self.send_abilities(self._handler_abilities)
+        self._sleep()
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely, complete tasks from all connections."""
@@ -86,7 +83,7 @@ class GearmanWorker(GearmanConnectionManager):
             current_connection.close()
 
     def shutdown(self):
-        self.command_handler_holding_job_lock = None
+        self.current_handler_holding_job_lock = None
         super(GearmanWorker, self).shutdown()
 
     ###############################################################
@@ -163,9 +160,9 @@ class GearmanWorker(GearmanConnectionManager):
     #####################################################
     ##### Callback methods for GearmanWorkerHandler #####
     #####################################################
-    def create_job(self, command_handler, job_handle, task, unique, data):
+    def create_job(self, current_handler, job_handle, task, unique, data):
         """Create a new job using our self.job_class"""
-        current_connection = self.handler_to_connection_map[command_handler]
+        current_connection = self.handler_to_connection_map[current_handler]
         return self.job_class(current_connection, job_handle, task, unique, data)
 
     def on_job_execute(self, current_job):
@@ -185,13 +182,13 @@ class GearmanWorker(GearmanConnectionManager):
         self.send_job_complete(current_job, job_result)
         return True
 
-    def set_job_lock(self, command_handler, lock):
+    def set_job_lock(self, current_handler, lock):
         """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
-        if command_handler not in self.handler_to_connection_map:
+        if current_handler not in self.handler_to_connection_map:
             return False
 
-        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
-        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
+        failed_lock = bool(lock and self.current_handler_holding_job_lock is not None)
+        failed_unlock = bool(not lock and self.current_handler_holding_job_lock != current_handler)
 
         # If we've already been locked, we should say the lock failed
         # If we're attempting to unlock something when we don't have a lock, we're in a bad state
@@ -199,12 +196,12 @@ class GearmanWorker(GearmanConnectionManager):
             return False
 
         if lock:
-            self.command_handler_holding_job_lock = command_handler
+            self.current_handler_holding_job_lock = current_handler
         else:
-            self.command_handler_holding_job_lock = None
+            self.current_handler_holding_job_lock = None
 
         return True
 
-    def check_job_lock(self, command_handler):
+    def check_job_lock(self, current_handler):
         """Check to see if we hold the job lock"""
-        return bool(self.command_handler_holding_job_lock == command_handler)
+        return bool(self.current_handler_holding_job_lock == current_handler)
