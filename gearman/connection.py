@@ -8,7 +8,7 @@ import sys
 
 from gearman._connection import Connection
 from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
-from gearman.constants import DEFAULT_PORT, _DEBUG_MODE_
+from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
@@ -16,11 +16,14 @@ gearman_logger = logging.getLogger(__name__)
 
 class GearmanConnection(Connection):
     def __init__(self, host=None, port=None):
-        port = port or DEFAULT_PORT
+        port = port or DEFAULT_GEARMAN_PORT
         super(GearmanConnection, self).__init__(host=host, port=port)
 
         self._on_command_recv_callback = None
         self._on_connect_callback = None
+
+        self._is_server_side = False
+        self._is_client_side = True
 
     def set_on_command_recv_callback(self, command_recv_callback):
         # On readable command callback takes cmd_type, and a bunch of keyword arguments
@@ -39,7 +42,7 @@ class GearmanConnection(Connection):
                 break
 
             cmd_type, cmd_args = cmd_tuple
-            self._recv_command_callback(cmd_type, cmd_args)
+            self._on_command_recv_callback(cmd_type, cmd_args)
 
     def handle_write(self):
         was_connecting = self.connecting
@@ -57,7 +60,7 @@ class GearmanConnection(Connection):
         return cmd_type, cmd_args
 
     def send_command(self, cmd_type, cmd_args):
-        data_stream = self._pack_command(command_type, command_args)
+        data_stream = self._pack_command(cmd_type, cmd_args)
         self.send(data_stream)
 
     def _pack_command(self, cmd_type, cmd_args):
@@ -75,7 +78,7 @@ class GearmanConnection(Connection):
             is_response = bool(self._is_server_side)
             return pack_binary_command(cmd_type, cmd_args, is_response)
 
-   def _unpack_command(self, given_buffer):
+    def _unpack_command(self, given_buffer):
         """Conditionally unpack a binary command or a text based server command"""
         if not given_buffer:
             cmd_type = None

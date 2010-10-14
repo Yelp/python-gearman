@@ -88,25 +88,30 @@ class GearmanConnectionManager(object):
 
     def establish_connection(self, current_connection):
         # Asynchronously establish a connection
+        current_connection.connect()
+
+        connection_fd = current_connection.fileno()
+        self.fd_to_connection_map[connection_fd] = current_connection
+
         current_handler = self.command_handler_class(data_encoder=self.data_encoder)
-        self.setup_handler(current_handler)
+        self.connection_to_handler_map[current_connection] = current_handler
+
+        self._setup_handler(current_handler)
+        current_handler.set_send_command_callback(current_connection.send_command)
 
         # Setup callbacks tying this handler and connection together
         current_connection.set_on_command_recv_callback(current_handler.recv_command)
         current_connection.set_on_connect_callback(current_handler.on_connect)
 
-        current_handler.set_send_command_callback(current_connection.send_command)
-        self.connection_to_handler_map[current_connection] = current_handler
-
-        connection_fd = current_connection.fileno()
-        self.fd_to_connection_map[connection_fd] = current_connection
-
-        current_connection.connect()
-
         return current_connection
 
-    def setup_handler(self, current_handler):
+    def _setup_handler(self, current_handler):
         return current_handler
+
+    @property
+    def connection_list(self):
+        return self.connection_to_handler_map.keys()
+
 
     def poll_connections_once(self, submitted_connections, timeout=None):
         """Does a single robust select, catching socket errors"""
@@ -184,7 +189,8 @@ class GearmanConnectionManager(object):
         any_activity = False
         callback_ok = callback_fxn(any_activity)
 
-        connection_ok = compat.any(current_connection.connected or current_connection.connecting for current_connection in submitted_connections)
+        print submitted_connections
+        connection_ok = compat.any(bool(current_connection.connected or current_connection.connecting) for current_connection in submitted_connections)
 
         while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
@@ -192,6 +198,7 @@ class GearmanConnectionManager(object):
                 break
 
             # Do a single robust select and handle all connection activity
+            print submitted_connections
             read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
             self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
@@ -202,7 +209,7 @@ class GearmanConnectionManager(object):
 
         # We should raise here if we have no alive connections (don't go into a select polling loop with no connections)
         if not connection_ok:
-            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_to_handler_map.iterkeys())
+            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_to_handler_map.keys())
 
         return bool(connection_ok and callback_ok)
 

@@ -1,6 +1,10 @@
 import errno
 import socket
+import struct
 import time
+
+
+from gearman.errors import ConnectionError
 
 ERRNO_DISCONNECTED = -1
 

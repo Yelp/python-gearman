@@ -11,8 +11,8 @@ gearman_logger = logging.getLogger(__name__)
 
 class GearmanClientCommandHandler(GearmanCommandHandler):
     """Maintains the state of this connection on behalf of a GearmanClient"""
-    def __init__(self, connection_manager=None):
-        super(GearmanClientCommandHandler, self).__init__(connection_manager=connection_manager)
+    def __init__(self, data_encoder=None):
+        super(GearmanClientCommandHandler, self).__init__(data_encoder=data_encoder)
 
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()

@@ -16,13 +16,16 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
         EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
     """
-    def __init__(self, connection_manager=None):
-        super(GearmanWorkerCommandHandler, self).__init__(connection_manager=connection_manager)
+    def __init__(self, data_encoder=None):
+        super(GearmanWorkerCommandHandler, self).__init__(data_encoder=data_encoder)
 
         self._handler_abilities = []
         self._client_id = None
+        self._connected = False
 
     def on_connect(self):
+        self._connected = True
+
         self.send_client_id(self._client_id)
         self.send_abilities(self._handler_abilities)
         self._sleep()
@@ -33,19 +36,29 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def set_abilities(self, connection_abilities_list):
         assert type(connection_abilities_list) in (list, tuple)
         self._handler_abilities = connection_abilities_list
+        if self._connected:
+            self.send_abilities(self._handler_abilities)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
+        if self._connected:
+            self.send_client_id(self._client_id)
+
+    def set_connection_manager(self, connection_manager):
+        self.connection_manager = connection_manager
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
     ###############################################################
-    def send_abilties(self, list_of_abilities):
+    def send_abilities(self, list_of_abilities):
         self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
         for task in list_of_abilities:
             self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
 
     def send_client_id(self, client_id):
+        if not client_id:
+            return
+
         self.send_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=client_id)
 
     def send_job_status(self, current_job, numerator, denominator):
