@@ -1,5 +1,6 @@
 import logging
 
+from gearman.job import GearmanJob
 from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import InvalidWorkerState
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
@@ -16,16 +17,15 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
         EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
     """
-    def __init__(self, data_encoder=None):
-        super(GearmanWorkerCommandHandler, self).__init__(data_encoder=data_encoder)
+    job_class = GearmanJob
+
+    def __init__(self, connection=None, data_encoder=None):
+        super(GearmanWorkerCommandHandler, self).__init__(connection=connection, data_encoder=data_encoder)
 
         self._handler_abilities = []
         self._client_id = None
-        self._connected = False
 
     def on_connect(self):
-        self._connected = True
-
         self.send_client_id(self._client_id)
         self.send_abilities(self._handler_abilities)
         self._sleep()
@@ -36,12 +36,12 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def set_abilities(self, connection_abilities_list):
         assert type(connection_abilities_list) in (list, tuple)
         self._handler_abilities = connection_abilities_list
-        if self._connected:
+        if self._gearman_connection.connected:
             self.send_abilities(self._handler_abilities)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
-        if self._connected:
+        if self._gearman_connection.connected:
             self.send_client_id(self._client_id)
 
     def set_connection_manager(self, connection_manager):
@@ -144,7 +144,8 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         if not self.connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, self.decode_data(data))
+        server_address = self._gearman_connection.getpeername()
+        gearman_job = self.job_class(server_address, job_handle, task, unique, self.decode_data(data))
 
         # Create a new job
         self.connection_manager.on_job_execute(gearman_job)

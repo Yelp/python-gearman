@@ -9,15 +9,16 @@ class GearmanCommandHandler(object):
 
     GearmanCommandHandler does no I/O and only understands sending/receiving commands
     """
-    def __init__(self, data_encoder=None):
+    def __init__(self, connection=None, data_encoder=None):
+        self._gearman_connection = connection
         self._data_encoder = data_encoder
 
         # Takes cmd_type and **cmd_args
-        self._send_command_callback = None
         self._gearman_command_callback_map = {}
 
-    def set_send_command_callback(self, send_command_callback):
-        self._send_command_callback = send_command_callback
+        # Setup callbacks tying this handler and connection together
+        self._gearman_connection.set_on_command_recv_callback(self.recv_command)
+        self._gearman_connection.set_on_connect_callback(self.on_connect)
 
     def on_connect(self):
         pass
@@ -32,7 +33,7 @@ class GearmanCommandHandler(object):
 
     def send_command(self, cmd_type, **cmd_args):
         """Hand off I/O to the connection mananger"""
-        self._send_command_callback(cmd_type, cmd_args)
+        self._gearman_connection.send_command(cmd_type, cmd_args)
 
     def recv_command(self, cmd_type, cmd_args):
         """Maps any command to a recv_* callback function"""

@@ -57,6 +57,7 @@ class GearmanConnectionManager(object):
         assert self.command_handler_class is not None, 'GearmanClientBase did not receive a command handler class'
 
         self.fd_to_connection_map = {}
+        self.address_to_connection_map = {}
         self.connection_to_handler_map = {}
 
         host_list = host_list or []
@@ -93,15 +94,13 @@ class GearmanConnectionManager(object):
         connection_fd = current_connection.fileno()
         self.fd_to_connection_map[connection_fd] = current_connection
 
-        current_handler = self.command_handler_class(data_encoder=self.data_encoder)
+        connection_address = current_connection.getpeername()
+        self.address_to_connection_map[connection_address] = current_connection
+
+        current_handler = self.command_handler_class(connection=current_connection, data_encoder=self.data_encoder)
         self.connection_to_handler_map[current_connection] = current_handler
 
         self._setup_handler(current_handler)
-        current_handler.set_send_command_callback(current_connection.send_command)
-
-        # Setup callbacks tying this handler and connection together
-        current_connection.set_on_command_recv_callback(current_handler.recv_command)
-        current_connection.set_on_connect_callback(current_handler.on_connect)
 
         return current_connection
 
@@ -189,7 +188,6 @@ class GearmanConnectionManager(object):
         any_activity = False
         callback_ok = callback_fxn(any_activity)
 
-        print submitted_connections
         connection_ok = compat.any(bool(current_connection.connected or current_connection.connecting) for current_connection in submitted_connections)
 
         while connection_ok and callback_ok:
@@ -198,7 +196,6 @@ class GearmanConnectionManager(object):
                 break
 
             # Do a single robust select and handle all connection activity
-            print submitted_connections
             read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
             self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
@@ -240,5 +237,9 @@ class GearmanConnectionManager(object):
 
         current_connection.close()
 
-        self.fd_to_connection_map.pop(connection_fd, None)
+        current_address = current_connection.getpeername()
+
+        self.fd_to_connection_map.pop(current_fd, None)
+        self.address_to_connection_map.pop(current_address, None)
+
         self.connection_to_handler_map.pop(current_connection, None)

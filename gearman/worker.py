@@ -126,7 +126,9 @@ class GearmanWorker(GearmanConnectionManager):
     ## Public methods so Gearman jobs can send Gearman updates ##
     #############################################################
     def _get_handler_for_job(self, current_job):
-        return self.connection_to_handler_map[current_job.connection]
+        current_connection = self.address_to_connection_map[current_job.connection]
+        current_handler = self.connection_to_handler_map[current_connection]
+        return current_handler
 
     def send_job_status(self, current_job, numerator, denominator):
         """Send a Gearman JOB_STATUS update for an inflight job"""
@@ -164,10 +166,6 @@ class GearmanWorker(GearmanConnectionManager):
     #####################################################
     ##### Callback methods for GearmanWorkerHandler #####
     #####################################################
-    def create_job(self, current_handler, job_handle, task, unique, data):
-        """Create a new job using our self.job_class"""
-        current_connection = self.handler_to_connection_map[current_handler]
-        return self.job_class(current_connection, job_handle, task, unique, data)
 
     def on_job_execute(self, current_job):
         try:
@@ -188,9 +186,6 @@ class GearmanWorker(GearmanConnectionManager):
 
     def set_job_lock(self, current_handler, lock):
         """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
-        if current_handler not in self.handler_to_connection_map:
-            return False
-
         failed_lock = bool(lock and self.current_handler_holding_job_lock is not None)
         failed_unlock = bool(not lock and self.current_handler_holding_job_lock != current_handler)
 
