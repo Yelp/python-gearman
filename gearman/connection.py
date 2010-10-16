@@ -44,11 +44,8 @@ class GearmanConnection(Connection):
             cmd_type, cmd_args = cmd_tuple
             self._on_command_recv_callback(cmd_type, cmd_args)
 
-    def handle_write(self):
-        was_connecting = self.connecting
-        super(GearmanConnection, self).handle_write()
-        if was_connecting and self.connected:
-            self._on_connect_callback()
+    def handle_connect(self):
+        self._on_connect_callback()
 
     def recv_command(self):
         io_buffer = self.peek()

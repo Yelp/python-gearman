@@ -2,6 +2,7 @@ import logging
 import select as select_lib
 
 import gearman.util
+from gearman.connection_poller import GearmanConnectionPoller
 from gearman.connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, ServerUnavailable
@@ -47,6 +48,7 @@ class GearmanConnectionManager(object):
     """
     command_handler_class = None
     connection_class = GearmanConnection
+    connection_poller_class = GearmanConnectionPoller
 
     job_class = GearmanJob
     job_request_class = GearmanJobRequest
@@ -56,9 +58,10 @@ class GearmanConnectionManager(object):
     def __init__(self, host_list=None):
         assert self.command_handler_class is not None, 'GearmanClientBase did not receive a command handler class'
 
-        self.fd_to_connection_map = {}
-        self.address_to_connection_map = {}
-        self.connection_to_handler_map = {}
+        self._address_to_connection_map = {}
+        self._connection_to_handler_map = {}
+
+        self._connection_poller = self.connection_poller_class()
 
         host_list = host_list or []
         for hostport_tuple in host_list:
@@ -66,7 +69,7 @@ class GearmanConnectionManager(object):
 
     def shutdown(self):
         # Shutdown all our connections one by one
-        for gearman_connection in self.connection_to_handler_map.iterkeys():
+        for gearman_connection in self._connection_to_handler_map.iterkeys():
             try:
                 gearman_connection.close()
             except ConnectionError:
@@ -91,14 +94,14 @@ class GearmanConnectionManager(object):
         # Asynchronously establish a connection
         current_connection.connect()
 
-        connection_fd = current_connection.fileno()
-        self.fd_to_connection_map[connection_fd] = current_connection
+        # Once we have a socket, register this connection with the poller
+        self._connection_poller.add_connection(current_connection)
 
         connection_address = current_connection.getpeername()
-        self.address_to_connection_map[connection_address] = current_connection
+        self._address_to_connection_map[connection_address] = current_connection
 
         current_handler = self.command_handler_class(connection=current_connection, data_encoder=self.data_encoder)
-        self.connection_to_handler_map[current_connection] = current_handler
+        self._connection_to_handler_map[current_connection] = current_handler
 
         self._setup_handler(current_handler)
 
@@ -109,137 +112,4 @@ class GearmanConnectionManager(object):
 
     @property
     def connection_list(self):
-        return self.connection_to_handler_map.keys()
-
-
-    def poll_connections_once(self, submitted_connections, timeout=None):
-        """Does a single robust select, catching socket errors"""
-        select_connections = set(submitted_connections)
-
-        rd_connections = set()
-        wr_connections = set()
-        ex_connections = set()
-
-        if timeout is not None and timeout < 0.0:
-            return rd_connections, wr_connections, ex_connections
-
-        successful_select = False
-        while not successful_select and select_connections:
-            select_connections -= ex_connections
-            check_rd_connections = [current_connection for current_connection in select_connections if current_connection.readable()]
-            check_wr_connections = [current_connection for current_connection in select_connections if current_connection.writable()]
-
-            try:
-                rd_list, wr_list, ex_list = gearman.util.select(check_rd_connections, check_wr_connections, select_connections, timeout=timeout)
-                rd_connections |= set(rd_list)
-                wr_connections |= set(wr_list)
-                ex_connections |= set(ex_list)
-
-                successful_select = True
-            except (select_lib.error, ConnectionError):
-                # On any exception, we're going to assume we ran into a socket exception
-                # We'll need to fish for bad connections as suggested at
-                #
-                # http://docs.python.org/howto/sockets
-                for conn_to_test in select_connections:
-                    try:
-                        _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
-                    except (select_lib.error, ConnectionError):
-                        rd_connections.discard(conn_to_test)
-                        wr_connections.discard(conn_to_test)
-                        ex_connections.add(conn_to_test)
-
-                        gearman_logger.error('select error: %r' % conn_to_test)
-
-        if _DEBUG_MODE_:
-            gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', \
-                len(select_connections), len(rd_connections), len(wr_connections), len(ex_connections))
-
-        return rd_connections, wr_connections, ex_connections
-
-    def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
-        """Process all connection activity... executes all handle_* callbacks"""
-        dead_connections = set()
-        for current_connection in rd_connections:
-            try:
-                self.handle_read(current_connection.fileno())
-            except ConnectionError:
-                dead_connections.add(current_connection)
-
-        for current_connection in wr_connections:
-            try:
-                self.handle_write(current_connection.fileno())
-            except ConnectionError:
-                dead_connections.add(current_connection)
-
-        for current_connection in ex_connections:
-            self.handle_error(current_connection.fileno())
-
-        for current_connection in dead_connections:
-            self.handle_error(current_connection.fileno())
-
-        failed_connections = ex_connections | dead_connections
-        return rd_connections, wr_connections, failed_connections
-
-    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
-        """Continue to poll our connections until we receive a stopping condition"""
-        stopwatch = gearman.util.Stopwatch(timeout)
-
-        any_activity = False
-        callback_ok = callback_fxn(any_activity)
-
-        connection_ok = compat.any(bool(current_connection.connected or current_connection.connecting) for current_connection in submitted_connections)
-
-        while connection_ok and callback_ok:
-            time_remaining = stopwatch.get_time_remaining()
-            if time_remaining == 0.0:
-                break
-
-            # Do a single robust select and handle all connection activity
-            read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
-            self.handle_connection_activity(read_connections, write_connections, dead_connections)
-
-            any_activity = compat.any([read_connections, write_connections, dead_connections])
-
-            callback_ok = callback_fxn(any_activity)
-            connection_ok = compat.any(current_connection.connected or current_connection.connecting for current_connection in submitted_connections)
-
-        # We should raise here if we have no alive connections (don't go into a select polling loop with no connections)
-        if not connection_ok:
-            raise ServerUnavailable('Found no valid connections in list: %r' % self.connection_to_handler_map.keys())
-
-        return bool(connection_ok and callback_ok)
-
-    def filenos(self):
-        connection_fds = set()
-        for connection in self.connection_to_handler_map.iterkeys():
-            try:
-                connection_fds.add(connection.fileno())
-            except ConnectionError:
-                pass
-
-        return connection_fds
-
-    def handle_read(self, current_fd):
-        """Handle all our pending socket data"""
-        current_connection = self.fd_to_connection_map[current_fd]
-
-        # Transfer data from socket -> buffer
-        current_connection.handle_read()
-
-    def handle_write(self, current_fd):
-        current_connection = self.fd_to_connection_map[current_fd]
-
-        current_connection.handle_write()
-
-    def handle_error(self, current_fd):
-        current_connection = self.fd_to_connection_map[current_fd]
-
-        current_connection.close()
-
-        current_address = current_connection.getpeername()
-
-        self.fd_to_connection_map.pop(current_fd, None)
-        self.address_to_connection_map.pop(current_address, None)
-
-        self.connection_to_handler_map.pop(current_connection, None)
+        return self._connection_to_handler_map.keys()

@@ -57,10 +57,9 @@ class Connection(object):
 
     def connect(self):
         """Connect to the server. Raise ConnectionError if connection fails."""
-        if self.connecting:
-            self._throw_exception(message='connection in progress')
-        elif self.connected:
-            self._throw_exception(message='connection already established')
+        # If we're already in the process of connecting OR already connected, error out
+        if not self.disconnected:
+            self._throw_exception(message='invalid connection state')
 
         current_time = time.time()
         if current_time < self._reconnect_time:
@@ -122,6 +121,10 @@ class Connection(object):
     def connecting(self):
         return bool(self._state == STATE_CONNECTING)
 
+    @property
+    def disconnected(self):
+        return bool(self._state == STATE_DISCONNECTED)
+
     def readable(self):
         """Returns True if we might have data to read"""
         return bool(self.connected)
@@ -134,59 +137,30 @@ class Connection(object):
 
     def handle_read(self):
         """Reads data from socket --> buffer"""
-        if self.connecting:
-            self._throw_exception(message='connection in progress')
+        if not self.connected:
+            self._throw_exception(message='invalid connection state')
 
         self._recv_data()
 
     def handle_write(self):
-        if self.connecting:
-            # Check our socket to see what error number we have - See "man connect"
-            connect_errno = self._socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-
-            self._update_state(connect_errno)
-        else:
+        if self.disconnected:
+            self._throw_exception(message='invalid connection state')
+        elif self.connected:
             # Transfer command from command queue -> buffer
             self._send_data()
+        else:
+            # Check our socket to see what error number we have - See "man connect"
+            connect_errno = self._socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            self._update_state(connect_errno)
 
-    def _recv_data(self):
-        """Read data from socket -> buffer, returns read # of bytes"""
-        if not self.connected:
-            self._throw_exception(message='disconnected')
+            if self.connected:
+                self.handle_connect()
 
-        recv_buffer = ''
-        try:
-            recv_buffer = self._socket.recv(self.bytes_to_read)
-        except socket.error, socket_exception:
-            self._throw_exception(exception=socket_exception)
+    def handle_connect(self):
+        pass
 
-        if len(recv_buffer) == 0:
-            self._throw_exception(message='remote disconnected')
-
-        self._incoming_buffer += recv_buffer
-        return len(self._incoming_buffer)
-
-    def _send_data(self):
-        """Send data from buffer -> socket
-
-        Returns remaining size of the output buffer
-        """
-        if not self.connected:
-            self._throw_exception(message='disconnected')
-
-        if not self._outgoing_buffer:
-            return 0
-
-        try:
-            bytes_sent = self._socket.send(self._outgoing_buffer)
-        except socket.error, socket_exception:
-            self._throw_exception(exception=socket_exception)
-
-        if bytes_sent == 0:
-            self._throw_exception(message='remote disconnected')
-
-        self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
-        return len(self._outgoing_buffer)
+    def handle_close(self):
+        self._throw_exception(message='remote disconnected')
 
     ########################################################
     ############### Private support methods  ###############
@@ -213,6 +187,45 @@ class Connection(object):
         # Reset all our raw data buffers
         self._incoming_buffer = ''
         self._outgoing_buffer = ''
+
+    def _recv_data(self):
+        """Read data from socket -> buffer, returns read # of bytes"""
+        if not self.connected:
+            self._throw_exception(message='invalid connection state')
+
+        recv_buffer = ''
+        try:
+            recv_buffer = self._socket.recv(self.bytes_to_read)
+        except socket.error, socket_exception:
+            self._throw_exception(exception=socket_exception)
+
+        if len(recv_buffer) == 0:
+            self.handle_close()
+
+        self._incoming_buffer += recv_buffer
+        return len(self._incoming_buffer)
+
+    def _send_data(self):
+        """Send data from buffer -> socket
+
+        Returns remaining size of the output buffer
+        """
+        if not self.connected:
+            self._throw_exception(message='invalid connection state')
+
+        if not self._outgoing_buffer:
+            return 0
+
+        try:
+            bytes_sent = self._socket.send(self._outgoing_buffer)
+        except socket.error, socket_exception:
+            self._throw_exception(exception=socket_exception)
+
+        if bytes_sent == 0:
+            self.handle_close()
+
+        self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
+        return len(self._outgoing_buffer)
 
     def _throw_exception(self, message=None, exception=None):
         self._update_state(ERRNO_DISCONNECTED)

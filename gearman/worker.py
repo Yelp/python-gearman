@@ -96,17 +96,17 @@ class GearmanWorker(GearmanConnectionManager):
 
     def wait_until_connection_established(self, poll_timeout=None):
         # Poll to make sure we send out our request for a status update
-        def continue_while_not_connected(any_activity):
+        def stop_when_connected():
             already_connected = False
             for current_connection in self.connection_list:
                 if current_connection.connected:
                     already_connected = True
-                elif not current_connection.connecting:
+                elif current_connection.disconnected:
                     self.establish_connection(current_connection)
+            
+            return already_connected:
 
-            return bool(not already_connected)
-
-        self.poll_connections_until_stopped(self.connection_list, continue_while_not_connected, timeout=poll_timeout)
+        self._connection_poller.start(timeout=poll_timeout)
 
     def after_poll(self, any_activity):
         """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
