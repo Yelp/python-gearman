@@ -17,17 +17,16 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
         EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
     """
-    job_class = GearmanJob
+    def __init__(self):
+        super(GearmanWorkerCommandHandler, self).__init__()
 
-    def __init__(self, connection=None, data_encoder=None):
-        super(GearmanWorkerCommandHandler, self).__init__(connection=connection, data_encoder=data_encoder)
-
-        self._handler_abilities = []
+        self._abilities = []
+        self._abilities_set = set()
         self._client_id = None
 
     def on_connect(self):
         self.send_client_id(self._client_id)
-        self.send_abilities(self._handler_abilities)
+        self.send_abilities(self._abilities)
         self._sleep()
 
     ##################################################################
@@ -35,17 +34,15 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     ##################################################################
     def set_abilities(self, connection_abilities_list):
         assert type(connection_abilities_list) in (list, tuple)
-        self._handler_abilities = connection_abilities_list
-        if self._gearman_connection.connected:
-            self.send_abilities(self._handler_abilities)
+        self._abilities = connection_abilities_list
+        self._abilities_set = set(connection_abilities_list)
+        if self._connection.connected:
+            self.send_abilities(self._abilities)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
-        if self._gearman_connection.connected:
+        if self._connection.connected:
             self.send_client_id(self._client_id)
-
-    def set_connection_manager(self, connection_manager):
-        self.connection_manager = connection_manager
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
@@ -96,13 +93,13 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         self.send_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def _check_job_lock(self):
-        return self.connection_manager.check_job_lock(self)
+        return self._connection_manager.check_job_lock(self)
 
     def _acquire_job_lock(self):
-        return self.connection_manager.set_job_lock(self, lock=True)
+        return self._connection_manager.set_job_lock(self, lock=True)
 
     def _release_job_lock(self):
-        if not self.connection_manager.set_job_lock(self, lock=False):
+        if not self._connection_manager.set_job_lock(self, lock=False):
             raise InvalidWorkerState("Unable to release job lock for %r" % self)
 
         return True
@@ -138,17 +135,17 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         AWAITING_JOB -> EXECUTE_JOB -> SLEEP :: Always transition once we're given a job
         """
-        assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
+        assert task in self._abilities_set, '%s not found in %r' % (task, self._abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
-        if not self.connection_manager.check_job_lock(self):
+        if not self._connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        server_address = self._gearman_connection.getpeername()
-        gearman_job = self.job_class(server_address, job_handle, task, unique, self.decode_data(data))
+        server_address = self._connection.getpeername()
+        gearman_job = self._connection_manager.job_class(server_address, job_handle, task, unique, self.decode_data(data))
 
         # Create a new job
-        self.connection_manager.on_job_execute(gearman_job)
+        self._connection_manager.on_job_execute(gearman_job)
 
         # Release the job lock once we're doing and go back to sleep
         self._release_job_lock()

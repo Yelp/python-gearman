@@ -159,8 +159,8 @@ class Connection(object):
     def handle_connect(self):
         pass
 
-    def handle_close(self):
-        self._throw_exception(message='remote disconnected')
+    def handle_disconnect(self):
+        pass
 
     ########################################################
     ############### Private support methods  ###############
@@ -200,7 +200,7 @@ class Connection(object):
             self._throw_exception(exception=socket_exception)
 
         if len(recv_buffer) == 0:
-            self.handle_close()
+            self.handle_disconnect()
 
         self._incoming_buffer += recv_buffer
         return len(self._incoming_buffer)
@@ -222,7 +222,7 @@ class Connection(object):
             self._throw_exception(exception=socket_exception)
 
         if bytes_sent == 0:
-            self.handle_close()
+            self.handle_disconnect()
 
         self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
         return len(self._outgoing_buffer)

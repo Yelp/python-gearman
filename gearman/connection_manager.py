@@ -65,7 +65,7 @@ class GearmanConnectionManager(object):
 
         host_list = host_list or []
         for hostport_tuple in host_list:
-            self.add_connection(hostport_tuple)
+            self.connect_to_host(hostport_tuple)
 
     def shutdown(self):
         # Shutdown all our connections one by one
@@ -79,30 +79,33 @@ class GearmanConnectionManager(object):
     # Connection management functions #
     ###################################
 
-    def add_connection(self, hostport_tuple):
+    def connect_to_host(self, hostport_tuple):
         """Add a new connection to this connection manager"""
         gearman_host, gearman_port = gearman.util.disambiguate_server_parameter(hostport_tuple)
 
         current_connection = self.connection_class(host=gearman_host, port=gearman_port)
-         
+
         # Establish a connection immediately - check for socket exceptions like: "host not found"
-        client_connection = self.establish_connection(current_connection)
+        current_connection.connect()
+
+        client_connection = self.register_connection(current_connection)
 
         return client_connection
 
-    def establish_connection(self, current_connection):
-        # Asynchronously establish a connection
-        current_connection.connect()
-
+    def register_connection(self, current_connection):
         # Once we have a socket, register this connection with the poller
         self._connection_poller.add_connection(current_connection)
 
         connection_address = current_connection.getpeername()
         self._address_to_connection_map[connection_address] = current_connection
 
-        current_handler = self.command_handler_class(connection=current_connection, data_encoder=self.data_encoder)
+        # Setup this CommandHandler
+        current_handler = self.command_handler_class()
+        current_handler.set_connection_manager(self)
+        current_handler.set_connection(current_connection)
         self._connection_to_handler_map[current_connection] = current_handler
 
+        current_connection.set_command_handler(current_handler)
         self._setup_handler(current_handler)
 
         return current_connection

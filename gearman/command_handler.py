@@ -9,19 +9,22 @@ class GearmanCommandHandler(object):
 
     GearmanCommandHandler does no I/O and only understands sending/receiving commands
     """
-    def __init__(self, connection=None, data_encoder=None):
-        self._gearman_connection = connection
-        self._data_encoder = data_encoder
+    def __init__(self):
+        self._connection = None
+        self._connection_manager = None
+
+        self._data_encoder = None
 
         # Takes cmd_type and **cmd_args
         self._gearman_command_callback_map = {}
 
-        # Setup callbacks tying this handler and connection together
-        self._gearman_connection.set_on_command_recv_callback(self.recv_command)
-        self._gearman_connection.set_on_connect_callback(self.on_connect)
+    #### Interaction with GearmanConnectionManager
+    def set_connection_manager(self, gearman_connection_manager):
+        self._connection_manager = gearman_connection_manager
+        self.set_data_encoder(self._connection_manager.data_encoder)
 
-    def on_connect(self):
-        pass
+    def set_data_encoder(self, data_encoder):
+        self._data_encoder = data_encoder
 
     def decode_data(self, data):
         """Convenience function :: handle binary string -> object unpacking"""
@@ -31,9 +34,19 @@ class GearmanCommandHandler(object):
         """Convenience function :: handle object -> binary string packing"""
         return self._data_encoder.encode(data)
 
+    #### Interaction with GearmanConnection ####
+    def set_connection(self, gearman_connection):
+        self._connection = gearman_connection
+
+    def on_connect(self):
+        pass
+
+    def on_disconnect(self):
+        pass
+
     def send_command(self, cmd_type, **cmd_args):
         """Hand off I/O to the connection mananger"""
-        self._gearman_connection.send_command(cmd_type, cmd_args)
+        self._connection.send_command(cmd_type, cmd_args)
 
     def recv_command(self, cmd_type, cmd_args):
         """Maps any command to a recv_* callback function"""
@@ -70,3 +83,4 @@ class GearmanCommandHandler(object):
     def recv_error(self, error_code, error_text):
         """When we receive an error from the server, notify the connection manager that we have a gearman error"""
         gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
+        self._connection_manager.on_gearman_error(self)

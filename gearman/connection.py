@@ -19,18 +19,11 @@ class GearmanConnection(Connection):
         port = port or DEFAULT_GEARMAN_PORT
         super(GearmanConnection, self).__init__(host=host, port=port)
 
-        self._on_command_recv_callback = None
-        self._on_connect_callback = None
-
         self._is_server_side = False
         self._is_client_side = True
 
-    def set_on_command_recv_callback(self, command_recv_callback):
-        # On readable command callback takes cmd_type, and a bunch of keyword arguments
-        self._on_command_recv_callback = command_recv_callback
-
-    def set_on_connect_callback(self, connect_callback):
-        self._on_connect_callback = connect_callback
+    def set_command_handler(self, command_handler):
+        self._command_handler = command_handler
 
     def handle_read(self):
         """Reads data from socket --> buffer"""
@@ -42,10 +35,13 @@ class GearmanConnection(Connection):
                 break
 
             cmd_type, cmd_args = cmd_tuple
-            self._on_command_recv_callback(cmd_type, cmd_args)
+            self._command_handler.recv_command(cmd_type, cmd_args)
 
     def handle_connect(self):
-        self._on_connect_callback()
+        self._command_handler.on_connect()
+
+    def handle_disconnect(self):
+        self._command_handler.on_disconnect()
 
     def recv_command(self):
         io_buffer = self.peek()
