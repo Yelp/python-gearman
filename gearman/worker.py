@@ -28,7 +28,6 @@ class GearmanWorker(GearmanConnectionManager):
     def _setup_handler(self, current_handler):
         current_handler.set_client_id(self._worker_client_id)
         current_handler.set_abilities(self._worker_abilities.keys())
-        current_handler.set_connection_manager(self)
 
     ########################################################
     ##### Public methods for general GearmanWorker use #####
@@ -104,7 +103,7 @@ class GearmanWorker(GearmanConnectionManager):
                 elif current_connection.disconnected:
                     self.establish_connection(current_connection)
             
-            return already_connected:
+            return already_connected
 
         self._connection_poller.start(timeout=poll_timeout)
 

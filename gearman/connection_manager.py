@@ -59,7 +59,9 @@ class GearmanConnectionManager(object):
         assert self.command_handler_class is not None, 'GearmanClientBase did not receive a command handler class'
 
         self._address_to_connection_map = {}
+
         self._connection_to_handler_map = {}
+        self._handler_to_connection_map = {}
 
         self._connection_poller = self.connection_poller_class()
 
@@ -94,25 +96,76 @@ class GearmanConnectionManager(object):
 
     def register_connection(self, current_connection):
         # Once we have a socket, register this connection with the poller
+        current_connection.set_connection_manager(self)
+
         self._connection_poller.add_connection(current_connection)
 
         connection_address = current_connection.getpeername()
         self._address_to_connection_map[connection_address] = current_connection
 
         # Setup this CommandHandler
-        current_handler = self.command_handler_class()
-        current_handler.set_connection_manager(self)
-        current_handler.set_connection(current_connection)
-        self._connection_to_handler_map[current_connection] = current_handler
-
-        current_connection.set_command_handler(current_handler)
+        current_handler = self.command_handler_class(connection_manager=self)
         self._setup_handler(current_handler)
+
+        # Setup bi-directional maps so we can forward events between these two calsses
+        self._connection_to_handler_map[current_connection] = current_handler
+        self._handler_to_connection_map[current_handler] = current_connection
 
         return current_connection
 
-    def _setup_handler(self, current_handler):
-        return current_handler
+    def unregister_connection(self, current_connection):
+        # Immediately signal a disconnect!
+        current_handler = self.on_disconnect(current_connection)
+
+        self._handler_to_connection_map.pop(current_handler)
+        self._connection_to_handler_map.pop(current_connection)
+        
+        connection_address = current_connection.getpeername()
+        self._address_to_connection_map.pop(connection_address)
+        
+        self._connection_poller.remove_connection(current_connection)
+
+        current_connection.set_connection_manager(None)
+
+        return current_connection
 
     @property
     def connection_list(self):
         return self._connection_to_handler_map.keys()
+
+    def _setup_handler(self, current_handler):
+        return current_handler
+
+    def poll_connections_until_stopped(self, continue_polling_callback, timeout=None):
+        return self._connection_poller.poll_until_stopped(continue_polling_callback, timeout=timeout)
+
+    ###################################
+    # Connection management functions #
+    ###################################
+
+    ### Handlers to take care of Connection Events
+    def on_recv_command(self, current_connection, cmd_type, cmd_args):
+        """Forwarding connection communication on to the respect handler"""
+        current_handler = self._connection_to_handler_map[current_connection]
+        current_handler.recv_command(cmd_type, cmd_args)
+        return current_handler
+
+    def on_connect(self, current_connection):
+        current_handler = self._connection_to_handler_map[current_connection]
+        current_handler.on_connect()
+        return current_handler
+
+    def on_disconnect(self, current_connection):
+        current_handler = self._connection_to_handler_map[current_connection]
+        current_handler.on_disconnect()
+        return current_handler
+
+    # Handlers to take care of CommandHandlerEvents
+    def on_send_command(self, current_handler, cmd_type, cmd_args):
+        current_connection = self._handler_to_connection_map[current_handler]
+        current_connection.send_command(cmd_type, cmd_args)
+        return current_connection
+
+    def on_gearman_error(self, current_handler):
+        current_connection = self._handler_to_connection_map[current_handler]
+        return current_connection

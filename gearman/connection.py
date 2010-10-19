@@ -21,9 +21,10 @@ class GearmanConnection(Connection):
 
         self._is_server_side = False
         self._is_client_side = True
+        self._connection_manager = None
 
-    def set_command_handler(self, command_handler):
-        self._command_handler = command_handler
+    def set_connection_manager(self, connection_manager):
+        self._connection_manager = connection_manager
 
     def handle_read(self):
         """Reads data from socket --> buffer"""
@@ -35,13 +36,13 @@ class GearmanConnection(Connection):
                 break
 
             cmd_type, cmd_args = cmd_tuple
-            self._command_handler.recv_command(cmd_type, cmd_args)
+            self._connection_manager.on_recv_command(self, cmd_type, cmd_args)
 
     def handle_connect(self):
-        self._command_handler.on_connect()
+        self._connection_manager.on_connect(self)
 
     def handle_disconnect(self):
-        self._command_handler.on_disconnect()
+        self._connection_manager.on_disconnect(self)
 
     def recv_command(self):
         io_buffer = self.peek()

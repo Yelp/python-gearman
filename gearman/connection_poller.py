@@ -48,7 +48,7 @@ class GearmanConnectionPoller(object):
 
         continue_polling = True
         while continue_polling:
-            time_remaining = self._stopwatch.get_time_remaining()
+            time_remaining = stopwatch.get_time_remaining()
 
             # Do a single robust select and handle all connection activity
             read_connections, write_connections, dead_connections = self._poll_once(timeout=time_remaining)
@@ -78,12 +78,11 @@ class GearmanConnectionPoller(object):
         check_all_connections = check_rd_conns | check_wr_conns | check_ex_conns
 
         successful_select = False
-        while not successful_select and select_connections:
+        while not successful_select and check_ex_conns:
             check_ex_conns -= event_ex_conns
 
             try:
-                event_rd_conns, event_rd_conns, event_ex_conns = 
-                    self._execute_select(check_rd_conns, check_wr_conns, check_ex_conns, timeout=timeout)
+                event_rd_conns, event_rd_conns, event_ex_conns = self._execute_select(check_rd_conns, check_wr_conns, check_ex_conns, timeout=timeout)
 
                 successful_select = True
             except (select.error, ConnectionError):
@@ -107,13 +106,13 @@ class GearmanConnectionPoller(object):
 
         return event_rd_conns, event_wr_conns, event_ex_conns
 
-    def _execute_select(rd_conns, wr_conns, ex_conns, timeout=None):
+    def _execute_select(self, rd_conns, wr_conns, ex_conns, timeout=None):
         """Behave similar to select.select, except ignoring certain types of exceptions"""
         rd_set = set()
         wr_set = set()
         ex_set = set()
 
-        select_args = [rlist, wlist, xlist]
+        select_args = [rd_conns, wr_conns, ex_conns]
         if timeout is not None:
             select_args.append(timeout)
 

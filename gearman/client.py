@@ -91,7 +91,7 @@ class GearmanClient(GearmanConnectionManager):
 
             return compat.any(is_request_pending(current_request) for current_request in job_requests)
 
-        self.poll_connections_until_stopped(self.connection_list, continue_while_jobs_pending, timeout=poll_timeout)
+        self.poll_connections_until_stopped(continue_while_jobs_pending, timeout=poll_timeout)
 
         # Mark any job still in the queued state to poll_timeout
         for current_request in job_requests:
@@ -115,7 +115,7 @@ class GearmanClient(GearmanConnectionManager):
 
             return False
 
-        self.poll_connections_until_stopped(self.connection_list, continue_while_jobs_incomplete, timeout=poll_timeout)
+        self.poll_connections_until_stopped(continue_while_jobs_incomplete, timeout=poll_timeout)
 
         # Mark any job still in the queued state to poll_timeout
         for current_request in job_requests:
@@ -164,7 +164,7 @@ class GearmanClient(GearmanConnectionManager):
 
             return False
 
-        self.poll_connections_until_stopped(self.connection_list, continue_while_status_not_updated, timeout=poll_timeout)
+        self.poll_connections_until_stopped(continue_while_status_not_updated, timeout=poll_timeout)
 
         for current_request in job_requests:
             current_request.server_status = current_request.server_status or {}
@@ -228,7 +228,7 @@ class GearmanClient(GearmanConnectionManager):
 
             return bool(not already_connected)
 
-        self.poll_connections_until_stopped(self.connection_list, continue_while_not_connected, timeout=poll_timeout)
+        self.poll_connections_until_stopped(continue_while_not_connected, timeout=poll_timeout)
 
     def send_job_request(self, current_request):
         """Attempt to send out a job request"""

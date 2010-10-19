@@ -9,22 +9,12 @@ class GearmanCommandHandler(object):
 
     GearmanCommandHandler does no I/O and only understands sending/receiving commands
     """
-    def __init__(self):
-        self._connection = None
-        self._connection_manager = None
-
-        self._data_encoder = None
+    def __init__(self, connection_manager):
+        self._connection_manager = connection_manager
+        self._data_encoder = connection_manager.data_encoder
 
         # Takes cmd_type and **cmd_args
         self._gearman_command_callback_map = {}
-
-    #### Interaction with GearmanConnectionManager
-    def set_connection_manager(self, gearman_connection_manager):
-        self._connection_manager = gearman_connection_manager
-        self.set_data_encoder(self._connection_manager.data_encoder)
-
-    def set_data_encoder(self, data_encoder):
-        self._data_encoder = data_encoder
 
     def decode_data(self, data):
         """Convenience function :: handle binary string -> object unpacking"""
@@ -35,9 +25,6 @@ class GearmanCommandHandler(object):
         return self._data_encoder.encode(data)
 
     #### Interaction with GearmanConnection ####
-    def set_connection(self, gearman_connection):
-        self._connection = gearman_connection
-
     def on_connect(self):
         pass
 
@@ -46,7 +33,7 @@ class GearmanCommandHandler(object):
 
     def send_command(self, cmd_type, **cmd_args):
         """Hand off I/O to the connection mananger"""
-        self._connection.send_command(cmd_type, cmd_args)
+        self._connection_manager.on_send_command(cmd_type, cmd_args)
 
     def recv_command(self, cmd_type, cmd_args):
         """Maps any command to a recv_* callback function"""

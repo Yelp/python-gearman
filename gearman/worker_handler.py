@@ -17,8 +17,8 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB  -> Holding worker level job lock and awaiting a server response
         EXECUTING_JOB -> Transitional state (for ASSIGN_JOB)
     """
-    def __init__(self):
-        super(GearmanWorkerCommandHandler, self).__init__()
+    def __init__(self, connection_manager=None):
+        super(GearmanWorkerCommandHandler, self).__init__(connection_manager=connection_manager)
 
         self._abilities = []
         self._abilities_set = set()
