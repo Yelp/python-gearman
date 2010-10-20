@@ -36,23 +36,21 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         assert type(connection_abilities_list) in (list, tuple)
         self._abilities = connection_abilities_list
         self._abilities_set = set(connection_abilities_list)
-        if self._connection.connected:
-            self.send_abilities(self._abilities)
 
     def set_client_id(self, client_id):
         self._client_id = client_id
-        if self._connection.connected:
-            self.send_client_id(self._client_id)
 
     ###############################################################
     #### Convenience methods for typical gearman jobs to call #####
     ###############################################################
-    def send_abilities(self, list_of_abilities):
+    def send_abilities(self, list_of_abilities=None):
+        list_of_abilities = list_of_abilities or self._abilities
         self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
         for task in list_of_abilities:
             self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
 
-    def send_client_id(self, client_id):
+    def send_client_id(self, client_id=None):
+        client_id = client_id or self._client_id
         if not client_id:
             return
 
@@ -141,8 +139,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         if not self._connection_manager.check_job_lock(self):
             raise InvalidWorkerState("Received a job when we weren't expecting one")
 
-        server_address = self._connection.getpeername()
-        gearman_job = self._connection_manager.job_class(server_address, job_handle, task, unique, self.decode_data(data))
+        gearman_job = self._connection_manager.create_job(self, job_handle, task, unique, self.decode_data(data))
 
         # Create a new job
         self._connection_manager.on_job_execute(gearman_job)

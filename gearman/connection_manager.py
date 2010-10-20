@@ -64,6 +64,7 @@ class GearmanConnectionManager(object):
         self._handler_to_connection_map = {}
 
         self._connection_poller = self.connection_poller_class()
+        self._connected_set = set()
 
         host_list = host_list or []
         for hostport_tuple in host_list:
@@ -139,6 +140,23 @@ class GearmanConnectionManager(object):
     def poll_connections_until_stopped(self, continue_polling_callback, timeout=None):
         return self._connection_poller.poll_until_stopped(continue_polling_callback, timeout=timeout)
 
+    def wait_until_connection_established(self, poll_timeout=None):
+        # Poll to make sure we send out our request for a status update
+        def continue_while_not_connected():
+            self._connected_set.clear()
+            for current_connection in self.connection_list:
+                if current_connection.connected:
+                    self._connected_set.add(current_connection)
+                elif not current_connection.connecting:
+                    self.attempt_connect(current_connection)
+
+            return not bool(self._connected_set)
+
+        self.poll_connections_until_stopped(continue_while_not_connected, timeout=poll_timeout)
+
+    def attempt_connect(self, current_connection):
+        current_connection.connect()
+ 
     ###################################
     # Connection management functions #
     ###################################

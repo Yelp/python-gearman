@@ -29,15 +29,18 @@ class GearmanClient(GearmanConnectionManager):
 
         # The authoritative copy of all requests that this client knows about
         # Ignores the fact if a request has been bound to a connection or not
-        self.request_to_rotating_connection_queue = compat.defaultdict(collections.deque)
+        self._request_to_rotating_connection_queue = compat.defaultdict(collections.deque)
 
-    def submit_job(self, task, data, unique=None, priority=PRIORITY_NONE, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
+    def submit_job(self, task, data, unique=None, priority=PRIORITY_NONE, background=False, wait_until_accepted=True, wait_until_complete=True, max_retries=0, poll_timeout=None):
         """Submit a single job to any gearman server"""
         job_info = dict(task=task, data=data, unique=unique, priority=priority)
-        completed_job_list = self.submit_multiple_jobs([job_info], background=background, wait_until_complete=wait_until_complete, max_retries=max_retries, poll_timeout=poll_timeout)
+
+        completed_job_list = self.submit_multiple_jobs([job_info], background=background, \
+            wait_until_accepted=wait_until_accepted, wait_until_complete=wait_until_complete, max_retries=max_retries, poll_timeout=poll_timeout)
+
         return gearman.util.unlist(completed_job_list)
 
-    def submit_multiple_jobs(self, jobs_to_submit, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
+    def submit_multiple_jobs(self, jobs_to_submit, background=False, wait_until_accepted=True, wait_until_complete=True, max_retries=0, poll_timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
         {'task': task, 'data': data, 'unique': unique, 'priority': priority}
@@ -47,9 +50,9 @@ class GearmanClient(GearmanConnectionManager):
         # Convert all job dicts to job request objects
         requests_to_submit = [self._create_request_from_dictionary(job_info, background=background, max_retries=max_retries) for job_info in jobs_to_submit]
 
-        return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, poll_timeout=poll_timeout)
+        return self.submit_multiple_requests(requests_to_submit, wait_until_accepted=wait_until_accepted, wait_until_complete=wait_until_complete, poll_timeout=poll_timeout)
 
-    def submit_multiple_requests(self, job_requests, wait_until_complete=True, poll_timeout=None):
+    def submit_multiple_requests(self, job_requests, wait_until_accepted=True, wait_until_complete=True, poll_timeout=None):
         """Take GearmanJobRequests, assign them connections, and request that they be done.
 
         * Blocks until our jobs are accepted (should be fast) OR times out
@@ -65,12 +68,12 @@ class GearmanClient(GearmanConnectionManager):
         self.wait_until_connection_established(poll_timeout=time_remaining)
 
         time_remaining = stopwatch.get_time_remaining()
-        if bool(time_remaining != 0.0):
+        if wait_until_accepted and stopwatch.has_time_remaining(time_remaining):
             processed_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=time_remaining)
 
         # Optionally, we'll allow a user to wait until all jobs are complete with the same poll_timeout
         time_remaining = stopwatch.get_time_remaining()
-        if wait_until_complete and bool(time_remaining != 0.0):
+        if wait_until_complete and stopwatch.has_time_remaining(time_remaining):
             processed_requests = self.wait_until_jobs_completed(processed_requests, poll_timeout=time_remaining)
 
         return processed_requests
@@ -84,7 +87,7 @@ class GearmanClient(GearmanConnectionManager):
 
         # Poll until we know we've gotten acknowledgement that our job's been accepted
         # If our connection fails while we're waiting for it to be accepted, automatically retry right here
-        def continue_while_jobs_pending(any_activity):
+        def continue_while_jobs_pending():
             for current_request in job_requests:
                 if current_request.state == JOB_UNKNOWN:
                     self.send_job_request(current_request)
@@ -108,7 +111,7 @@ class GearmanClient(GearmanConnectionManager):
 
         # Poll until we get responses for all our functions
         # Do NOT attempt to auto-retry connection failures as we have no idea how for a worker got
-        def continue_while_jobs_incomplete(any_activity):
+        def continue_while_jobs_incomplete():
             for current_request in job_requests:
                 if is_request_incomplete(current_request) and current_request.state != JOB_UNKNOWN:
                     return True
@@ -122,7 +125,7 @@ class GearmanClient(GearmanConnectionManager):
             current_request.timed_out = is_request_incomplete(current_request)
 
             if not current_request.timed_out:
-                self.request_to_rotating_connection_queue.pop(current_request, None)
+                self._request_to_rotating_connection_queue.pop(current_request, None)
 
         return job_requests
 
@@ -143,7 +146,7 @@ class GearmanClient(GearmanConnectionManager):
             current_request.server_status['last_time_received'] = current_request.server_status.get('time_received')
 
             current_connection = current_request.job.connection
-            current_command_handler = self.connection_to_handler_map[current_connection]
+            current_command_handler = self._connection_to_handler_map[current_connection]
 
             current_command_handler.send_get_status_of_job(current_request)
 
@@ -157,7 +160,7 @@ class GearmanClient(GearmanConnectionManager):
             return bool(current_status.get('time_received') == current_status.get('last_time_received'))
 
         # Poll to make sure we send out our request for a status update
-        def continue_while_status_not_updated(any_activity):
+        def continue_while_status_not_updated():
             for current_request in job_requests:
                 if is_status_not_updated(current_request) and current_request.state != JOB_UNKNOWN:
                     return True
@@ -189,10 +192,10 @@ class GearmanClient(GearmanConnectionManager):
         current_request = self.job_request_class(current_job, initial_priority=initial_priority, background=background, max_attempts=max_attempts)
         return current_request
 
-    def establish_request_connection(self, current_request):
+    def choose_connection(self, current_request):
         """Return a live connection for the given hash"""
         # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
-        rotating_connections = self.request_to_rotating_connection_queue.get(current_request, None)
+        rotating_connections = self._request_to_rotating_connection_queue.get(current_request, None)
         if not rotating_connections:
             rotating_connections = collections.deque(self.connection_list)
 
@@ -200,7 +203,7 @@ class GearmanClient(GearmanConnectionManager):
             connections_to_rotate = hash(current_request.job.task) % len(self.connection_list)
             rotating_connections.rotate(-connections_to_rotate)
 
-            self.request_to_rotating_connection_queue[current_request] = rotating_connections
+            self._request_to_rotating_connection_queue[current_request] = rotating_connections
 
         failed_connections = 0
         chosen_connection = None
@@ -216,31 +219,17 @@ class GearmanClient(GearmanConnectionManager):
         rotating_connections.rotate(-failed_connections)
         return chosen_connection
 
-    def wait_until_connection_established(self, poll_timeout=None):
-        # Poll to make sure we send out our request for a status update
-        def continue_while_not_connected(any_activity):
-            already_connected = False
-            for current_connection in self.connection_list:
-                if current_connection.connected:
-                    already_connected = True
-                elif not current_connection.connecting:
-                    self.establish_connection(current_connection)
-
-            return bool(not already_connected)
-
-        self.poll_connections_until_stopped(continue_while_not_connected, timeout=poll_timeout)
-
     def send_job_request(self, current_request):
         """Attempt to send out a job request"""
         if current_request.connection_attempts >= current_request.max_connection_attempts:
             raise ExceededConnectionAttempts('Exceeded %d connection attempt(s) :: %r' % (current_request.max_connection_attempts, current_request))
 
-        chosen_connection = self.establish_request_connection(current_request)
+        chosen_connection = self.choose_connection(current_request)
 
         current_request.job.connection = chosen_connection
         current_request.connection_attempts += 1
         current_request.timed_out = False
 
-        current_command_handler = self.connection_to_handler_map[chosen_connection]
+        current_command_handler = self._connection_to_handler_map[chosen_connection]
         current_command_handler.send_job_request(current_request)
         return current_request

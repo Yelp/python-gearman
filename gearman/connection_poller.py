@@ -46,7 +46,10 @@ class GearmanConnectionPoller(object):
     def poll_until_stopped(self, continue_polling_callback, timeout=None):
         stopwatch = gearman.util.Stopwatch(timeout)
 
-        continue_polling = True
+        callback_ok = continue_polling_callback()
+        stopwatch_ok = stopwatch.has_time_remaining()
+        continue_polling = compat.all([callback_ok, stopwatch_ok])
+
         while continue_polling:
             time_remaining = stopwatch.get_time_remaining()
 
@@ -54,35 +57,39 @@ class GearmanConnectionPoller(object):
             read_connections, write_connections, dead_connections = self._poll_once(timeout=time_remaining)
             self._handle_connection_activity(read_connections, write_connections, dead_connections)
 
-            connection_ok = compat.any(bool(not current_connection.disconnected) for current_connection in self._connection_set)
-            stopwatch_ok = bool(time_remaining != 0.0)
             callback_ok = continue_polling_callback()
+            connection_ok = compat.any(bool(not current_connection.disconnected) for current_connection in self._connection_set)
+            stopwatch_ok = stopwatch.has_time_remaining()
 
-            continue_polling = compat.all([connection_ok, stopwatch_ok, callback_ok])
+            continue_polling = compat.all([callback_ok, connection_ok, stopwatch_ok])
 
         # Return True, if we were stopped by our callback
         return bool(not callback_ok)
 
     def _poll_once(self, timeout=None):
         """Does a single robust select, catching socket errors"""
-        event_rd_conns = set()
-        event_wr_conns = set()
-        event_ex_conns = set()
+        connections_to_check = set(self._connection_set)
+
+        actual_rd_conns = set()
+        actual_wr_conns = set()
+        actual_ex_conns = set()
 
         if timeout is not None and timeout < 0.0:
-            return event_rd_conns, event_wr_conns, event_ex_conns
-
-        check_rd_conns = set(conn for conn in self._connection_set if conn.readable())
-        check_wr_conns = set(conn for conn in self._connection_set if conn.writable())
-        check_ex_conns = set(self._connection_set)
-        check_all_connections = check_rd_conns | check_wr_conns | check_ex_conns
+            return actual_rd_conns, actual_wr_conns, actual_ex_conns
 
         successful_select = False
-        while not successful_select and check_ex_conns:
-            check_ex_conns -= event_ex_conns
+        while not successful_select and connections_to_check:
+            connections_to_check -= actual_ex_conns
+
+            check_rd_conns = set(conn for conn in connections_to_check if conn.readable())
+            check_wr_conns = set(conn for conn in connections_to_check if conn.writable())
+            check_ex_conns = set(connections_to_check)
 
             try:
-                event_rd_conns, event_rd_conns, event_ex_conns = self._execute_select(check_rd_conns, check_wr_conns, check_ex_conns, timeout=timeout)
+                event_rd_conns, event_wr_conns, event_ex_conns = self._execute_select(check_rd_conns, check_wr_conns, check_ex_conns, timeout=timeout)
+                actual_rd_conns |= event_rd_conns
+                actual_wr_conns |= event_wr_conns
+                actual_ex_conns |= event_ex_conns
 
                 successful_select = True
             except (select.error, ConnectionError):
@@ -94,17 +101,16 @@ class GearmanConnectionPoller(object):
                     try:
                         _, _, _ = self._execute_select([conn_to_test], [], [], timeout=0.0)
                     except (select.error, ConnectionError):
-                        event_rd_conns.discard(conn_to_test)
-                        event_wr_conns.discard(conn_to_test)
-                        event_ex_conns.add(conn_to_test)
-
+                        actual_rd_conns.discard(conn_to_test)
+                        actual_wr_conns.discard(conn_to_test)
+                        actual_ex_conns.add(conn_to_test)
                         gearman_logger.error('select error: %r' % conn_to_test)
 
         if _DEBUG_MODE_:
             gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', \
-                len(check_all_connections), len(event_rd_conns), len(event_wr_conns), len(event_ex_conns))
+                len(self._connection_set), len(actual_rd_conns), len(actual_wr_conns), len(actual_ex_conns))
 
-        return event_rd_conns, event_wr_conns, event_ex_conns
+        return actual_rd_conns, actual_wr_conns, actual_ex_conns
 
     def _execute_select(self, rd_conns, wr_conns, ex_conns, timeout=None):
         """Behave similar to select.select, except ignoring certain types of exceptions"""

@@ -5,6 +5,7 @@ import sys
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.connection import ConnectionError
+from gearman import compat
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class GearmanWorker(GearmanConnectionManager):
         super(GearmanWorker, self).__init__(host_list=host_list)
 
         self.randomized_connections = None
-        self.current_handler_holding_job_lock = None
+        self._handler_holding_job_lock = None
 
     def _setup_handler(self, current_handler):
         current_handler.set_client_id(self._worker_client_id)
@@ -39,23 +40,28 @@ class GearmanWorker(GearmanConnectionManager):
             return current_job.data
         """
         self._worker_abilities[task] = callback_function
-        for current_handler in self.connection_to_handler_map.itervalues():
+        for current_connection, current_handler in self._connection_to_handler_map.iteritems():
             current_handler.set_abilities(self._worker_abilities.keys())
+            if current_connection.connected:
+                current_connection.send_abilities()
+            
 
         return task
 
     def unregister_task(self, task):
         """Unregister a function with worker"""
         self._worker_abilities.pop(task, None)
-        for current_handler in self.connection_to_handler_map.itervalues():
+        for current_connection, current_handler in self._connection_to_handler_map.iteritems():
             current_handler.set_abilities(self._worker_abilities.keys())
+            if current_connection.connected:
+                current_connection.send_abilities()
 
         return task
 
     def set_client_id(self, client_id):
         """Notify the server that we should be identified as this client ID"""
         self._worker_client_id = client_id
-        for current_handler in self.connection_to_handler_map.itervalues():
+        for current_handler in self._connection_to_handler_map.itervalues():
             current_handler.set_client_id(self._worker_client_id)
 
         return client_id
@@ -65,49 +71,28 @@ class GearmanWorker(GearmanConnectionManager):
         continue_working = True
         worker_connections = []
 
-        def continue_while_connections_alive(any_activity):
-            return self.after_poll(any_activity)
+        def continue_while_connections_alive():
+            return compat.all([current_connection.connected for current_connection in self._connected_set])
 
         # Shuffle our connections after the poll timeout
         while continue_working:
-            self.wait_until_connection_established()
+            self.wait_until_connection_established(poll_timeout=poll_timeout)
 
-            worker_connections = self.establish_worker_connections()
-            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
+            continue_working = self.poll_connections_until_stopped(continue_while_connections_alive, timeout=poll_timeout)
+            self.after_poll()
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
         for current_connection in worker_connections:
             current_connection.close()
 
     def shutdown(self):
-        self.current_handler_holding_job_lock = None
+        self._handler_holding_job_lock = None
         super(GearmanWorker, self).shutdown()
 
     ###############################################################
     ## Methods to override when dealing with connection polling ##
     ##############################################################
-    def establish_worker_connections(self):
-        """Return a shuffled list of connections that are alive, and try to reconnect to dead connections if necessary."""
-        output_connections = [current_connection for current_connection in self.connection_list if current_connection.connected]
-        random.shuffle(output_connections)
-
-        return output_connections
-
-    def wait_until_connection_established(self, poll_timeout=None):
-        # Poll to make sure we send out our request for a status update
-        def stop_when_connected():
-            already_connected = False
-            for current_connection in self.connection_list:
-                if current_connection.connected:
-                    already_connected = True
-                elif current_connection.disconnected:
-                    self.establish_connection(current_connection)
-            
-            return already_connected
-
-        self._connection_poller.start(timeout=poll_timeout)
-
-    def after_poll(self, any_activity):
+    def after_poll(self):
         """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
 
         Return True to continue polling, False to exit the work loop"""
@@ -115,7 +100,7 @@ class GearmanWorker(GearmanConnectionManager):
 
     def handle_error(self, current_connection):
         """If we discover that a connection has a problem, we better release the job lock"""
-        current_handler = self.connection_to_handler_map.get(current_connection)
+        current_handler = self._connection_to_handler_map.get(current_connection)
         if current_handler:
             self.set_job_lock(current_handler, lock=False)
 
@@ -125,8 +110,8 @@ class GearmanWorker(GearmanConnectionManager):
     ## Public methods so Gearman jobs can send Gearman updates ##
     #############################################################
     def _get_handler_for_job(self, current_job):
-        current_connection = self.address_to_connection_map[current_job.connection]
-        current_handler = self.connection_to_handler_map[current_connection]
+        current_connection = current_job.connection
+        current_handler = self._connection_to_handler_map[current_connection]
         return current_handler
 
     def send_job_status(self, current_job, numerator, denominator):
@@ -165,6 +150,10 @@ class GearmanWorker(GearmanConnectionManager):
     #####################################################
     ##### Callback methods for GearmanWorkerHandler #####
     #####################################################
+    def create_job(self, current_handler, job_handle, task, unique, data):
+        """Create a new job using our self.job_class"""
+        current_connection = self._handler_to_connection_map[current_handler]
+        return self.job_class(current_connection, job_handle, task, unique, data)
 
     def on_job_execute(self, current_job):
         try:
@@ -185,8 +174,8 @@ class GearmanWorker(GearmanConnectionManager):
 
     def set_job_lock(self, current_handler, lock):
         """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
-        failed_lock = bool(lock and self.current_handler_holding_job_lock is not None)
-        failed_unlock = bool(not lock and self.current_handler_holding_job_lock != current_handler)
+        failed_lock = bool(lock and self._handler_holding_job_lock is not None)
+        failed_unlock = bool(not lock and self._handler_holding_job_lock != current_handler)
 
         # If we've already been locked, we should say the lock failed
         # If we're attempting to unlock something when we don't have a lock, we're in a bad state
@@ -194,12 +183,12 @@ class GearmanWorker(GearmanConnectionManager):
             return False
 
         if lock:
-            self.current_handler_holding_job_lock = current_handler
+            self._handler_holding_job_lock = current_handler
         else:
-            self.current_handler_holding_job_lock = None
+            self._handler_holding_job_lock = None
 
         return True
 
     def check_job_lock(self, current_handler):
         """Check to see if we hold the job lock"""
-        return bool(self.current_handler_holding_job_lock == current_handler)
+        return bool(self._handler_holding_job_lock == current_handler)

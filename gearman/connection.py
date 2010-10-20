@@ -29,7 +29,6 @@ class GearmanConnection(Connection):
     def handle_read(self):
         """Reads data from socket --> buffer"""
         super(GearmanConnection, self).handle_read()
-        
         while True:
             cmd_tuple = self.recv_command()
             if cmd_tuple is None:
@@ -43,6 +42,9 @@ class GearmanConnection(Connection):
 
     def handle_disconnect(self):
         self._connection_manager.on_disconnect(self)
+
+    def handle_error(self):
+        pass
 
     def recv_command(self):
         io_buffer = self.peek()

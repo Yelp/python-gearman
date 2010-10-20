@@ -137,24 +137,20 @@ class Connection(object):
 
     def handle_read(self):
         """Reads data from socket --> buffer"""
-        if not self.connected:
+        if self.connected:
+            self._recv_data()
+        elif self.connecting:
+            self._check_state()
+        else:
             self._throw_exception(message='invalid connection state')
-
-        self._recv_data()
 
     def handle_write(self):
-        if self.disconnected:
-            self._throw_exception(message='invalid connection state')
-        elif self.connected:
-            # Transfer command from command queue -> buffer
+        if self.connected:
             self._send_data()
+        elif self.connecting:
+            self._check_state()
         else:
-            # Check our socket to see what error number we have - See "man connect"
-            connect_errno = self._socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-            self._update_state(connect_errno)
-
-            if self.connected:
-                self.handle_connect()
+            self._throw_exception(message='invalid connection state')
 
     def handle_connect(self):
         pass
@@ -170,6 +166,14 @@ class Connection(object):
         current_socket.setblocking(0)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
         return current_socket
+
+    def _check_state(self):
+        # Check our socket to see what error number we have - See "man connect"
+        connect_errno = self._socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        self._update_state(connect_errno)
+
+        if self.connected:
+            self.handle_connect()
 
     def _update_state(self, error_number):
         """Update our connection state based on 'errno' """
@@ -197,7 +201,9 @@ class Connection(object):
         try:
             recv_buffer = self._socket.recv(self.bytes_to_read)
         except socket.error, socket_exception:
-            self._throw_exception(exception=socket_exception)
+            socket_errno, socket_message = socket_exception
+            if socket_errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                self._throw_exception(exception=socket_exception)
 
         if len(recv_buffer) == 0:
             self.handle_disconnect()
@@ -219,7 +225,8 @@ class Connection(object):
         try:
             bytes_sent = self._socket.send(self._outgoing_buffer)
         except socket.error, socket_exception:
-            self._throw_exception(exception=socket_exception)
+            if socket_errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                self._throw_exception(exception=socket_exception)
 
         if bytes_sent == 0:
             self.handle_disconnect()

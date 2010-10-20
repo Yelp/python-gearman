@@ -42,13 +42,10 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         """Forward the status of a job"""
         self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.job.handle)
 
-    def on_connection_established(self):
+    def on_connect(self):
         pass
 
-    def on_connection_lost(self):
-        self.on_connection_error()
-
-    def on_connection_error(self):
+    def on_disconnect(self):
         for pending_request in self.requests_awaiting_handles:
             pending_request.state = JOB_UNKNOWN
 

@@ -31,10 +31,6 @@ class GearmanCommandHandler(object):
     def on_disconnect(self):
         pass
 
-    def send_command(self, cmd_type, **cmd_args):
-        """Hand off I/O to the connection mananger"""
-        self._connection_manager.on_send_command(cmd_type, cmd_args)
-
     def recv_command(self, cmd_type, cmd_args):
         """Maps any command to a recv_* callback function"""
         completed_work = None
@@ -49,6 +45,10 @@ class GearmanCommandHandler(object):
         # This must match the parameter names as defined in the command handler
         completed_work = cmd_callback(**cmd_args)
         return completed_work
+
+    def send_command(self, cmd_type, **cmd_args):
+        """Hand off I/O to the connection mananger"""
+        self._connection_manager.on_send_command(self, cmd_type, cmd_args)
 
     def _locate_command_callback(self, cmd_type, cmd_args):
         gearman_command_name = get_command_name(cmd_type)
