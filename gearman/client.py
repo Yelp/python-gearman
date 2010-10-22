@@ -61,20 +61,17 @@ class GearmanClient(GearmanConnectionManager):
         You MUST check the status of your requests after calling this function as "timed_out" or "state == JOB_UNKNOWN" maybe True
         """
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        stopwatch = gearman.util.Stopwatch(poll_timeout)
+        countdown_timer = gearman.util.CountdownTimer(poll_timeout)
 
         # We should always wait until our job is accepted, this should be fast
-        time_remaining = stopwatch.get_time_remaining()
-        self.wait_until_connection_established(poll_timeout=time_remaining)
+        self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
 
-        time_remaining = stopwatch.get_time_remaining()
-        if wait_until_accepted and stopwatch.has_time_remaining(time_remaining):
-            processed_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=time_remaining)
+        if wait_until_accepted and not countdown_timer.expired:
+            processed_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=countdown_timer.time_remaining)
 
         # Optionally, we'll allow a user to wait until all jobs are complete with the same poll_timeout
-        time_remaining = stopwatch.get_time_remaining()
-        if wait_until_complete and stopwatch.has_time_remaining(time_remaining):
-            processed_requests = self.wait_until_jobs_completed(processed_requests, poll_timeout=time_remaining)
+        if wait_until_complete and not countdown_timer.expired:
+            processed_requests = self.wait_until_jobs_completed(processed_requests, poll_timeout=countdown_timer.time_remaining)
 
         return processed_requests
 
@@ -137,10 +134,9 @@ class GearmanClient(GearmanConnectionManager):
     def get_job_statuses(self, job_requests, poll_timeout=None):
         """Fetch the job status of a multiple requests"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
-        stopwatch = gearman.util.Stopwatch(poll_timeout)
+        countdown_timer = gearman.util.CountdownTimer(poll_timeout)
 
-        time_remaining = stopwatch.get_time_remaining()
-        self.wait_until_connection_established(poll_timeout=time_remaining)
+        self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
 
         for current_request in job_requests:
             current_request.server_status['last_time_received'] = current_request.server_status.get('time_received')
@@ -150,7 +146,7 @@ class GearmanClient(GearmanConnectionManager):
 
             current_command_handler.send_get_status_of_job(current_request)
 
-        return self.wait_until_job_statuses_received(job_requests, poll_timeout=time_remaining)
+        return self.wait_until_job_statuses_received(job_requests, poll_timeout=countdown_timer.time_remaining)
 
     def wait_until_job_statuses_received(self, job_requests, poll_timeout=None):
         """Go into a select loop until we received statuses on all our requests"""
@@ -200,7 +196,7 @@ class GearmanClient(GearmanConnectionManager):
             rotating_connections = collections.deque(self.connection_list)
 
             # Always start off this task on the same server if possible
-            connections_to_rotate = hash(current_request.job.task) % len(self.connection_list)
+            connections_to_rotate = hash(current_request.job) % len(self.connection_list)
             rotating_connections.rotate(-connections_to_rotate)
 
             self._request_to_rotating_connection_queue[current_request] = rotating_connections

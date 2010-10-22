@@ -28,7 +28,6 @@ class GearmanConnectionPoller(object):
         self._connection_set = set()
 
         self._polling = False
-        self._stopwatch = None
 
     def add_connection(self, current_connection):
         """Add a new connection to this connection manager"""
@@ -44,24 +43,22 @@ class GearmanConnectionPoller(object):
         self._fd_to_connection_map.pop(connection_fd)
 
     def poll_until_stopped(self, continue_polling_callback, timeout=None):
-        stopwatch = gearman.util.Stopwatch(timeout)
+        countdown_timer = gearman.util.CountdownTimer(timeout)
 
         callback_ok = continue_polling_callback()
-        stopwatch_ok = stopwatch.has_time_remaining()
-        continue_polling = compat.all([callback_ok, stopwatch_ok])
+        timer_ok = bool(not countdown_timer.expired)
+        continue_polling = compat.all([callback_ok, timer_ok])
 
         while continue_polling:
-            time_remaining = stopwatch.get_time_remaining()
-
             # Do a single robust select and handle all connection activity
-            read_connections, write_connections, dead_connections = self._poll_once(timeout=time_remaining)
+            read_connections, write_connections, dead_connections = self._poll_once(timeout=countdown_timer.time_remaining)
             self._handle_connection_activity(read_connections, write_connections, dead_connections)
 
             callback_ok = continue_polling_callback()
             connection_ok = compat.any(bool(not current_connection.disconnected) for current_connection in self._connection_set)
-            stopwatch_ok = stopwatch.has_time_remaining()
+            timer_ok = bool(not countdown_timer.expired)
 
-            continue_polling = compat.all([callback_ok, connection_ok, stopwatch_ok])
+            continue_polling = compat.all([callback_ok, connection_ok, timer_ok])
 
         # Return True, if we were stopped by our callback
         return bool(not callback_ok)

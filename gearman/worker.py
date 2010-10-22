@@ -6,6 +6,7 @@ from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.connection import ConnectionError
 from gearman import compat
+import gearman.util
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -44,7 +45,6 @@ class GearmanWorker(GearmanConnectionManager):
             current_handler.set_abilities(self._worker_abilities.keys())
             if current_connection.connected:
                 current_connection.send_abilities()
-            
 
         return task
 
@@ -68,22 +68,18 @@ class GearmanWorker(GearmanConnectionManager):
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely, complete tasks from all connections."""
-        continue_working = True
-        worker_connections = []
 
-        def continue_while_connections_alive():
-            return compat.all([current_connection.connected for current_connection in self._connected_set])
+        countdown_timer = gearman.util.CountdownTimer(poll_timeout)
 
         # Shuffle our connections after the poll timeout
-        while continue_working:
-            self.wait_until_connection_established(poll_timeout=poll_timeout)
+        while True:
+            self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
 
-            continue_working = self.poll_connections_until_stopped(continue_while_connections_alive, timeout=poll_timeout)
+            self.wait_until_connection_lost(poll_timeout=countdown_timer.time_remaining)
+
             self.after_poll()
 
-        # If we were kicked out of the worker loop, we should shutdown all our connections
-        for current_connection in worker_connections:
-            current_connection.close()
+            countdown_timer.reset()
 
     def shutdown(self):
         self._handler_holding_job_lock = None

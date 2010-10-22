@@ -8,31 +8,40 @@ import time
 
 from gearman.constants import DEFAULT_GEARMAN_PORT
 
-class Stopwatch(object):
+class CountdownTimer(object):
     """Timer class that keeps track of time remaining"""
-    def __init__(self, time_remaining):
-        if time_remaining is not None:
-            self.stop_time = time.time() + time_remaining
-        else:
-            self.stop_time = None
+    def __init__(self, requested_seconds):
+        self._requested_seconds = requested_seconds
+        self._stop_time = None
+        self.reset()
 
-    def get_time_remaining(self):
-        if self.stop_time is None:
+    def reset(self):
+        if self._requested_seconds is not None:
+            self._stop_time = time.time() + self._requested_seconds
+        else:
+            self._stop_time = None
+
+    @property
+    def time_remaining(self):
+        if self._stop_time is None:
             return None
 
         current_time = time.time()
-        if not self.has_time_remaining(current_time):
+        if self._check_expired(current_time):
             return 0.0
 
-        time_remaining = self.stop_time - current_time
+        time_remaining = self._stop_time - current_time
         return time_remaining
 
-    def has_time_remaining(self, time_comparison=None):
-        time_comparison = time_comparison or self.get_time_remaining()
-        if self.stop_time is None:
-            return True
+    @property
+    def expired(self):
+        return self._check_expired(time.time())
 
-        return bool(time_comparison < self.stop_time)
+    def _check_expired(self, given_time):
+        if self._stop_time is None:
+            return False
+
+        return bool(given_time >= self._stop_time)
 
 def disambiguate_server_parameter(hostport_tuple):
     """Takes either a tuple of (address, port) or a string of 'address:port' and disambiguates them for us"""
