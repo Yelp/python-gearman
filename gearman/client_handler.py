@@ -139,7 +139,6 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
     def recv_status_res(self, job_handle, known, running, numerator, denominator):
         # If we received a STATUS_RES update about this request, update our known status
         current_request = self.handle_to_request_map[job_handle]
-        self._assert_request_state(current_request, JOB_CREATED)
 
         # Make our status response Python friendly
         current_request.status = {
