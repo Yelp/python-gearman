@@ -139,11 +139,14 @@ class GearmanConnectionManager(object):
     def poll_connections_until_stopped(self, continue_polling_callback, timeout=None):
         return self._connection_poller.poll_until_stopped(continue_polling_callback, timeout=timeout)
 
-    def wait_until_connection_established(self, poll_timeout=None):
-        # Poll to make sure we send out our request for a status update
+    def establish_connections(self):
         for current_connection in self.connection_list:
             if current_connection.disconnected:
-                self.attempt_connect(current_connection)
+		        current_connection.connect()
+
+    def wait_until_connection_established(self, poll_timeout=None):
+        # Poll to make sure we send out our request for a status update
+        self.establish_connections()
 
         def continue_while_not_connected():
             return not compat.any(current_connection.connected for current_connection in self.connection_list)
@@ -158,9 +161,6 @@ class GearmanConnectionManager(object):
             return compat.all([current_connection.connected for current_connection in self.connection_list])
 
         self.poll_connections_until_stopped(continue_while_connections_alive, timeout=poll_timeout)
-
-    def attempt_connect(self, current_connection):
-        current_connection.connect()
  
     ###################################
     # Connection management functions #

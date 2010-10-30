@@ -68,11 +68,11 @@ class GearmanWorker(GearmanConnectionManager):
 
     def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
         """Loop indefinitely, complete tasks from all connections."""
-
         countdown_timer = gearman.util.CountdownTimer(poll_timeout)
 
         # Shuffle our connections after the poll timeout
         while True:
+            print "Entering work loop with %f" % countdown_timer.time_remaining
             self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
 
             self.wait_until_connection_lost(poll_timeout=countdown_timer.time_remaining)

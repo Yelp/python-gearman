@@ -63,21 +63,27 @@ class GearmanClient(GearmanConnectionManager):
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         countdown_timer = gearman.util.CountdownTimer(poll_timeout)
 
-        # We should always wait until our job is accepted, this should be fast
-        self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
+        # Continue looping in case our job failed
+        while not countdown_timer.expired:
+            self.wait_until_connection_established(poll_timeout=countdown_timer.time_remaining)
 
-        if wait_until_accepted and not countdown_timer.expired:
-            processed_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=countdown_timer.time_remaining)
+            if wait_until_accepted and not countdown_timer.expired:
+                job_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=countdown_timer.time_remaining)
 
-        # Optionally, we'll allow a user to wait until all jobs are complete with the same poll_timeout
-        if wait_until_complete and not countdown_timer.expired:
-            processed_requests = self.wait_until_jobs_completed(processed_requests, poll_timeout=countdown_timer.time_remaining)
+            # Optionally, we'll allow a user to wait until all jobs are complete with the same poll_timeout
+            if wait_until_complete and not countdown_timer.expired:
+                job_requests = self.wait_until_jobs_completed(job_requests, poll_timeout=countdown_timer.time_remaining)
 
-        return processed_requests
+        return job_requests
 
     def wait_until_jobs_accepted(self, job_requests, poll_timeout=None):
         """Go into a select loop until all our jobs have moved to STATE_PENDING"""
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
+
+        # Send off requests to create this job then poll and wait
+        for current_request in job_requests:
+            if current_request.state == JOB_UNKNOWN:
+	            self.send_job_request(current_request)
 
         def is_request_pending(current_request):
             return bool(current_request.state == JOB_PENDING)
@@ -85,10 +91,6 @@ class GearmanClient(GearmanConnectionManager):
         # Poll until we know we've gotten acknowledgement that our job's been accepted
         # If our connection fails while we're waiting for it to be accepted, automatically retry right here
         def continue_while_jobs_pending():
-            for current_request in job_requests:
-                if current_request.state == JOB_UNKNOWN:
-                    self.send_job_request(current_request)
-
             return compat.any(is_request_pending(current_request) for current_request in job_requests)
 
         self.poll_connections_until_stopped(continue_while_jobs_pending, timeout=poll_timeout)
@@ -220,8 +222,10 @@ class GearmanClient(GearmanConnectionManager):
         if current_request.connection_attempts >= current_request.max_connection_attempts:
             raise ExceededConnectionAttempts('Exceeded %d connection attempt(s) :: %r' % (current_request.max_connection_attempts, current_request))
 
-        chosen_connection = self.choose_connection(current_request)
+        if current_request.state != JOB_UNKNOWN:
+            raise InvalidClientState
 
+        chosen_connection = self.choose_connection(current_request)
         current_request.job.connection = chosen_connection
         current_request.connection_attempts += 1
         current_request.timed_out = False

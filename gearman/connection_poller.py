@@ -84,9 +84,9 @@ class GearmanConnectionPoller(object):
 
             try:
                 event_rd_conns, event_wr_conns, event_ex_conns = self._execute_select(check_rd_conns, check_wr_conns, check_ex_conns, timeout=timeout)
-                actual_rd_conns |= event_rd_conns
-                actual_wr_conns |= event_wr_conns
-                actual_ex_conns |= event_ex_conns
+                actual_rd_conns |= set(event_rd_conns)
+                actual_wr_conns |= set(event_wr_conns)
+                actual_ex_conns |= set(event_ex_conns)
 
                 successful_select = True
             except (select.error, ConnectionError):
@@ -111,26 +111,22 @@ class GearmanConnectionPoller(object):
 
     def _execute_select(self, rd_conns, wr_conns, ex_conns, timeout=None):
         """Behave similar to select.select, except ignoring certain types of exceptions"""
-        rd_set = set()
-        wr_set = set()
-        ex_set = set()
-
         select_args = [rd_conns, wr_conns, ex_conns]
         if timeout is not None:
             select_args.append(timeout)
 
         try:
             rd_list, wr_list, er_list = select.select(*select_args)
-            rd_set = set(rd_list)
-            wr_set = set(wr_list)
-            er_set = set(er_list)
-
         except select.error, exc:
             # Ignore interrupted system call, reraise anything else
             if exc[0] != errno.EINTR:
                 raise
 
-        return rd_set, wr_set, er_set
+	        rd_list = []
+	        wr_list = []
+	        er_list = []
+
+        return rd_list, wr_list, er_list
 
     def _handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
         """Process all connection activity... executes all handle_* callbacks"""
