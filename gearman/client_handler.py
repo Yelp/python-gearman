@@ -40,6 +40,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def send_get_status_of_job(self, current_request):
         """Forward the status of a job"""
+        self._register_request(current_request)
         self.send_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.job.handle)
 
     def on_io_error(self):
@@ -48,6 +49,13 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
         for inflight_request in self.handle_to_request_map.itervalues():
             inflight_request.state = JOB_UNKNOWN
+
+    def _register_request(self, current_request):
+        self.handle_to_request_map[current_request.job.handle] = current_request
+
+    def _unregister_request(self, current_request):
+        # De-allocate this request for all jobs
+        return self.handle_to_request_map.pop(current_request.job.handle, None)
 
     ##################################################################
     ## Gearman command callbacks with kwargs defined by protocol.py ##
@@ -67,7 +75,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         # Update the state of this request
         current_request.job.handle = job_handle
         current_request.state = JOB_CREATED
-        self.handle_to_request_map[job_handle] = current_request
+        self._register_request(current_request)
 
         return True
 
@@ -113,6 +121,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
         current_request.result = self.decode_data(data)
         current_request.state = JOB_COMPLETE
+        self._unregister_request(current_request)
 
         return True
 
@@ -122,6 +131,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.state = JOB_FAILED
+        self._unregister_request(current_request)
 
         return True
 
@@ -140,13 +150,19 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         # If we received a STATUS_RES update about this request, update our known status
         current_request = self.handle_to_request_map[job_handle]
 
+        job_known = bool(known == '1')
         # Make our status response Python friendly
         current_request.status = {
             'handle': job_handle,
-            'known': bool(known == '1'),
+            'known': job_known,
             'running': bool(running == '1'),
             'numerator': int(numerator),
             'denominator': int(denominator),
             'time_received': time.time()
         }
+
+        # If the server doesn't know about this request, we no longer need to track it
+        if not job_known:
+            self._unregister_request(current_request)
+
         return True

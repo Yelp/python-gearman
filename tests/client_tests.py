@@ -36,6 +36,7 @@ class ClientTest(_GearmanAbstractTest):
 
         if submitted and accepted:
             self.command_handler.recv_command(GEARMAN_COMMAND_JOB_CREATED, job_handle=current_request.job.handle)
+            self.assert_(current_request.job.handle in self.command_handler.handle_to_request_map)
 
         return current_request
 
@@ -206,10 +207,6 @@ class ClientTest(_GearmanAbstractTest):
         failed_request = self.generate_job_request()
         timeout_request = self.generate_job_request()
 
-        completed_request.state = JOB_CREATED
-        failed_request.state = JOB_CREATED
-        timeout_request.state = JOB_CREATED
-
         self.update_requests = True
         def multiple_job_updates(rx_conns, wr_conns, ex_conns):
             # Only give a single status update and have the 3rd job handle timeout
@@ -226,23 +223,26 @@ class ClientTest(_GearmanAbstractTest):
         del self.update_requests
 
         finished_completed_request, finished_failed_request, finished_timeout_request = finished_requests
+
         self.assert_jobs_equal(finished_completed_request.job, completed_request.job)
         self.assertEqual(finished_completed_request.state, JOB_COMPLETE)
         self.assertEqual(finished_completed_request.result, '12345')
         self.assertFalse(finished_completed_request.timed_out)
+        self.assert_(finished_completed_request.job.handle not in self.command_handler.handle_to_request_map)
 
         self.assert_jobs_equal(finished_failed_request.job, failed_request.job)
         self.assertEqual(finished_failed_request.state, JOB_FAILED)
         self.assertEqual(finished_failed_request.result, None)
         self.assertFalse(finished_failed_request.timed_out)
+        self.assert_(finished_failed_request.job.handle not in self.command_handler.handle_to_request_map)
 
         self.assertEqual(finished_timeout_request.state, JOB_CREATED)
         self.assertEqual(finished_timeout_request.result, None)
         self.assertTrue(finished_timeout_request.timed_out)
+        self.assert_(finished_timeout_request.job.handle in self.command_handler.handle_to_request_map)
 
     def test_get_job_status(self):
         single_request = self.generate_job_request()
-        single_request.state = JOB_CREATED
 
         def retrieve_status(rx_conns, wr_conns, ex_conns):
             self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=single_request.job.handle, known='1', running='0', numerator='0', denominator='1')
@@ -259,9 +259,29 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEqual(request_status['denominator'], 1)
         self.assertFalse(job_request.timed_out)
 
+    def test_get_job_status_unknown(self):
+        single_request = self.generate_job_request()
+        current_handle = single_request.job.handle
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_handle)
+
+        def retrieve_status(rx_conns, wr_conns, ex_conns):
+            self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=current_handle, known='0', running='0', numerator='0', denominator='1')
+            return rx_conns, wr_conns, ex_conns
+
+        self.connection_manager.handle_connection_activity = retrieve_status
+
+        job_request = self.connection_manager.get_job_status(single_request)
+        request_status = job_request.status
+        self.failUnless(request_status)
+        self.assertFalse(request_status['known'])
+        self.assertFalse(request_status['running'])
+        self.assertEqual(request_status['numerator'], 0)
+        self.assertEqual(request_status['denominator'], 1)
+        self.assertFalse(job_request.timed_out)
+        self.assert_(current_handle not in self.command_handler.handle_to_request_map)
+
     def test_get_job_status_timeout(self):
         single_request = self.generate_job_request()
-        single_request.state = JOB_CREATED
 
         def retrieve_status_timeout(rx_conns, wr_conns, ex_conns):
             pass
