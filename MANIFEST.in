@@ -1,2 +1,4 @@
 include *.txt
+include docs/Makefile
 recursive-include docs *.rst
+prune docs/_build
