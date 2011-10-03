@@ -4,7 +4,7 @@ import logging
 import os
 import random
 
-import gearman.util
+import gearman.util, gearman.job
 
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.client_handler import GearmanClientCommandHandler
@@ -121,6 +121,17 @@ class GearmanClient(GearmanConnectionManager):
                 self.request_to_rotating_connection_queue.pop(current_request, None)
 
         return job_requests
+
+    def get_job_status_handle(self, handle, poll_timeout=None):
+        """Fetch the job status from a specific handle, if the Client only has one server added"""
+        assert type(len(self.connection_list) == 1), "Querying for job status by handle can only be performed with only one added server."
+
+        # create a job to perform the status fetch
+        job = gearman.job.GearmanJob(self.connection_list[0], handle, None, None, None)        
+        job_request = gearman.job.GearmanJobRequest(job)
+        job_request.state = 'CREATED'
+        
+        return self.get_job_status(job_request, poll_timeout)
 
     def get_job_status(self, current_request, poll_timeout=None):
         """Fetch the job status of a single request"""
