@@ -144,4 +144,4 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
     def recv_job_assign(self, job_handle, task, data):
         """JOB_ASSIGN and JOB_ASSIGN_UNIQ are essentially the same"""
-        return self.recv_job_assign(job_handle=job_handle, task=task, unique=None, data=data)
+        return self.recv_job_assign_uniq(job_handle=job_handle, task=task, unique=None, data=data)
