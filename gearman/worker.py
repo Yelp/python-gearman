@@ -74,7 +74,22 @@ class GearmanWorker(GearmanConnectionManager):
         continue_working = True
         worker_connections = []
 
+        # We're going to track whether a previous call to our closure indicated
+        # we were processing a job. This is just a list of possibly a single
+        # element indicating we had a job. It's a list so that through the
+        # magic of closures we can reference and write to it each call.
+        # This is all so that we can determine when we've finished processing a job
+        # correctly.
+        had_job = []
+
         def continue_while_connections_alive(any_activity):
+            if had_job and not self.has_job_lock():
+                return self.after_poll(any_activity) and self.after_job()
+
+            del had_job[:]
+            if self.has_job_lock():
+                had_job.append(True)
+
             return self.after_poll(any_activity)
 
         # Shuffle our connections after the poll timeout
@@ -112,6 +127,15 @@ class GearmanWorker(GearmanConnectionManager):
         """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
 
         Return True to continue polling, False to exit the work loop"""
+        return True
+
+    def after_job(self):
+        """Callback to notify any outside listeners that a GearmanWorker has completed the current job.
+
+        This is useful for accomplishing work or stopping the GearmanWorker in between jobs.
+
+        Return True to continue polling, False to exit the work loop
+        """
         return True
 
     def handle_error(self, current_connection):
@@ -224,7 +248,10 @@ class GearmanWorker(GearmanConnectionManager):
             self.command_handler_holding_job_lock = None
 
         return True
-
+    
+    def has_job_lock(self):
+        return bool(self.command_handler_holding_job_lock is not None)
+    
     def check_job_lock(self, command_handler):
         """Check to see if we hold the job lock"""
         return bool(self.command_handler_holding_job_lock == command_handler)
