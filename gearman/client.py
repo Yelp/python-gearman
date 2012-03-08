@@ -13,7 +13,7 @@ from gearman.errors import ConnectionError, ExceededConnectionAttempts, ServerUn
 
 gearman_logger = logging.getLogger(__name__)
 
-# This number must be <= GEARMAN_UNIQUE_SIZE in gearman/libgearman/constants.h 
+# This number must be <= GEARMAN_UNIQUE_SIZE in gearman/libgearman/constants.h
 RANDOM_UNIQUE_BYTES = 16
 
 class GearmanClient(GearmanConnectionManager):
@@ -167,9 +167,7 @@ class GearmanClient(GearmanConnectionManager):
         """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')
-        if job_unique == '-':
-            job_unique = job_info['data']
-        elif not job_unique:
+        if not job_unique:
             job_unique = os.urandom(self.random_unique_bytes).encode('hex')
 
         current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
