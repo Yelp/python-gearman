@@ -74,12 +74,21 @@ class GearmanWorker(GearmanConnectionManager):
         continue_working = True
         worker_connections = []
 
+        has_job = []
         def continue_while_connections_alive(any_activity):
+            if has_job and not self.has_job_lock():
+                return self.after_poll(any_activity) and self.after_job()
+            
+            del has_job[:]
+            if self.has_job_lock():
+                has_job.append(True)
+            
             return self.after_poll(any_activity)
 
         # Shuffle our connections after the poll timeout
         while continue_working:
             worker_connections = self.establish_worker_connections()
+
             continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
@@ -112,6 +121,15 @@ class GearmanWorker(GearmanConnectionManager):
         """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
 
         Return True to continue polling, False to exit the work loop"""
+        return True
+
+    def after_job(self):
+        """Callback to notify any outside listeners that a GearmanWorker has completed the current job.
+
+        This is useful for accomplishing work or stopping the GearmanWorker in between jobs.
+
+        Return True to continue polling, False to exit the work loop
+        """
         return True
 
     def handle_error(self, current_connection):
@@ -224,7 +242,10 @@ class GearmanWorker(GearmanConnectionManager):
             self.command_handler_holding_job_lock = None
 
         return True
-
+    
+    def has_job_lock(self):
+        return bool(self.command_handler_holding_job_lock is not None)
+    
     def check_job_lock(self, command_handler):
         """Check to see if we hold the job lock"""
         return bool(self.command_handler_holding_job_lock == command_handler)
