@@ -130,7 +130,7 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
 
         # Assert we get a non-string argument (expecting BYTES)
         cmd_type = protocol.GEARMAN_COMMAND_JOB_CREATED
-        cmd_args = dict(job_handle=unicode(12345))
+        cmd_args = dict(job_handle=u'Let it \u2744')
         self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
 
     def test_packing_response(self):
@@ -158,6 +158,18 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         expected_format = '!4sII%ds' % expected_payload_size
 
         expected_command_buffer = struct.pack(expected_format, protocol.MAGIC_REQ_STRING, cmd_type, expected_payload_size, cmd_args['data'])
+        packed_command_buffer = protocol.pack_binary_command(cmd_type, cmd_args)
+        self.assertEquals(packed_command_buffer, expected_command_buffer)
+
+    def test_packing_encodable_unicode(self):
+        cmd_type = protocol.GEARMAN_COMMAND_ECHO_REQ
+        string = 'abcde'
+        cmd_args = dict(data=u'%s' % string)
+
+        expected_payload_size = len(cmd_args['data'])
+        expected_format = '!4sII%ds' % expected_payload_size
+
+        expected_command_buffer = struct.pack(expected_format, protocol.MAGIC_REQ_STRING, cmd_type, expected_payload_size, string)
         packed_command_buffer = protocol.pack_binary_command(cmd_type, cmd_args)
         self.assertEquals(packed_command_buffer, expected_command_buffer)
 
