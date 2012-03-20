@@ -1,6 +1,7 @@
 import collections
 import time
 import logging
+import weakref
 
 from gearman.command_handler import GearmanCommandHandler
 from gearman.constants import JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
@@ -16,7 +17,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()
-        self.handle_to_request_map = dict()
+        self.handle_to_request_map = weakref.WeakValueDictionary()
 
     ##################################################################
     ##### Public interface methods to be called by GearmanClient #####
