@@ -76,7 +76,7 @@ Worker
             return super(CustomGearmanWorker, self).on_job_exception(current_job, exc_info)
 
         def on_job_complete(self, current_job, job_result):
-            print "Job failed, CAN stop last gasp GEARMAN_COMMAND_WORK_FAIL"
+            print "Job complete, CAN stop last gasp GEARMAN_COMMAND_WORK_COMPLETE"
             return super(CustomGearmanWorker, self).send_job_complete(current_job, job_result)
 
         def after_poll(self, any_activity):
