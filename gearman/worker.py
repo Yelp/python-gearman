@@ -5,7 +5,7 @@ import sys
 from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
-from gearman.errors import ConnectionError
+from gearman.errors import ConnectionError, RetryJob
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -108,6 +108,13 @@ class GearmanWorker(GearmanConnectionManager):
     ###############################################################
     ## Methods to override when dealing with connection polling ##
     ##############################################################
+    def force_reconnect(self, current_job):
+        current_handler = self._get_handler_for_job(current_job)
+        current_connection = self.handler_to_connection_map[current_handler]
+        current_connection.close()
+        self.establish_connection(current_connection)
+
+
     def establish_worker_connections(self):
         """Return a shuffled list of connections that are alive, and try to reconnect to dead connections if necessary."""
         self.randomized_connections = list(self.connection_list)
@@ -216,6 +223,9 @@ class GearmanWorker(GearmanConnectionManager):
         try:
             function_callback = self.worker_abilities[current_job.task]
             job_result = function_callback(self, current_job)
+        except RetryJob:
+            self.force_reconnect(current_job)
+            return
         except Exception:
             return self.on_job_exception(current_job, sys.exc_info())
 
@@ -248,10 +258,10 @@ class GearmanWorker(GearmanConnectionManager):
             self.command_handler_holding_job_lock = None
 
         return True
-    
+
     def has_job_lock(self):
         return bool(self.command_handler_holding_job_lock is not None)
-    
+
     def check_job_lock(self, command_handler):
         """Check to see if we hold the job lock"""
         return bool(self.command_handler_holding_job_lock == command_handler)
