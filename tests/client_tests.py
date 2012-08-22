@@ -284,7 +284,7 @@ class ClientTest(_GearmanAbstractTest):
         single_request = self.generate_job_request()
 
         def retrieve_status_timeout(rx_conns, wr_conns, ex_conns):
-            pass
+            return rx_conns, wr_conns, ex_conns
 
         self.connection_manager.handle_connection_activity = retrieve_status_timeout
 
