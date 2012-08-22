@@ -4,6 +4,8 @@ v2.0.X, 2012-XX-XX -- Major bug fix release
  * Protocol - support unicode values (to some degree)
  * GearmanClient - fix memory leak on brackground jobs [GH-10]
  * GearmanWorker - add a after_job hook [GH-22]
+ * ConnectionManager - fix case where closed connections would still be polled [GHPR-25]
+ * 1to2 - fix wording mistakce [GHPR-23]
 
 v2.0.2, 2011-01-11 -- Major bug fix release
  * GearmanClient - Fixed a memory leak in the handler where we never de-allocated completed jobs [GH-6]
