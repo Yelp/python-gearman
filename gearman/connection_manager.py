@@ -179,6 +179,7 @@ class GearmanConnectionManager(object):
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
         """Continue to poll our connections until we receive a stopping condition"""
         stopwatch = gearman.util.Stopwatch(timeout)
+        submitted_connections = set(submitted_connections)
 
         any_activity = False
         callback_ok = callback_fxn(any_activity)
@@ -191,9 +192,14 @@ class GearmanConnectionManager(object):
 
             # Do a single robust select and handle all connection activity
             read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
-            self.handle_connection_activity(read_connections, write_connections, dead_connections)
+
+            # Handle reads and writes and close all of the dead connections
+            read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
             any_activity = compat.any([read_connections, write_connections, dead_connections])
+
+            # Do not retry dead connections on the next iteration of the loop, as we closed them in handle_error
+            submitted_connections -= dead_connections
 
             callback_ok = callback_fxn(any_activity)
             connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
