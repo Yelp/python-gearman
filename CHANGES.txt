@@ -1,7 +1,6 @@
 v2.0.X, 2012-XX-XX -- Major bug fix release
  * GearmanWorker - Dispatch to the right function instead of looping
  * GearmanClient - Let the server handle the special '-' unique [GH-18]
- * Protocol - support unicode values (to some degree)
  * GearmanClient - fix memory leak on brackground jobs [GH-10]
  * GearmanWorker - add a after_job hook [GH-22]
  * ConnectionManager - fix case where closed connections would still be polled [GHPR-25]
