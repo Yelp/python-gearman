@@ -237,12 +237,11 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
         magic = MAGIC_REQ_STRING
 
     # !NOTE! str should be replaced with bytes in Python 3.x
-    # The binary protocol is null byte delimited, so let's make sure we don't
-    # have null bytes in our values and we're dealing with strings we can probably encode.
-    if compat.any(not isinstance(param_value, basestring) or '\0' in param_value for param_value in cmd_args.itervalues()):
-        raise ProtocolError('Received un-encodable arguments: %r' % cmd_args)
+    # We will iterate in ORDER and str all our command arguments
+    if compat.any(type(param_value) != str for param_value in cmd_args.itervalues()):
+        raise ProtocolError('Received non-binary arguments: %r' % cmd_args)
 
-    data_items = [cmd_args[param].encode('ascii') for param in expected_cmd_params]
+    data_items = [cmd_args[param] for param in expected_cmd_params]
     binary_payload = NULL_CHAR.join(data_items)
 
     # Pack the header in the !4sII format then append the binary payload
