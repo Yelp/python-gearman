@@ -50,7 +50,7 @@ GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
 GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
 GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
 
-# Fake command code
+# Fake command code 
 GEARMAN_COMMAND_TEXT_COMMAND = 9999
 
 GEARMAN_PARAMS_FOR_COMMAND = {
@@ -242,10 +242,7 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
     if compat.any(not isinstance(param_value, basestring) or '\0' in param_value for param_value in cmd_args.itervalues()):
         raise ProtocolError('Received un-encodable arguments: %r' % cmd_args)
 
-    try:
-        data_items = [cmd_args[param].encode('ascii') for param in expected_cmd_params]
-    except:
-        raise ProtocolError('Received un-encodable arguments: %r' % cmd_args)
+    data_items = [cmd_args[param].encode('ascii') for param in expected_cmd_params]
     binary_payload = NULL_CHAR.join(data_items)
 
     # Pack the header in the !4sII format then append the binary payload
