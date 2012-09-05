@@ -133,6 +133,21 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         cmd_args = dict(job_handle=unicode(12345))
         self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
 
+        # Assert we check for NULLs in all but the "last" argument, where last depends on the cmd_type.
+        cmd_type = protocol.GEARMAN_COMMAND_SUBMIT_JOB
+        cmd_args = dict(task='funct\x00ion', data='abcd', unique='12345')
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
+        # Assert we check for NULLs in all but the "last" argument, where last depends on the cmd_type.
+        cmd_type = protocol.GEARMAN_COMMAND_SUBMIT_JOB
+        cmd_args = dict(task='function', data='ab\x00cd', unique='12345')
+        protocol.pack_binary_command(cmd_type, cmd_args) # Should not raise, 'data' is last.
+
+        # Assert we check for NULLs in all but the "last" argument, where last depends on the cmd_type.
+        cmd_type = protocol.GEARMAN_COMMAND_SUBMIT_JOB
+        cmd_args = dict(task='function', data='abcd', unique='123\x0045')
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
     def test_packing_response(self):
         # Test packing a response for a job (server side packing)
         cmd_type = protocol.GEARMAN_COMMAND_NO_JOB
