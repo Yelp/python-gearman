@@ -208,6 +208,7 @@ class GearmanConnection(object):
         if bytes_sent == 0:
             self.throw_exception(message='remote disconnected')
         
+        # This is being done for debugging purposes.
         if bytes_sent < len(self._outgoing_buffer):
             self.throw_exception(message='socket full, only sent %d of %d bytes' % (bytes_sent, len(self._outgoing_buffer)))
 
