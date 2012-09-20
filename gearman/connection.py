@@ -207,8 +207,14 @@ class GearmanConnection(object):
 
         if bytes_sent == 0:
             self.throw_exception(message='remote disconnected')
+        
+        if bytes_sent < len(self._outgoing_buffer):
+            self.throw_exception(message='socket full, only sent %d of %d bytes' % (bytes_sent, len(self._outgoing_buffer)))
 
+        # if this doesn't clear out the buffer, we already raised an exception...
         self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
+        
+        # XXX: This should probably, based on most standards, return the length sent, not the length remaining
         return len(self._outgoing_buffer)
 
     def _pack_command(self, cmd_type, cmd_args):
