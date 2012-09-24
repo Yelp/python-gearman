@@ -90,7 +90,10 @@ class GearmanConnectionManager(object):
         !NOTE! This function can throw a ConnectionError which deriving ConnectionManagers should catch
         """
         assert current_connection in self.connection_list, "Unknown connection - %r" % current_connection
+
         if current_connection.connected:
+            current_connection.close()
+            current_connection.connect()
             return current_connection
 
         # !NOTE! May throw a ConnectionError
