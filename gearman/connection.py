@@ -189,6 +189,12 @@ class GearmanConnection(object):
 
         self._outgoing_buffer = ''.join(packed_data)
 
+    def reconnect(self):
+        """If we don't have outgoing data waiting, close the current connection and open a new one."""
+        if not self._outgoing_buffer:
+            self.close()
+            self.connect()
+
     def send_data_to_socket(self):
         """Send data from buffer -> socket
 

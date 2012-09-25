@@ -92,8 +92,7 @@ class GearmanConnectionManager(object):
         assert current_connection in self.connection_list, "Unknown connection - %r" % current_connection
 
         if current_connection.connected:
-            current_connection.close()
-            current_connection.connect()
+            current_connection.reconnect()
             return current_connection
 
         # !NOTE! May throw a ConnectionError
