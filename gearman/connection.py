@@ -195,7 +195,7 @@ class GearmanConnection(object):
 
         self._outgoing_buffer = ''.join(packed_data)
 
-    def reconnect(self):
+    def maybe_reconnect(self):
         """If we don't have outgoing data waiting after a length of time, close the current connection and open a new one."""
         if self.connect_time < time.time() - self.reconnect_timeout:
             if not self._outgoing_buffer:
