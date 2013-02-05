@@ -20,8 +20,6 @@ class MockGearmanConnection(GearmanConnection):
         self._fail_on_bind = False
         self._fail_on_read = False
         self._fail_on_write = False
-        self.connect_time = 0.0
-        self.reconnect_timeout = 0.0
 
     def _create_client_socket(self):
         if self._fail_on_bind:

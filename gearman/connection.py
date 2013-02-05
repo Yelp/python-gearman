@@ -11,8 +11,6 @@ from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_CO
 
 gearman_logger = logging.getLogger(__name__)
 
-RECONNECT_TIMEOUT_DEFAULT = 60.0
-
 class GearmanConnection(object):
     """A connection between a client/worker and a server.  Can be used to reconnect (unlike a socket)
 
@@ -31,8 +29,6 @@ class GearmanConnection(object):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = host
         self.gearman_port = port
-
-        self.reconnect_timeout = RECONNECT_TIMEOUT_DEFAULT
 
         if host is None:
             raise ServerUnavailable("No host specified")
@@ -94,8 +90,6 @@ class GearmanConnection(object):
         self.connected = True
         self._is_client_side = True
         self._is_server_side = False
-
-        self.connect_time = time.time()
 
     def _create_client_socket(self):
         """Creates a client side socket and subsequently binds/configures our socket options"""
@@ -194,13 +188,6 @@ class GearmanConnection(object):
             packed_data.append(packed_command)
 
         self._outgoing_buffer = ''.join(packed_data)
-
-    def maybe_reconnect(self):
-        """If we don't have outgoing data waiting after a length of time, close the current connection and open a new one."""
-        if self.connect_time < time.time() - self.reconnect_timeout:
-            if not self._outgoing_buffer:
-                self.close()
-                self.connect()
 
     def send_data_to_socket(self):
         """Send data from buffer -> socket
