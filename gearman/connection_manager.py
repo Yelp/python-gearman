@@ -1,6 +1,6 @@
 import logging
-import select as select_lib
 
+import gearman.io
 import gearman.util
 from gearman.connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
@@ -107,50 +107,27 @@ class GearmanConnectionManager(object):
         current_handler.initial_state(**self.handler_initial_state)
         return current_connection
 
-    def poll_connections_once(self, submitted_connections, timeout=None):
-        """Does a single robust select, catching socket errors"""
-        select_connections = set(current_connection for current_connection in submitted_connections if current_connection.connected)
+    def poll_connections_once(self, poller, connection_map, timeout=None):
+        # a timeout of -1 when used with epoll will block until there
+        # is activity. Select does not support negative timeouts, so this
+        # is translated to a timeout=None when falling back to select
+        timeout = timeout or -1 
 
-        rd_connections = set()
-        wr_connections = set()
-        ex_connections = set()
+        readable = set()
+        writable = set()
+        errors = set()
+        for fileno, events in poller.poll(timeout=timeout):
+            conn = connection_map.get(fileno)
+            if not conn:
+                continue
+            if events & gearman.io.READ:
+                readable.add(conn)
+            if events & gearman.io.WRITE:
+                writable.add(conn)
+            if events & gearman.io.ERROR:
+                errors.add(conn)
 
-        if timeout is not None and timeout < 0.0:
-            return rd_connections, wr_connections, ex_connections
-
-        successful_select = False
-        while not successful_select and select_connections:
-            select_connections -= ex_connections
-            check_rd_connections = [current_connection for current_connection in select_connections if current_connection.readable()]
-            check_wr_connections = [current_connection for current_connection in select_connections if current_connection.writable()]
-
-            try:
-                rd_list, wr_list, ex_list = gearman.util.select(check_rd_connections, check_wr_connections, select_connections, timeout=timeout)
-                rd_connections |= set(rd_list)
-                wr_connections |= set(wr_list)
-                ex_connections |= set(ex_list)
-
-                successful_select = True
-            except (select_lib.error, ConnectionError):
-                # On any exception, we're going to assume we ran into a socket exception
-                # We'll need to fish for bad connections as suggested at
-                #
-                # http://www.amk.ca/python/howto/sockets/
-                for conn_to_test in select_connections:
-                    try:
-                        _, _, _ = gearman.util.select([conn_to_test], [], [], timeout=0)
-                    except (select_lib.error, ConnectionError):
-                        rd_connections.discard(conn_to_test)
-                        wr_connections.discard(conn_to_test)
-                        ex_connections.add(conn_to_test)
-
-                        gearman_logger.error('select error: %r' % conn_to_test)
-
-        if _DEBUG_MODE_:
-            gearman_logger.debug('select :: Poll - %d :: Read - %d :: Write - %d :: Error - %d', \
-                len(select_connections), len(rd_connections), len(wr_connections), len(ex_connections))
-
-        return rd_connections, wr_connections, ex_connections
+        return readable, writable, errors
 
     def handle_connection_activity(self, rd_connections, wr_connections, ex_connections):
         """Process all connection activity... executes all handle_* callbacks"""
@@ -176,14 +153,30 @@ class GearmanConnectionManager(object):
         failed_connections = ex_connections | dead_connections
         return rd_connections, wr_connections, failed_connections
 
+    def _register_connections_with_poller(self, connections, poller):
+        for conn in connections:
+            events = 0
+            if conn.readable():
+                events |= gearman.io.READ
+            if conn.writable():
+                events |= gearman.io.WRITE
+            poller.register(conn, events)
+
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
         """Continue to poll our connections until we receive a stopping condition"""
         stopwatch = gearman.util.Stopwatch(timeout)
         submitted_connections = set(submitted_connections)
+        connection_map = {}
 
         any_activity = False
         callback_ok = callback_fxn(any_activity)
         connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
+        poller = gearman.io.get_connection_poller()
+        if connection_ok:
+            self._register_connections_with_poller(submitted_connections, 
+                    poller)
+            connection_map = dict([(c.fileno(), c) for c in
+                submitted_connections if c.connected])
 
         while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
@@ -191,7 +184,7 @@ class GearmanConnectionManager(object):
                 break
 
             # Do a single robust select and handle all connection activity
-            read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
+            read_connections, write_connections, dead_connections = self.poll_connections_once(poller, connection_map, timeout=time_remaining)
 
             # Handle reads and writes and close all of the dead connections
             read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
@@ -203,6 +196,8 @@ class GearmanConnectionManager(object):
 
             callback_ok = callback_fxn(any_activity)
             connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
+
+        poller.close()
 
         # We should raise here if we have no alive connections (don't go into a select polling loop with no connections)
         if not connection_ok:

@@ -33,14 +33,21 @@ class MockGearmanConnection(GearmanConnection):
         if self._fail_on_write:
             self.throw_exception(message='mock write failure')
 
+    def fileno(self):
+        # 73 is the best number, so why not?
+        return 73
+
     def __repr__(self):
         return ('<GearmanConnection %s:%d connected=%s> (%s)' %
             (self.gearman_host, self.gearman_port, self.connected, id(self)))
 
 class MockGearmanConnectionManager(GearmanConnectionManager):
     """Handy mock client base to test Worker/Client/Abstract ClientBases"""
-    def poll_connections_once(self, connections, timeout=None):
+    def poll_connections_once(self, poller, connection_map, timeout=None):
         return set(), set(), set()
+
+    def _register_connections_with_poller(self, connections, poller):
+        pass
 
 class _GearmanAbstractTest(unittest.TestCase):
     connection_class = MockGearmanConnection
