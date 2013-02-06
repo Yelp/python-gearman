@@ -12,3 +12,4 @@ gearman/._*
 MANIFEST
 dist
 build
+*.swo
