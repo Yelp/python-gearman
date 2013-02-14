@@ -1,3 +1,4 @@
+import array
 import collections
 import logging
 import socket
@@ -46,7 +47,7 @@ class GearmanConnection(object):
         self._is_server_side = None
 
         # Reset all our raw data buffers
-        self._incoming_buffer = ''
+        self._incoming_buffer = array.array('c')
         self._outgoing_buffer = ''
 
         # Toss all commands we may have sent or received
@@ -149,7 +150,7 @@ class GearmanConnection(object):
         if len(recv_buffer) == 0:
             self.throw_exception(message='remote disconnected')
 
-        self._incoming_buffer += recv_buffer
+        self._incoming_buffer.fromstring(recv_buffer)
         return len(self._incoming_buffer)
 
     def _unpack_command(self, given_buffer):

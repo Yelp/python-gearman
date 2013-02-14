@@ -203,6 +203,7 @@ def parse_binary_command(in_buffer, is_response=True):
     split_arguments = []
 
     if len(expected_cmd_params) > 0:
+        binary_payload = binary_payload.tostring()
         split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
     elif binary_payload:
         raise ProtocolError('Expected no binary payload: %s' % get_command_name(cmd_type))
@@ -262,7 +263,7 @@ def parse_text_command(in_buffer):
     if '\n' not in in_buffer:
         return cmd_type, cmd_args, cmd_len
 
-    text_command, in_buffer = in_buffer.split('\n', 1)
+    text_command, in_buffer = in_buffer.tostring().split('\n', 1)
     if NULL_CHAR in text_command:
         raise ProtocolError('Received unexpected character: %s' % text_command)
 
