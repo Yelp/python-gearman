@@ -6,6 +6,7 @@ from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.errors import ConnectionError
+from gearman.protocol import GEARMAN_COMMAND_NOOP
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -92,10 +93,20 @@ class GearmanWorker(GearmanConnectionManager):
 
             return self.after_poll(any_activity)
 
+        def before_handling_activity(read_connections, write_connections, dead_connections):
+            # Called before actually handling activity...
+            if not read_connectionsa and not had_job:
+                # If nothing has data to read and we are not processing a job...
+                for connection in set(worker_connections) - set(dead_connections):
+                    # Have all of the handlers (that are still active)...
+                    handler = self.connection_to_handler_map[connection]
+                    # Act as if they have received a NOOP.
+                    handler.recv_command(GEARMAN_COMMAND_NOOP)
+
         # Shuffle our connections after the poll timeout
         while continue_working:
             worker_connections = self.establish_worker_connections()
-            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
+            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout, prehandle=before_handling_activity)
 
         # If we were kicked out of the worker loop, we should shutdown all our connections
         for current_connection in worker_connections:
