@@ -176,7 +176,7 @@ class GearmanConnectionManager(object):
         failed_connections = ex_connections | dead_connections
         return rd_connections, wr_connections, failed_connections
 
-    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
+    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None, prehandle=None):
         """Continue to poll our connections until we receive a stopping condition"""
         stopwatch = gearman.util.Stopwatch(timeout)
         submitted_connections = set(submitted_connections)
