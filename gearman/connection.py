@@ -97,7 +97,7 @@ class GearmanConnection(object):
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((self.gearman_host, self.gearman_port))
-        except socket.error, socket_exception:
+        except socket.error as socket_exception:
             self.throw_exception(exception=socket_exception)
 
         self.set_socket(client_socket)
@@ -144,7 +144,7 @@ class GearmanConnection(object):
         recv_buffer = ''
         try:
             recv_buffer = self.gearman_socket.recv(bytes_to_read)
-        except socket.error, socket_exception:
+        except socket.error as socket_exception:
             self.throw_exception(exception=socket_exception)
 
         if len(recv_buffer) == 0:
@@ -203,7 +203,7 @@ class GearmanConnection(object):
 
         try:
             bytes_sent = self.gearman_socket.send(self._outgoing_buffer)
-        except socket.error, socket_exception:
+        except socket.error as socket_exception:
             self.throw_exception(exception=socket_exception)
 
         if bytes_sent == 0:
