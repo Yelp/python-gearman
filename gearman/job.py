@@ -3,27 +3,29 @@ from gearman.constants import PRIORITY_NONE, JOB_UNKNOWN, JOB_PENDING, JOB_CREAT
 
 class GearmanJob(object):
     """Represents the basics of a job... used in GearmanClient / GearmanWorker to represent job states"""
-    def __init__(self, connection, handle, task, unique, data):
+    def __init__(self, connection, handle, task, unique, data, when_to_run):
         self.connection = connection
         self.handle = handle
 
         self.task = task
         self.unique = unique
         self.data = data
+        self.when_to_run = when_to_run
 
     def to_dict(self):
-        return dict(task=self.task, job_handle=self.handle, unique=self.unique, data=self.data)
+        return dict(task=self.task, job_handle=self.handle, unique=self.unique, data=self.data, when_to_run=self.when_to_run)
 
     def __repr__(self):
-        return '<GearmanJob connection/handle=(%r, %r), task=%s, unique=%s, data=%r>' % (self.connection, self.handle, self.task, self.unique, self.data)
+        return '<GearmanJob connection/handle=(%r, %r), task=%s, unique=%s, data=%r, when_to_run=%d>' % (self.connection, self.handle, self.task, self.unique, self.data, self.when_to_run)
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient to represent job states"""
-    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, max_attempts=1):
+    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, run_later=False, max_attempts=1):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
         self.background = background
+        self.run_later = run_later
 
         self.connection_attempts = 0
         self.max_connection_attempts = max_attempts
@@ -79,5 +81,5 @@ class GearmanJobRequest(object):
         return actually_complete
 
     def __repr__(self):
-        formatted_representation = '<GearmanJobRequest task=%r, unique=%r, priority=%r, background=%r, state=%r, timed_out=%r>'
-        return formatted_representation % (self.job.task, self.job.unique, self.priority, self.background, self.state, self.timed_out)
+        formatted_representation = '<GearmanJobRequest task=%r, unique=%r, when_to_run=%r, priority=%r, background=%r, run_later=%r, state=%r, timed_out=%r>'
+        return formatted_representation % (self.job.task, self.job.unique, self.job.when_to_run, self.priority, self.background, self.run_later, self.state, self.timed_out)
