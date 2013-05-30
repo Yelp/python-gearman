@@ -6,7 +6,7 @@ import weakref
 from gearman.command_handler import GearmanCommandHandler
 from gearman.constants import JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import InvalidClientState
-from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
+from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority_run_later
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -29,10 +29,13 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         gearman_job = current_request.job
 
         # Handle the I/O for requesting a job - determine which COMMAND we need to send
-        cmd_type = submit_cmd_for_background_priority(current_request.background, current_request.priority)
+        cmd_type = submit_cmd_for_background_priority_run_later(current_request.background, current_request.priority, current_request.run_later)
 
         outbound_data = self.encode_data(gearman_job.data)
-        self.send_command(cmd_type, task=gearman_job.task, unique=gearman_job.unique, data=outbound_data)
+        if current_request.run_later:
+            self.send_command(cmd_type, task=gearman_job.task, unique=gearman_job.unique, when_to_run=gearman_job.when_to_run, data=outbound_data)
+        else:
+            self.send_command(cmd_type, task=gearman_job.task, unique=gearman_job.unique, data=outbound_data)
 
         # Once this command is sent, our request needs to wait for a handle
         current_request.state = JOB_PENDING

@@ -7,7 +7,7 @@ from gearman.client_handler import GearmanClientCommandHandler
 
 from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ExceededConnectionAttempts, ServerUnavailable, InvalidClientState
-from gearman.protocol import submit_cmd_for_background_priority, GEARMAN_COMMAND_STATUS_RES, GEARMAN_COMMAND_GET_STATUS, GEARMAN_COMMAND_JOB_CREATED, \
+from gearman.protocol import submit_cmd_for_background_priority_run_later, GEARMAN_COMMAND_STATUS_RES, GEARMAN_COMMAND_GET_STATUS, GEARMAN_COMMAND_JOB_CREATED, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_WARNING
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
@@ -312,7 +312,7 @@ class ClientCommandHandlerInterfaceTest(_GearmanAbstractTest):
                 queued_request = self.command_handler.requests_awaiting_handles.popleft()
                 self.assertEqual(queued_request, current_request)
 
-                expected_cmd_type = submit_cmd_for_background_priority(background, priority)
+                expected_cmd_type = submit_cmd_for_background_priority_run_later(background, priority, False)
                 self.assert_sent_command(expected_cmd_type, task=gearman_job.task, data=gearman_job.data, unique=gearman_job.unique)
 
     def test_get_status_of_job(self):
