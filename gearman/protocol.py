@@ -50,6 +50,8 @@ GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
 GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
 GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
 
+GEARMAN_COMMAND_SUBMIT_JOB_EPOCH = 36
+
 # Fake command code
 GEARMAN_COMMAND_TEXT_COMMAND = 9999
 
@@ -94,6 +96,8 @@ GEARMAN_PARAMS_FOR_COMMAND = {
     GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ['task', 'unique', 'data'],
+
+    GEARMAN_COMMAND_SUBMIT_JOB_EPOCH: ['task', 'unique', 'when_to_run', 'data'],
 
     # Fake gearman command
     GEARMAN_COMMAND_TEXT_COMMAND: ['raw_text']
@@ -140,6 +144,8 @@ GEARMAN_COMMAND_TO_NAME = {
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: 'GEARMAN_COMMAND_SUBMIT_JOB_LOW',
     GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: 'GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG',
 
+    GEARMAN_COMMAND_SUBMIT_JOB_EPOCH: 'GEARMAN_COMMAND_SUBMIT_JOB_EPOCH',
+
     GEARMAN_COMMAND_TEXT_COMMAND: 'GEARMAN_COMMAND_TEXT_COMMAND'
 }
 
@@ -152,16 +158,17 @@ GEARMAN_SERVER_COMMAND_SHUTDOWN = 'shutdown'
 def get_command_name(cmd_type):
     return GEARMAN_COMMAND_TO_NAME.get(cmd_type, cmd_type)
 
-def submit_cmd_for_background_priority(background, priority):
+def submit_cmd_for_background_priority_run_later(background, priority, run_later):
     cmd_type_lookup = {
-        (True, PRIORITY_NONE): GEARMAN_COMMAND_SUBMIT_JOB_BG,
-        (True, PRIORITY_LOW): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
-        (True, PRIORITY_HIGH): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
-        (False, PRIORITY_NONE): GEARMAN_COMMAND_SUBMIT_JOB,
-        (False, PRIORITY_LOW): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
-        (False, PRIORITY_HIGH): GEARMAN_COMMAND_SUBMIT_JOB_HIGH
+        (True, PRIORITY_NONE, False): GEARMAN_COMMAND_SUBMIT_JOB_BG,
+        (True, PRIORITY_LOW, False): GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG,
+        (True, PRIORITY_HIGH, False): GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG,
+        (False, PRIORITY_NONE, False): GEARMAN_COMMAND_SUBMIT_JOB,
+        (False, PRIORITY_LOW, False): GEARMAN_COMMAND_SUBMIT_JOB_LOW,
+        (False, PRIORITY_HIGH, False): GEARMAN_COMMAND_SUBMIT_JOB_HIGH,
+        (True, PRIORITY_NONE, True): GEARMAN_COMMAND_SUBMIT_JOB_EPOCH
     }
-    lookup_tuple = (background, priority)
+    lookup_tuple = (background, priority, run_later)
     cmd_type = cmd_type_lookup[lookup_tuple]
     return cmd_type
 

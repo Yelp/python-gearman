@@ -78,15 +78,15 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
-        return self.job_class(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        return self.job_class(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()), when_to_run=None)
 
     def generate_job_dict(self):
         current_job = self.generate_job()
         return current_job.to_dict()
 
-    def generate_job_request(self, priority=PRIORITY_NONE, background=False):
+    def generate_job_request(self, priority=PRIORITY_NONE, when_to_run=None, background=False):
         job_handle = str(random.random())
-        current_job = self.job_class(connection=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        current_job = self.job_class(connection=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()), when_to_run=when_to_run)
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
         self.assertEqual(current_request.state, JOB_UNKNOWN)
