@@ -1,5 +1,4 @@
 import collections
-from contextlib import nested
 import mock
 import random
 import unittest
@@ -167,9 +166,7 @@ class ClientTest(_GearmanAbstractTest):
                     job_handle=expected_job.handle)
                 return set([flaky_connection]), set(), set()
 
-        with nested(
-                mock.patch.object(self.connection_manager, 'poll_connections_once', poll_connections_once),
-            ):
+        with mock.patch.object(self.connection_manager, 'poll_connections_once', poll_connections_once):
             job_request = self.connection_manager.submit_job(expected_job.task, expected_job.data, unique=expected_job.unique, background=True, priority=PRIORITY_LOW, wait_until_complete=False, max_retries=1)
             self.assertEqual(job_request.state, JOB_CREATED)
 
