@@ -132,7 +132,7 @@ class ClientTest(_GearmanAbstractTest):
         current_request.max_connection_attempts = self.connection_manager.expected_failures + 1
         current_request.state = JOB_UNKNOWN
 
-        accepted_jobs = self.connection_manager.wait_until_jobs_accepted([current_request])
+        self.connection_manager.wait_until_jobs_accepted([current_request])
         self.assertEquals(current_request.state, JOB_CREATED)
         self.assertEquals(current_request.connection_attempts, current_request.max_connection_attempts)
 
@@ -452,7 +452,6 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         job_handle = current_request.job.handle
-        new_data = str(random.random())
         self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=job_handle)
 
         self.assertEqual(current_request.state, JOB_FAILED)
