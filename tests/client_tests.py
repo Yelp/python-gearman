@@ -1,4 +1,5 @@
 import collections
+import mock
 import random
 import unittest
 
@@ -131,7 +132,7 @@ class ClientTest(_GearmanAbstractTest):
         current_request.max_connection_attempts = self.connection_manager.expected_failures + 1
         current_request.state = JOB_UNKNOWN
 
-        accepted_jobs = self.connection_manager.wait_until_jobs_accepted([current_request])
+        self.connection_manager.wait_until_jobs_accepted([current_request])
         self.assertEquals(current_request.state, JOB_CREATED)
         self.assertEquals(current_request.connection_attempts, current_request.max_connection_attempts)
 
@@ -143,6 +144,31 @@ class ClientTest(_GearmanAbstractTest):
         self.assertRaises(ExceededConnectionAttempts, self.connection_manager.wait_until_jobs_accepted, [current_request])
         self.assertEquals(current_request.state, JOB_UNKNOWN)
         self.assertEquals(current_request.connection_attempts, current_request.max_connection_attempts)
+
+    def test_retry_flaked_connection(self):
+        flaky_connection = MockGearmanConnection()
+        flaky_connection._fail_on_read = True
+        flaky_connection.poll_count = 0
+
+        expected_job = self.generate_job()
+
+        self.connection_manager.connection_list = [flaky_connection]
+
+        def poll_connections_once(connections, timeout=None):
+            flaky_connection.poll_count += 1
+            if flaky_connection.poll_count == 1:
+                flaky_connection._fail_on_read = False
+                return set(), set(), set([flaky_connection])
+            else:
+                handler = self.connection_manager.connection_to_handler_map[flaky_connection]
+                handler.recv_command(
+                    GEARMAN_COMMAND_JOB_CREATED,
+                    job_handle=expected_job.handle)
+                return set([flaky_connection]), set(), set()
+
+        with mock.patch.object(self.connection_manager, 'poll_connections_once', poll_connections_once):
+            job_request = self.connection_manager.submit_job(expected_job.task, expected_job.data, unique=expected_job.unique, background=True, priority=PRIORITY_LOW, wait_until_complete=False, max_retries=1)
+            self.assertEqual(job_request.state, JOB_CREATED)
 
     def test_multiple_fg_job_submission(self):
         submitted_job_count = 5
@@ -426,7 +452,6 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         job_handle = current_request.job.handle
-        new_data = str(random.random())
         self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=job_handle)
 
         self.assertEqual(current_request.state, JOB_FAILED)

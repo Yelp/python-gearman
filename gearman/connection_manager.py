@@ -201,9 +201,6 @@ class GearmanConnectionManager(object):
 
             any_activity = compat.any([read_connections, write_connections, dead_connections])
 
-            # Do not retry dead connections on the next iteration of the loop, as we closed them in handle_error
-            submitted_connections -= dead_connections
-
             callback_ok = callback_fxn(any_activity)
             connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
 
