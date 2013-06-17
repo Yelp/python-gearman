@@ -69,7 +69,10 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         if not self.requests_awaiting_handles:
             raise InvalidClientState('Received a job_handle with no pending requests')
 
-        # If our client got a JOB_CREATED, our request now has a server handle
+        """The gearman server returns JOB_CREATED responses in order
+        in response to SUBMIT_JOB_* requests.  We therefore know that the
+        handle we just got cooresponds to the first request awaiting a
+        handle"""
         current_request = self.requests_awaiting_handles.popleft()
         self._assert_request_state(current_request, JOB_PENDING)
 
