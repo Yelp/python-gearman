@@ -4,7 +4,7 @@ import gearman.io
 import gearman.util
 from gearman.connection import GearmanConnection
 from gearman.constants import _DEBUG_MODE_
-from gearman.errors import ConnectionError, ServerUnavailable
+from gearman.errors import ConnectionError, GearmanError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
 from gearman import compat
 
@@ -59,8 +59,16 @@ class GearmanConnectionManager(object):
         self.connection_list = []
 
         host_list = host_list or []
-        for hostport_tuple in host_list:
-            self.add_connection(hostport_tuple)
+        for element in host_list:
+            # old style host:port pair
+            if isinstance(element, str):
+                self.add_connection(element)
+            elif isinstance(element, dict):
+                if not all (k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
+                    raise GearmanError("Incomplete SSL connection definition")
+                self.add_ssl_connection(element['host'], element['port'],
+                                        element['keyfile'], element['certfile'],
+                                        element['ca_certs'])
 
         self.handler_to_connection_map = {}
         self.connection_to_handler_map = {}
@@ -75,6 +83,16 @@ class GearmanConnectionManager(object):
     ###################################
     # Connection management functions #
     ###################################
+
+    def add_ssl_connection(self, host, port, keyfile, certfile, ca_certs):
+        """Add a new SSL connection to this connection manager"""
+        client_connection = self.connection_class(host=host,
+                                                  port=port,
+                                                  keyfile=keyfile,
+                                                  certfile=certfile,
+                                                  ca_certs=ca_certs)
+        self.connection_list.append(client_connection)
+        return client_connection
 
     def add_connection(self, hostport_tuple):
         """Add a new connection to this connection manager"""

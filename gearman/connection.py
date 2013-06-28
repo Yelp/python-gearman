@@ -2,6 +2,7 @@ import array
 import collections
 import logging
 import socket
+import ssl
 import struct
 import time
 
@@ -26,10 +27,13 @@ class GearmanConnection(object):
     """
     connect_cooldown_seconds = 1.0
 
-    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT):
+    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT, keyfile=None, certfile=None, ca_certs=None):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = host
         self.gearman_port = port
+        self.keyfile = keyfile
+        self.certfile = certfile
+        self.ca_certs = ca_certs
 
         if host is None:
             raise ServerUnavailable("No host specified")
@@ -96,6 +100,15 @@ class GearmanConnection(object):
         """Creates a client side socket and subsequently binds/configures our socket options"""
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            # All 3 files must be given before SSL can be used
+            if self.keyfile and self.certfile and self.ca_certs:
+                client_socket = ssl.wrap_socket(client_socket,
+                                                keyfile=self.keyfile,
+                                                certfile=self.certfile,
+                                                ca_certs=self.ca_certs,
+                                                ssl_version=ssl.PROTOCOL_TLSv1)
+
             client_socket.connect((self.gearman_host, self.gearman_port))
         except socket.error, socket_exception:
             self.throw_exception(exception=socket_exception)
