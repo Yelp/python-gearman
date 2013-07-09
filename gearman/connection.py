@@ -107,6 +107,7 @@ class GearmanConnection(object):
                                                 keyfile=self.keyfile,
                                                 certfile=self.certfile,
                                                 ca_certs=self.ca_certs,
+                                                cert_reqs=ssl.CERT_REQUIRED,
                                                 ssl_version=ssl.PROTOCOL_TLSv1)
 
             client_socket.connect((self.gearman_host, self.gearman_port))
