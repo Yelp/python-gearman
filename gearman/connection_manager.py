@@ -129,7 +129,7 @@ class GearmanConnectionManager(object):
         # a timeout of -1 when used with epoll will block until there
         # is activity. Select does not support negative timeouts, so this
         # is translated to a timeout=None when falling back to select
-        timeout = timeout or -1 
+        timeout = timeout or -1
 
         readable = set()
         writable = set()
@@ -191,14 +191,15 @@ class GearmanConnectionManager(object):
         connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
         poller = gearman.io.get_connection_poller()
         if connection_ok:
-            self._register_connections_with_poller(submitted_connections, 
+            self._register_connections_with_poller(submitted_connections,
                     poller)
             connection_map = dict([(c.fileno(), c) for c in
                 submitted_connections if c.connected])
 
         while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
-            if time_remaining == 0.0:
+            callback_ok = callback_fxn(any_activity)
+            if time_remaining == 0.0 or (any_activity and not callback_ok):
                 break
 
             # Do a single robust select and handle all connection activity

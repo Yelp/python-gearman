@@ -90,10 +90,16 @@ class GearmanAdminClient(GearmanConnectionManager):
 
     def wait_until_server_responds(self, expected_type):
         current_handler = self.current_handler
+        stopwatch = util.Stopwatch(self.poll_timeout)
+        time_remaining = stopwatch.get_time_remaining()
+
         def continue_while_no_response(any_activity):
             return (not current_handler.response_ready)
 
-        self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=self.poll_timeout)
+        while time_remaining > 0.0 and not self.current_handler.response_ready:
+            self.poll_connections_until_stopped([self.current_connection], continue_while_no_response, timeout=time_remaining)
+            time_remaining = stopwatch.get_time_remaining()
+
         if not self.current_handler.response_ready:
             raise InvalidAdminClientState('Admin client timed out after %f second(s)' % self.poll_timeout)
 
