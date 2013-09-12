@@ -64,11 +64,7 @@ class GearmanConnectionManager(object):
             if isinstance(element, str):
                 self.add_connection(element)
             elif isinstance(element, dict):
-                if not all (k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
-                    raise GearmanError("Incomplete SSL connection definition")
-                self.add_ssl_connection(element['host'], element['port'],
-                                        element['keyfile'], element['certfile'],
-                                        element['ca_certs'])
+                self.add_complex_connection(**element)
 
         self.handler_to_connection_map = {}
         self.connection_to_handler_map = {}
@@ -84,13 +80,15 @@ class GearmanConnectionManager(object):
     # Connection management functions #
     ###################################
 
-    def add_ssl_connection(self, host, port, keyfile, certfile, ca_certs):
-        """Add a new SSL connection to this connection manager"""
-        client_connection = self.connection_class(host=host,
-                                                  port=port,
-                                                  keyfile=keyfile,
-                                                  certfile=certfile,
-                                                  ca_certs=ca_certs)
+    def add_complex_connection(self, **keywords):
+        """
+        Add a new complex connection to this connection manager.
+
+        A "complex" connection is one with various connection options, such as
+        using SSL or setting keepalive values. This method accepts a dictionary, the
+        keys of which correspond to the GearmanConnection.__init__() parameters.
+        """
+        client_connection = self.connection_class(**keywords)
         self.connection_list.append(client_connection)
         return client_connection
 
