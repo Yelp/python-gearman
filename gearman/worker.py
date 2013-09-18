@@ -6,6 +6,7 @@ from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.errors import ConnectionError
+from gearman.protocol import GEARMAN_COMMAND_GRAB_JOB_UNIQ
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -141,8 +142,8 @@ class GearmanWorker(GearmanConnectionManager):
     def handle_error(self, current_connection):
         """If we discover that a connection has a problem, we better release the job lock"""
         current_handler = self.connection_to_handler_map.get(current_connection)
-        if current_handler:
-            self.set_job_lock(current_handler, lock=False)
+        #if current_handler:
+            #self.set_job_lock(current_handler, lock=False)
 
         super(GearmanWorker, self).handle_error(current_connection)
 
@@ -234,18 +235,18 @@ class GearmanWorker(GearmanConnectionManager):
         if command_handler not in self.handler_to_connection_map:
             return False
 
-        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
-        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
+        #failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
+        #failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
 
         # If we've already been locked, we should say the lock failed
         # If we're attempting to unlock something when we don't have a lock, we're in a bad state
-        if failed_lock or failed_unlock:
-            return False
+        #if failed_lock or failed_unlock:
+        #    return False
 
-        if lock:
-            self.command_handler_holding_job_lock = command_handler
-        else:
-            self.command_handler_holding_job_lock = None
+        #if lock:
+        #self.command_handler_holding_job_lock = command_handler
+        #else:
+        #    self.command_handler_holding_job_lock = None
 
         return True
     
