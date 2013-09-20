@@ -1,7 +1,6 @@
 import struct
 from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH
 from gearman.errors import ProtocolError
-from gearman import compat
 # Protocol specific constants
 NULL_CHAR = '\x00'
 MAGIC_RES_STRING = '%sRES' % NULL_CHAR
@@ -251,13 +250,13 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
 
     # !NOTE! str should be replaced with bytes in Python 3.x
     # We will iterate in ORDER and str all our command arguments
-    if compat.any(type(param_value) != str for param_value in cmd_args.itervalues()):
+    if any(type(param_value) != str for param_value in cmd_args.itervalues()):
         raise ProtocolError('Received non-binary arguments: %r' % cmd_args)
 
     data_items = [cmd_args[param] for param in expected_cmd_params]
 
     # Now check that all but the last argument are free of \0 as per the protocol spec.
-    if compat.any('\0' in argument for argument in data_items[:-1]):
+    if any('\0' in argument for argument in data_items[:-1]):
         raise ProtocolError('Received arguments with NULL byte in non-final argument')
 
     binary_payload = NULL_CHAR.join(data_items)

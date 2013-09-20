@@ -108,10 +108,8 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         print('recv_noop')
         if self._check_job_lock():
             pass
-        elif self._acquire_job_lock():
-            self._grab_job()
         else:
-            self._sleep()
+            self._grab_job_all() # TODO: is this best?
 
         return True
 

@@ -3,10 +3,8 @@ import logging
 import gearman.io
 import gearman.util
 from gearman.connection import GearmanConnection
-from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, GearmanError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
-from gearman import compat
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -191,7 +189,7 @@ class GearmanConnectionManager(object):
 
         any_activity = False
         callback_ok = callback_fxn(any_activity)
-        connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
+        connection_ok = any(current_connection.connected for current_connection in submitted_connections)
         poller = gearman.io.get_connection_poller()
         if connection_ok:
             self._register_connections_with_poller(submitted_connections, 
@@ -210,13 +208,13 @@ class GearmanConnectionManager(object):
             # Handle reads and writes and close all of the dead connections
             read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
-            any_activity = compat.any([read_connections, write_connections, dead_connections])
+            any_activity = any([read_connections, write_connections, dead_connections])
 
             # Do not retry dead connections on the next iteration of the loop, as we closed them in handle_error
             submitted_connections -= dead_connections
 
             callback_ok = callback_fxn(any_activity)
-            connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
+            connection_ok = any(current_connection.connected for current_connection in submitted_connections)
 
         poller.close()
 
