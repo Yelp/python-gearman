@@ -24,7 +24,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         self._client_id = None
 
     def initial_state(self, abilities=None, client_id=None):
-        #self.set_client_id(client_id)
+        self.set_client_id(client_id)
         self.set_abilities(abilities)
 
         self._grab_job_all()
@@ -36,7 +36,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         assert type(connection_abilities_list) in (list, tuple)
         self._handler_abilities = connection_abilities_list
 
-        # self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
+        self.send_command(GEARMAN_COMMAND_RESET_ABILITIES)
         for task in self._handler_abilities:
             self.send_command(GEARMAN_COMMAND_CAN_DO, task=task)
 
@@ -105,7 +105,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         SLEEP -> AWAKE -> AWAITING_JOB :: Transition if we can acquire the worker job lock
         SLEEP -> AWAKE -> SLEEP        :: Transition if we can NOT acquire a worker job lock
         """
-        print('recv_noop')
+        #print('recv_noop')
         if self._check_job_lock():
             pass
         else:
@@ -118,7 +118,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         AWAITING_JOB -> SLEEP :: Always transition to sleep if we have nothing to do
         """
-        print('recv_no_job')
+        #print('recv_no_job')
         self._release_job_lock()
         self._sleep()
 
@@ -128,7 +128,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         """When initially connecting to the server, we want all jobs to be assigned
         """
         assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
-        print('recv_job_assign_all')
+        #print('recv_job_assign_all')
 
         gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, self.decode_data(data))
 
@@ -141,7 +141,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def recv_job_assign_uniq(self, job_handle, task, unique, data):
         """Transition from being AWAITING_JOB -> EXECUTE_JOB -> GRAB_JOB
         """
-        print('recv_job_assign_uniq')
+        #print('recv_job_assign_uniq')
         assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
@@ -160,5 +160,5 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
     def recv_job_assign(self, job_handle, task, data):
         """JOB_ASSIGN and JOB_ASSIGN_UNIQ are essentially the same"""
-        print('recv_job_assign')
+        #print('recv_job_assign')
         return self.recv_job_assign_uniq(job_handle=job_handle, task=task, unique=None, data=data)

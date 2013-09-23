@@ -208,7 +208,8 @@ class GearmanConnection(object):
 
     def send_command(self, cmd_type, cmd_args):
         """Adds a single gearman command to the outgoing command queue"""
-        self._outgoing_commands.append((cmd_type, cmd_args))
+        packed_command = self._pack_command(cmd_type, cmd_args)
+        return self.gearman_socket.send(packed_command) 
 
     def send_commands_to_buffer(self):
         """Sends and packs commands -> buffer"""
