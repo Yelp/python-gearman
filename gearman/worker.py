@@ -79,15 +79,15 @@ class GearmanWorker(GearmanConnectionManager):
         # magic of closures we can reference and write to it each call.
         # This is all so that we can determine when we've finished processing a job
         # correctly.
-        had_job = []
+        #had_job = []
 
         def continue_while_connections_alive(any_activity):
-            if had_job and not self.has_job_lock():
-                return self.after_poll(any_activity) and self.after_job()
+            #if had_job and not self.has_job_lock():
+            #    return self.after_poll(any_activity) and self.after_job()
 
-            del had_job[:]
-            if self.has_job_lock():
-                had_job.append(True)
+            #del had_job[:]
+            #if self.has_job_lock():
+            #    had_job.append(True)
 
             return self.after_poll(any_activity)
 
@@ -228,29 +228,3 @@ class GearmanWorker(GearmanConnectionManager):
         self.send_job_complete(current_job, job_result)
         return True
 
-    def set_job_lock(self, command_handler, lock):
-        """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
-        if command_handler not in self.handler_to_connection_map:
-            return False
-
-        #failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
-        #failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
-
-        # If we've already been locked, we should say the lock failed
-        # If we're attempting to unlock something when we don't have a lock, we're in a bad state
-        #if failed_lock or failed_unlock:
-        #    return False
-
-        #if lock:
-        #self.command_handler_holding_job_lock = command_handler
-        #else:
-        #    self.command_handler_holding_job_lock = None
-
-        return True
-    
-    def has_job_lock(self):
-        return bool(self.command_handler_holding_job_lock is not None)
-    
-    def check_job_lock(self, command_handler):
-        """Check to see if we hold the job lock"""
-        return bool(self.command_handler_holding_job_lock == command_handler)

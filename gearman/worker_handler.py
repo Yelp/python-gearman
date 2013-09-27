@@ -52,6 +52,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def send_job_status(self, current_job, numerator, denominator):
         assert type(numerator) in (int, float), 'Numerator must be a numeric value'
         assert type(denominator) in (int, float), 'Denominator must be a numeric value'
+
         self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=str(numerator), denominator=str(denominator))
 
     def send_job_complete(self, current_job, data):
@@ -86,18 +87,6 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def _sleep(self):
         self.send_command(GEARMAN_COMMAND_PRE_SLEEP)
 
-    def _check_job_lock(self):
-        return self.connection_manager.check_job_lock(self)
-
-    def _acquire_job_lock(self):
-        return self.connection_manager.set_job_lock(self, lock=True)
-
-    def _release_job_lock(self):
-        if not self.connection_manager.set_job_lock(self, lock=False):
-            raise InvalidWorkerState("Unable to release job lock for %r" % self)
-
-        return True
-
     def recv_noop(self):
         """Transition from being SLEEP --> AWAITING_JOB / SLEEP
 
@@ -106,10 +95,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         SLEEP -> AWAKE -> SLEEP        :: Transition if we can NOT acquire a worker job lock
         """
         #print('recv_noop')
-        if self._check_job_lock():
-            pass
-        else:
-            self._grab_job_all() # TODO: is this best?
+        self._grab_job_all() # TODO: is this best?
 
         return True
 
@@ -119,7 +105,6 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         AWAITING_JOB -> SLEEP :: Always transition to sleep if we have nothing to do
         """
         #print('recv_no_job')
-        self._release_job_lock()
         self._sleep()
 
         return True
@@ -143,10 +128,6 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
         """
         #print('recv_job_assign_uniq')
         assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
-
-        # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
-        # if not self.connection_manager.check_job_lock(self):
-        #    raise InvalidWorkerState("Received a job when we weren't expecting one")
 
         gearman_job = self.connection_manager.create_job(self, job_handle, task, unique, self.decode_data(data))
 

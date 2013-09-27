@@ -154,11 +154,11 @@ class GearmanConnectionManager(object):
             except ConnectionError:
                 dead_connections.add(current_connection)
 
-        for current_connection in wr_connections:
-            try:
-                self.handle_write(current_connection)
-            except ConnectionError:
-                dead_connections.add(current_connection)
+        # for current_connection in wr_connections:
+           # try:
+           #     self.handle_write(current_connection)
+           # except ConnectionError:
+           #     dead_connections.add(current_connection)
 
         for current_connection in ex_connections:
             self.handle_error(current_connection)
@@ -237,12 +237,12 @@ class GearmanConnectionManager(object):
         # Notify the handler that we have commands to fetch
         current_handler.fetch_commands()
 
-    def handle_write(self, current_connection):
-        # Transfer command from command queue -> buffer
-        current_connection.send_commands_to_buffer()
+    #def handle_write(self, current_connection):
+    #    # Transfer command from command queue -> buffer
+    #    current_connection.send_commands_to_buffer()
 
-        # Transfer data from buffer -> socket
-        current_connection.send_data_to_socket()
+    #    # Transfer data from buffer -> socket
+    #    current_connection.send_data_to_socket()
 
     def handle_error(self, current_connection):
         dead_handler = self.connection_to_handler_map.pop(current_connection, None)
