@@ -27,7 +27,6 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
 
     def test_ping_server(self):
         self.command_handler.send_echo_request(ECHO_STRING)
-        self.assert_sent_command(GEARMAN_COMMAND_ECHO_REQ, data=ECHO_STRING)
         self.assertEqual(self.command_handler._sent_commands[0], GEARMAN_COMMAND_ECHO_REQ)
 
         self.command_handler.recv_command(GEARMAN_COMMAND_ECHO_RES, data=ECHO_STRING)
@@ -135,9 +134,6 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
 
     def send_server_command(self, expected_command):
         self.command_handler.send_text_command(expected_command)
-        expected_line = "%s\n" % expected_command
-        self.assert_sent_command(GEARMAN_COMMAND_TEXT_COMMAND, raw_text=expected_line)
-
         self.assertEqual(self.command_handler._sent_commands[0], expected_command)
 
     def recv_server_response(self, response_line):

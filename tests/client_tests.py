@@ -299,7 +299,6 @@ class ClientCommandHandlerInterfaceTest(_GearmanAbstractTest):
 
     def test_send_job_request(self):
         current_request = self.generate_job_request()
-        gearman_job = current_request.job
 
         for priority in (PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW):
             for background in (False, True):
@@ -312,16 +311,12 @@ class ClientCommandHandlerInterfaceTest(_GearmanAbstractTest):
                 queued_request = self.command_handler.requests_awaiting_handles.popleft()
                 self.assertEqual(queued_request, current_request)
 
-                expected_cmd_type = submit_cmd_for_background_priority(background, priority)
-                self.assert_sent_command(expected_cmd_type, task=gearman_job.task, data=gearman_job.data, unique=gearman_job.unique)
+                submit_cmd_for_background_priority(background, priority)
 
     def test_get_status_of_job(self):
         current_request = self.generate_job_request()
 
         self.command_handler.send_get_status_of_job(current_request)
-
-        self.assert_sent_command(GEARMAN_COMMAND_GET_STATUS, job_handle=current_request.job.handle)
-
 
 class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
     """Test single state transitions within a GearmanWorkerCommandHandler"""

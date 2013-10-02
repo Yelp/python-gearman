@@ -2,7 +2,6 @@ import logging
 import random
 import sys
 
-from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.errors import ConnectionError
@@ -74,22 +73,7 @@ class GearmanWorker(GearmanConnectionManager):
         continue_working = True
         worker_connections = []
 
-        # We're going to track whether a previous call to our closure indicated
-        # we were processing a job. This is just a list of possibly a single
-        # element indicating we had a job. It's a list so that through the
-        # magic of closures we can reference and write to it each call.
-        # This is all so that we can determine when we've finished processing a job
-        # correctly.
-        had_job = []
-
         def continue_while_connections_alive(any_activity):
-            if had_job and not self.has_job_lock():
-                return self.after_poll(any_activity) and self.after_job()
-
-            del had_job[:]
-            if self.has_job_lock():
-                had_job.append(True)
-
             return self.after_poll(any_activity)
 
         # Shuffle our connections after the poll timeout
@@ -155,7 +139,7 @@ class GearmanWorker(GearmanConnectionManager):
     def wait_until_updates_sent(self, multiple_gearman_jobs, poll_timeout=None):
         connection_set = set([current_job.connection for current_job in multiple_gearman_jobs])
         def continue_while_updates_pending(any_activity):
-            return compat.any(current_connection.writable() for current_connection in connection_set)
+            return any(current_connection.writable() for current_connection in connection_set)
 
         self.poll_connections_until_stopped(connection_set, continue_while_updates_pending, timeout=poll_timeout)
 
@@ -229,29 +213,3 @@ class GearmanWorker(GearmanConnectionManager):
         self.send_job_complete(current_job, job_result)
         return True
 
-    def set_job_lock(self, command_handler, lock):
-        """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
-        if command_handler not in self.handler_to_connection_map:
-            return False
-
-        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
-        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
-
-        # If we've already been locked, we should say the lock failed
-        # If we're attempting to unlock something when we don't have a lock, we're in a bad state
-        if failed_lock or failed_unlock:
-            return False
-
-        if lock:
-            self.command_handler_holding_job_lock = command_handler
-        else:
-            self.command_handler_holding_job_lock = None
-
-        return True
-    
-    def has_job_lock(self):
-        return bool(self.command_handler_holding_job_lock is not None)
-    
-    def check_job_lock(self, command_handler):
-        """Check to see if we hold the job lock"""
-        return bool(self.command_handler_holding_job_lock == command_handler)

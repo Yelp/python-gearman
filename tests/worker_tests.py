@@ -1,21 +1,18 @@
 import collections
-from gearman import compat
 import unittest
 
 from gearman.worker import GearmanWorker
 from gearman.worker_handler import GearmanWorkerCommandHandler
 
-from gearman.errors import ServerUnavailable, InvalidWorkerState
-from gearman.protocol import get_command_name, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, \
-    GEARMAN_COMMAND_NOOP, GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_NO_JOB, GEARMAN_COMMAND_GRAB_JOB_UNIQ, GEARMAN_COMMAND_JOB_ASSIGN_UNIQ, \
-    GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING
+from gearman.errors import ServerUnavailable
+from gearman.protocol import *
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
 
-class MockGearmanWorker(MockGearmanConnectionManager, GearmanWorker):
+class MockGearmanWorker(GearmanWorker, MockGearmanConnectionManager):
     def __init__(self, *largs, **kwargs):
         super(MockGearmanWorker, self).__init__(*largs, **kwargs)
-        self.worker_job_queues = compat.defaultdict(collections.deque)
+        self.worker_job_queues = collections.defaultdict(collections.deque)
 
     def on_job_execute(self, current_job):
         current_handler = self.connection_to_handler_map[current_job.connection]
@@ -27,23 +24,6 @@ class _GearmanAbstractWorkerTest(_GearmanAbstractTest):
 
     def setup_command_handler(self):
         super(_GearmanAbstractWorkerTest, self).setup_command_handler()
-        self.assert_sent_abilities([])
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
-
-    def assert_sent_abilities(self, expected_abilities):
-        observed_abilities = set()
-
-        self.assert_sent_command(GEARMAN_COMMAND_RESET_ABILITIES)
-        for ability in expected_abilities:
-            cmd_type, cmd_args = self.connection._outgoing_commands.popleft()
-
-            self.assertEqual(get_command_name(cmd_type), get_command_name(GEARMAN_COMMAND_CAN_DO))
-            observed_abilities.add(cmd_args['task'])
-
-        self.assertEqual(observed_abilities, set(expected_abilities))
-
-    def assert_sent_client_id(self, expected_client_id):
-        self.assert_sent_command(GEARMAN_COMMAND_SET_CLIENT_ID, client_id=expected_client_id)
 
 class WorkerTest(_GearmanAbstractWorkerTest):
     """Test the public worker interface"""
@@ -151,9 +131,6 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
         # When we attempt a new connection, make sure we get a new command handler
         self.assertNotEquals(self.command_handler, self.connection_manager.connection_to_handler_map[self.connection])
 
-        self.assert_sent_client_id(expected_client_id)
-        self.assert_sent_abilities(expected_abilities)
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
         self.assert_no_pending_commands()
 
     def test_set_abilities(self):
@@ -161,7 +138,6 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # We were disconnected, connect and wipe pending commands
         self.command_handler.set_abilities(expected_abilities)
-        self.assert_sent_abilities(expected_abilities)
         self.assert_no_pending_commands()
 
     def test_set_client_id(self):
@@ -173,7 +149,6 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # We were disconnected, connect and wipe pending commands
         self.command_handler.set_client_id(expected_client_id)
-        self.assert_sent_client_id(expected_client_id)
         self.assert_no_pending_commands()
 
     def test_send_functions(self):
@@ -181,27 +156,21 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.command_handler.send_job_status(current_job, 0, 1)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator='0', denominator='1')
 
         # Test GEARMAN_COMMAND_WORK_COMPLETE
         self.command_handler.send_job_complete(current_job, 'completion data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data='completion data')
 
         # Test GEARMAN_COMMAND_WORK_FAIL
         self.command_handler.send_job_failure(current_job)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
 
         # Test GEARMAN_COMMAND_WORK_EXCEPTION
         self.command_handler.send_job_exception(current_job, 'exception data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data='exception data')
 
         # Test GEARMAN_COMMAND_WORK_DATA
         self.command_handler.send_job_data(current_job, 'job data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data='job data')
 
         # Test GEARMAN_COMMAND_WORK_WARNING
         self.command_handler.send_job_warning(current_job, 'job warning')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data='job warning')
 
 class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
     """Test multiple state transitions within a GearmanWorkerCommandHandler
@@ -217,8 +186,6 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
 
     def setup_command_handler(self):
         super(_GearmanAbstractWorkerTest, self).setup_command_handler()
-        self.assert_sent_abilities(['__test_ability__'])
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def test_wakeup_work(self):
         self.move_to_state_wakeup()
@@ -249,8 +216,6 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
         for _ in range(5):
             self.command_handler.recv_command(GEARMAN_COMMAND_NOOP)
 
-        self.assert_job_lock(is_locked=True)
-
         # Pretend like the server has no work... do nothing
         # Moving to state NO_JOB will make sure there's only 1 item on the queue
         self.move_to_state_no_job()
@@ -273,45 +238,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
         # After this job completes, we're going to greedily ask for more jobs
         self.move_to_state_no_job()
 
-    def test_worker_already_locked(self):
-        other_connection = MockGearmanConnection()
-        self.connection_manager.connection_list.append(other_connection)
-        self.connection_manager.establish_connection(other_connection)
-
-        other_handler = self.connection_manager.connection_to_handler_map[other_connection]
-        other_handler.recv_command(GEARMAN_COMMAND_NOOP)
-
-        # Make sure other handler has a lock
-        self.assertEqual(self.connection_manager.command_handler_holding_job_lock, other_handler)
-
-        # Make sure OUR handler has nothing incoming
-        self.assert_no_pending_commands()
-
-        # Make sure we try to grab a job but fail...so go back to sleep
-        self.command_handler.recv_command(GEARMAN_COMMAND_NOOP)
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
-
-        # Make sure other handler still has lock
-        self.assertEqual(self.connection_manager.command_handler_holding_job_lock, other_handler)
-
-        # Make the other handler release its lock
-        other_handler.recv_command(GEARMAN_COMMAND_NO_JOB)
-
-        # Ensure that the lock has been freed
-        self.assert_job_lock(is_locked=False)
-
-        # Try to do work after we have our lock released
-        self.move_to_state_wakeup()
-
-        self.move_to_state_job_assign_uniq(self.generate_job_dict())
-
-        self.move_to_state_wakeup()
-
-        self.move_to_state_no_job()
-
     def move_to_state_wakeup(self):
         self.assert_no_pending_commands()
-        self.assert_job_lock(is_locked=False)
 
         self.command_handler.recv_command(GEARMAN_COMMAND_NOOP)
 
@@ -326,9 +254,7 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
         self.command_handler.recv_command(GEARMAN_COMMAND_NO_JOB)
 
         # We should be asleep... which means no pending jobs and we're not awaiting job assignment
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
         self.assert_no_pending_commands()
-        self.assert_job_lock(is_locked=False)
 
     def move_to_state_job_assign_uniq(self, fake_job):
         """Move us to the JOB_ASSIGN_UNIQ state...
@@ -348,17 +274,8 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
         self.assertEqual(current_job.unique, fake_job['unique'])
         self.assertEqual(current_job.data, fake_job['data'])
 
-        # At the end of recv_command(GEARMAN_COMMAND_JOB_ASSIGN_UNIQ)
-        self.assert_job_lock(is_locked=False)
-        self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
-
     def assert_awaiting_job(self):
-        self.assert_sent_command(GEARMAN_COMMAND_GRAB_JOB_UNIQ)
         self.assert_no_pending_commands()
-
-    def assert_job_lock(self, is_locked):
-        expected_value = (is_locked and self.command_handler) or None
-        self.assertEqual(self.connection_manager.command_handler_holding_job_lock, expected_value)
 
 if __name__ == '__main__':
     unittest.main()

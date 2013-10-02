@@ -1,7 +1,6 @@
 import struct
 from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH
 from gearman.errors import ProtocolError
-from gearman import compat
 # Protocol specific constants
 NULL_CHAR = '\x00'
 MAGIC_RES_STRING = '%sRES' % NULL_CHAR
@@ -49,6 +48,10 @@ GEARMAN_COMMAND_JOB_ASSIGN_UNIQ = 31
 GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG = 32
 GEARMAN_COMMAND_SUBMIT_JOB_LOW = 33
 GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG = 34
+GEARMAN_COMMAND_GRAB_JOB_ALL = 39
+
+# Gearman commands 40-49
+GEARMAN_COMMAND_JOB_ASSIGN_ALL = 40
 
 # Fake command code
 GEARMAN_COMMAND_TEXT_COMMAND = 9999
@@ -94,7 +97,11 @@ GEARMAN_PARAMS_FOR_COMMAND = {
     GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: ['task', 'unique', 'data'],
     GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: ['task', 'unique', 'data'],
+    GEARMAN_COMMAND_GRAB_JOB_ALL: [],
 
+    # Gearman commands 40-49
+    GEARMAN_COMMAND_JOB_ASSIGN_ALL: ['job_handle', 'task', 'unique', 'reducer', 'data'],
+    
     # Fake gearman command
     GEARMAN_COMMAND_TEXT_COMMAND: ['raw_text']
 }
@@ -139,6 +146,10 @@ GEARMAN_COMMAND_TO_NAME = {
     GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG: 'GEARMAN_COMMAND_SUBMIT_JOB_HIGH_BG',
     GEARMAN_COMMAND_SUBMIT_JOB_LOW: 'GEARMAN_COMMAND_SUBMIT_JOB_LOW',
     GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG: 'GEARMAN_COMMAND_SUBMIT_JOB_LOW_BG',
+    GEARMAN_COMMAND_GRAB_JOB_ALL: 'GEARMAN_COMMAND_GRAB_JOB_ALL', 
+
+    # Gearman commands 40-49
+    GEARMAN_COMMAND_JOB_ASSIGN_ALL: 'GEARMAN_COMMAND_JOB_ASSIGN_ALL',
 
     GEARMAN_COMMAND_TEXT_COMMAND: 'GEARMAN_COMMAND_TEXT_COMMAND'
 }
@@ -239,13 +250,13 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
 
     # !NOTE! str should be replaced with bytes in Python 3.x
     # We will iterate in ORDER and str all our command arguments
-    if compat.any(type(param_value) != str for param_value in cmd_args.itervalues()):
+    if any(type(param_value) != str for param_value in cmd_args.itervalues()):
         raise ProtocolError('Received non-binary arguments: %r' % cmd_args)
 
     data_items = [cmd_args[param] for param in expected_cmd_params]
 
     # Now check that all but the last argument are free of \0 as per the protocol spec.
-    if compat.any('\0' in argument for argument in data_items[:-1]):
+    if any('\0' in argument for argument in data_items[:-1]):
         raise ProtocolError('Received arguments with NULL byte in non-final argument')
 
     binary_payload = NULL_CHAR.join(data_items)

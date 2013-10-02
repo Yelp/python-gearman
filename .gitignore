@@ -13,3 +13,4 @@ MANIFEST
 dist
 build
 *.swo
+*.swp
