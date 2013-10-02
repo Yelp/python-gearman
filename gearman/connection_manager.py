@@ -173,6 +173,9 @@ class GearmanConnectionManager(object):
 
     def _register_connections_with_poller(self, connections, poller):
         for conn in connections:
+            # possible that not all connections have been established yet
+            if not conn.gearman_socket:
+                continue
             events = 0
             if conn.readable():
                 events |= gearman.io.READ
@@ -198,14 +201,24 @@ class GearmanConnectionManager(object):
 
         while connection_ok and callback_ok:
             time_remaining = stopwatch.get_time_remaining()
-            callback_ok = callback_fxn(any_activity)
-            if time_remaining == 0.0 or (any_activity and not callback_ok):
+            if time_remaining == 0.0:
                 break
+
+            # if we have writes to do, do those first
+            dead_writes = set()
+            for current_connection in submitted_connections:
+                if current_connection.writable():
+                    try:
+                        self.handle_write(current_connection)
+                    except ConnectionError:
+                        # this dead connection will be closed in handle_connection_activity later
+                        dead_writes.add(current_connection)
 
             # Do a single robust select and handle all connection activity
             read_connections, write_connections, dead_connections = self.poll_connections_once(poller, connection_map, timeout=time_remaining)
 
             # Handle reads and writes and close all of the dead connections
+            dead_connections |= dead_writes
             read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
             any_activity = compat.any([read_connections, write_connections, dead_connections])
