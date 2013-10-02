@@ -73,22 +73,7 @@ class GearmanWorker(GearmanConnectionManager):
         continue_working = True
         worker_connections = []
 
-        # We're going to track whether a previous call to our closure indicated
-        # we were processing a job. This is just a list of possibly a single
-        # element indicating we had a job. It's a list so that through the
-        # magic of closures we can reference and write to it each call.
-        # This is all so that we can determine when we've finished processing a job
-        # correctly.
-        #had_job = []
-
         def continue_while_connections_alive(any_activity):
-            #if had_job and not self.has_job_lock():
-            #    return self.after_poll(any_activity) and self.after_job()
-
-            #del had_job[:]
-            #if self.has_job_lock():
-            #    had_job.append(True)
-
             return self.after_poll(any_activity)
 
         # Shuffle our connections after the poll timeout
