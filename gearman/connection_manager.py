@@ -173,6 +173,9 @@ class GearmanConnectionManager(object):
 
     def _register_connections_with_poller(self, connections, poller):
         for conn in connections:
+            # possible that not all connections have been established yet
+            if not conn.gearman_socket:
+                continue
             events = 0
             if conn.readable():
                 events |= gearman.io.READ
