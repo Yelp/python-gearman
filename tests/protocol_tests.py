@@ -3,11 +3,7 @@ import struct
 import unittest
 
 from gearman import protocol
-
-from gearman.connection import GearmanConnection
-from gearman.constants import JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
-from gearman.errors import ConnectionError, ServerUnavailable, ProtocolError
-
+from gearman.errors import ProtocolError
 from tests._core_testing import _GearmanAbstractTest
 
 class ProtocolBinaryCommandsTest(unittest.TestCase):
@@ -172,6 +168,16 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         # Assert we check for NULLs in all but the "last" argument, where last depends on the cmd_type.
         cmd_type = protocol.GEARMAN_COMMAND_SUBMIT_JOB
         cmd_args = dict(task='function', data='abcd', unique='123\x0045')
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
+        # Assert we get arg mismatch, got 1, expecting 0
+        cmd_type = protocol.GEARMAN_COMMAND_GRAB_JOB_ALL
+        cmd_args = dict(extra='arguments')
+        self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
+
+        # Assert we check for NULLs in all but the "last" argument, where last depends on the cmd_type.
+        cmd_type = protocol.GEARMAN_COMMAND_JOB_ASSIGN_ALL
+        cmd_args = dict(job_handle=12345, task='function', unique='12345', reducer='', data='ab\x00cd')
         self.assertRaises(ProtocolError, protocol.pack_binary_command, cmd_type, cmd_args)
 
     def test_packing_response(self):
