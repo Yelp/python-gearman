@@ -57,11 +57,9 @@ class GearmanConnection(object):
 
         # Reset all our raw data buffers
         self._incoming_buffer = array.array('c')
-        self._outgoing_buffer = ''
 
         # Toss all commands we may have sent or received
         self._incoming_commands = collections.deque()
-        self._outgoing_commands = collections.deque()
 
     def fileno(self):
         """Implements fileno() for use with select.select()"""
@@ -73,10 +71,6 @@ class GearmanConnection(object):
     def get_address(self):
         """Returns the host and port"""
         return (self.gearman_host, self.gearman_port)
-
-    def writable(self):
-        """Returns True if we have data to write"""
-        return self.connected and bool(self._outgoing_commands or self._outgoing_buffer)
 
     def readable(self):
         """Returns True if we might have data to read"""

@@ -3,7 +3,6 @@ import logging
 import gearman.io
 import gearman.util
 from gearman.connection import GearmanConnection
-from gearman.constants import _DEBUG_MODE_
 from gearman.errors import ConnectionError, GearmanError, ServerUnavailable
 from gearman.job import GearmanJob, GearmanJobRequest
 from gearman import compat
@@ -173,8 +172,6 @@ class GearmanConnectionManager(object):
             events = 0
             if conn.readable():
                 events |= gearman.io.READ
-            if conn.writable():
-                events |= gearman.io.WRITE
             poller.register(conn, events)
 
     def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):

@@ -133,8 +133,8 @@ class ClientWorker(TestCase):
             i += 1
 
     def test_stress_workers(self):
-        num_jobs = 50000#0#0
-        stress_fns = ['stress']#, 'stress1', 'stress2']
+        num_jobs = 500000#0
+        stress_fns = ['stress', 'stress1', 'stress2']
         for i in range(0, num_jobs):
             choice(self.clients).client_submit_job(choice(stress_fns), '', None, gearman.PRIORITY_NONE, True)
             if i % 1000 == 0:
