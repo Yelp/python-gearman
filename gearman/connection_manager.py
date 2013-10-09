@@ -129,7 +129,7 @@ class GearmanConnectionManager(object):
         # a timeout of -1 when used with epoll will block until there
         # is activity. Select does not support negative timeouts, so this
         # is translated to a timeout=None when falling back to select
-        timeout = timeout or -1 
+        timeout = timeout or -1
 
         readable = set()
         writable = set()
@@ -153,12 +153,6 @@ class GearmanConnectionManager(object):
         for current_connection in rd_connections:
             try:
                 self.handle_read(current_connection)
-            except ConnectionError:
-                dead_connections.add(current_connection)
-
-        for current_connection in wr_connections:
-            try:
-                self.handle_write(current_connection)
             except ConnectionError:
                 dead_connections.add(current_connection)
 
@@ -194,7 +188,7 @@ class GearmanConnectionManager(object):
         connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
         poller = gearman.io.get_connection_poller()
         if connection_ok:
-            self._register_connections_with_poller(submitted_connections, 
+            self._register_connections_with_poller(submitted_connections,
                     poller)
             connection_map = dict([(c.fileno(), c) for c in
                 submitted_connections if c.connected])
@@ -238,13 +232,6 @@ class GearmanConnectionManager(object):
 
         # Notify the handler that we have commands to fetch
         current_handler.fetch_commands()
-
-    def handle_write(self, current_connection):
-        # Transfer command from command queue -> buffer
-        current_connection.send_commands_to_buffer()
-
-        # Transfer data from buffer -> socket
-        current_connection.send_data_to_socket()
 
     def handle_error(self, current_connection):
         dead_handler = self.connection_to_handler_map.pop(current_connection, None)

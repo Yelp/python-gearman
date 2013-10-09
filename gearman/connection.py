@@ -207,49 +207,31 @@ class GearmanConnection(object):
         return cmd_type, cmd_args, cmd_len
 
     def send_command(self, cmd_type, cmd_args):
-        """Adds a single gearman command to the outgoing command queue"""
-        self._outgoing_commands.append((cmd_type, cmd_args))
+        """Packs single gearman command and sends to socket"""
+        packed_command = self._pack_command(cmd_type, cmd_args)
+        return self.send_data_to_socket(packed_command)
 
-    def send_commands_to_buffer(self):
-        """Sends and packs commands -> buffer"""
-        if not self._outgoing_commands:
-            return
+    def send_data_to_socket(self, data):
+        """Send data to socket
 
-        packed_data = [self._outgoing_buffer]
-        while self._outgoing_commands:
-            cmd_type, cmd_args = self._outgoing_commands.popleft()
-            packed_command = self._pack_command(cmd_type, cmd_args)
-            packed_data.append(packed_command)
-
-        self._outgoing_buffer = ''.join(packed_data)
-
-    def send_data_to_socket(self):
-        """Send data from buffer -> socket
-
-        Returns remaining size of the output buffer
+        Returns number of bytes sent
         """
         if not self.connected:
             self.throw_exception(message='disconnected')
 
-        if not self._outgoing_buffer:
-            return 0
+        bytes_sent = 0
+        try:
+            bytes_sent = self.gearman_socket.send(data)
+        except ssl.SSLError as e:
+            if e.errno != ssl.SSL_ERROR_WANT_WRITE:
+                self.throw_exception(exception=e)
+        except socket.error, socket_exception:
+            self.throw_exception(exception=socket_exception)
 
-        while True:
-            try:
-                bytes_sent = self.gearman_socket.send(self._outgoing_buffer)
-            except ssl.SSLError as e:
-                if e.errno != ssl.SSL_ERROR_WANT_WRITE:
-                    self.throw_exception(exception=e)
-                continue
-            except socket.error, socket_exception:
-                self.throw_exception(exception=socket_exception)
+        if bytes_sent == 0:
+            self.throw_exception(message='remote disconnected')
 
-            if bytes_sent == 0:
-                self.throw_exception(message='remote disconnected')
-            break
-
-        self._outgoing_buffer = self._outgoing_buffer[bytes_sent:]
-        return len(self._outgoing_buffer)
+        return bytes_sent
 
     def _pack_command(self, cmd_type, cmd_args):
         """Converts a command to its raw binary format"""
