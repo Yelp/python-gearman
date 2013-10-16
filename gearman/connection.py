@@ -166,9 +166,12 @@ class GearmanConnection(object):
                 recv_buffer = self.gearman_socket.recv(bytes_to_read)
             except ssl.SSLError as e:
                 # if we would block, ignore the error
-                if e.errno != ssl.SSL_ERROR_WANT_READ:
+                if e.errno == ssl.SSL_ERROR_WANT_READ:
+                    continue
+                elif e.errno == ssl.SSL_ERROR_WANT_WRITE:
+                    continue
+                else:
                     self.throw_exception(exception=e)
-                continue
             except socket.error, socket_exception:
                 self.throw_exception(exception=socket_exception)
 
@@ -238,9 +241,12 @@ class GearmanConnection(object):
             try:
                 bytes_sent = self.gearman_socket.send(self._outgoing_buffer)
             except ssl.SSLError as e:
-                if e.errno != ssl.SSL_ERROR_WANT_WRITE:
+                if e.errno == ssl.SSL_ERROR_WANT_READ:
+                    continue
+                elif e.errno == ssl.SSL_ERROR_WANT_WRITE:
+                    continue
+                else:
                     self.throw_exception(exception=e)
-                continue
             except socket.error, socket_exception:
                 self.throw_exception(exception=socket_exception)
 
