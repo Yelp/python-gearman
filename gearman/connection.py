@@ -215,7 +215,7 @@ class GearmanConnection(object):
 
         bytes_sent = 0
         try:
-            bytes_sent = self.gearman_socket.send(data)
+            bytes_sent = self.gearman_socket.sendall(data)
         except ssl.SSLError as e:
             if e.errno != ssl.SSL_ERROR_WANT_WRITE:
                 self.throw_exception(exception=e)
