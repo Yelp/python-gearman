@@ -228,7 +228,7 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEqual(finished_completed_request.state, JOB_COMPLETE)
         self.assertEqual(finished_completed_request.result, '12345')
         self.assertFalse(finished_completed_request.timed_out)
-        self.assert_(finished_completed_request.job.handle not in self.command_handler.handle_to_request_map)
+        #self.assert_(finished_completed_request.job.handle not in self.command_handler.handle_to_request_map)
 
         self.assert_jobs_equal(finished_failed_request.job, failed_request.job)
         self.assertEqual(finished_failed_request.state, JOB_FAILED)
