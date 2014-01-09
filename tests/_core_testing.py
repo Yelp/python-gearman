@@ -39,8 +39,10 @@ class MockGearmanConnection(GearmanConnection):
 
 class MockGearmanConnectionManager(GearmanConnectionManager):
     """Handy mock client base to test Worker/Client/Abstract ClientBases"""
-    def poll_connections_once(self, connections, timeout=None):
+    def poll_connections_once(self, connections, timeout=None, write_only=False):
         return set(), set(), set()
+    def send_command(self, command_handler, cmd_type, cmd_args):
+        super(MockGearmanConnectionManager, self).send_command(command_handler, cmd_type, cmd_args, sync=False)
 
 class _GearmanAbstractTest(unittest.TestCase):
     connection_class = MockGearmanConnection

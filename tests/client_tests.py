@@ -278,7 +278,9 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEqual(request_status['numerator'], 0)
         self.assertEqual(request_status['denominator'], 1)
         self.assertFalse(job_request.timed_out)
-        #self.assert_(current_handle not in self.command_handler.handle_to_request_map)
+        del single_request
+        del job_request
+        self.assert_(current_handle not in self.command_handler.handle_to_request_map)
 
     def test_get_job_status_timeout(self):
         single_request = self.generate_job_request()

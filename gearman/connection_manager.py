@@ -10,6 +10,8 @@ from gearman import compat
 
 gearman_logger = logging.getLogger(__name__)
 
+POLL_TIMEOUT_IN_SECONDS = 60.0
+
 class DataEncoder(object):
     @classmethod
     def encode(cls, encodable_object):
@@ -125,7 +127,7 @@ class GearmanConnectionManager(object):
         current_handler.initial_state(**self.handler_initial_state)
         return current_connection
 
-    def poll_connections_once(self, submitted_connections, timeout=None):
+    def poll_connections_once(self, submitted_connections, timeout=None, write_only=False):
         """Does a single robust select, catching socket errors"""
         select_connections = set(current_connection for current_connection in submitted_connections if current_connection.connected)
 
@@ -139,8 +141,14 @@ class GearmanConnectionManager(object):
         successful_select = False
         while not successful_select and select_connections:
             select_connections -= ex_connections
-            check_rd_connections = [current_connection for current_connection in select_connections if current_connection.readable()]
+            if write_only:
+                check_rd_connections = []
+            else:
+                check_rd_connections = [current_connection for current_connection in select_connections if current_connection.readable()]
             check_wr_connections = [current_connection for current_connection in select_connections if current_connection.writable()]
+
+            if len(check_rd_connections) == 0 and len(check_wr_connections) == 0 and timeout is None:
+                break
 
             try:
                 rd_list, wr_list, ex_list = gearman.util.select(check_rd_connections, check_wr_connections, select_connections, timeout=timeout)
@@ -195,7 +203,7 @@ class GearmanConnectionManager(object):
         return rd_connections, wr_connections, failed_connections
 
 
-    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None):
+    def poll_connections_until_stopped(self, submitted_connections, callback_fxn, timeout=None, write_only=False):
         """Continue to poll our connections until we receive a stopping condition"""
         stopwatch = gearman.util.Stopwatch(timeout)
         submitted_connections = set(submitted_connections)
@@ -210,7 +218,7 @@ class GearmanConnectionManager(object):
                 break
 
             # Do a single robust select and handle all connection activity
-            read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining)
+            read_connections, write_connections, dead_connections = self.poll_connections_once(submitted_connections, timeout=time_remaining, write_only=write_only)
 
             # Handle reads and writes and close all of the dead connections
             read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
@@ -275,7 +283,7 @@ class GearmanConnectionManager(object):
         cmd_type, cmd_args = cmd_tuple
         return cmd_type, cmd_args
 
-    def send_command(self, command_handler, cmd_type, cmd_args):
+    def send_command(self, command_handler, cmd_type, cmd_args, sync=True):
         """CommandHandlers call this function to send pending commands
 
         NOTE: CommandHandlers have NO knowledge as to which connection they're representing
@@ -283,6 +291,10 @@ class GearmanConnectionManager(object):
         """
         gearman_connection = self.handler_to_connection_map[command_handler]
         gearman_connection.send_command(cmd_type, cmd_args)
+        def continue_while_send_command_pending(any_activity):
+            return gearman_connection.writable()
+        if sync and gearman_connection.writable():
+            self.poll_connections_until_stopped([gearman_connection], continue_while_send_command_pending, timeout=POLL_TIMEOUT_IN_SECONDS, write_only=True)
 
     def on_gearman_error(self, error_code, error_text):
         gearman_logger.error('Received error from server: %s: %s' % (error_code, error_text))
