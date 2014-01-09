@@ -8,7 +8,8 @@ from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 from gearman.errors import ConnectionError, InvalidAdminClientState, ServerUnavailable
 from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, \
-    GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
+    GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN, GEARMAN_SERVER_COMMAND_GETPID, \
+    GEARMAN_SERVER_COMMAND_CANCEL_JOB, GEARMAN_SERVER_COMMAND_SHOW_JOBS, GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -102,3 +103,27 @@ class GearmanAdminClient(GearmanConnectionManager):
             raise InvalidAdminClientState('Received an unexpected response... got command %r, expecting command %r' % (cmd_type, expected_type))
 
         return cmd_resp
+
+    def get_pid(self):
+        """Retrieves the process ID"""
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_GETPID)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_GETPID)
+
+    def cancel_job(self, handle):
+        """Cancels a job"""
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_CANCEL_JOB+" "+handle)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_CANCEL_JOB)
+
+    def get_jobs(self):
+        """Retrieves a list of jobs"""
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
+
+    def get_unique_jobs(self):
+        """Retrieves a list of unique jobs"""
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
