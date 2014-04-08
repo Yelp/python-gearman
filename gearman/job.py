@@ -20,7 +20,7 @@ class GearmanJob(object):
 
 class GearmanJobRequest(object):
     """Represents a job request... used in GearmanClient to represent job states"""
-    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, run_later=False, max_attempts=1):
+    def __init__(self, gearman_job, initial_priority=PRIORITY_NONE, background=False, run_later=False, max_attempts=3):
         self.gearman_job = gearman_job
 
         self.priority = initial_priority
