@@ -17,6 +17,7 @@ For information on the Gearman protocol and a Gearman server, see http://www.gea
     library.rst
     1to2.rst
     architecture.rst
+    types_of_jobs.rst
 
 * :ref:`search`
 
