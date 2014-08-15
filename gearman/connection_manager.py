@@ -129,7 +129,7 @@ class GearmanConnectionManager(object):
         # a timeout of -1 when used with epoll will block until there
         # is activity. Select does not support negative timeouts, so this
         # is translated to a timeout=None when falling back to select
-        timeout = timeout or -1 
+        timeout = timeout or -1
 
         readable = set()
         writable = set()
@@ -194,7 +194,7 @@ class GearmanConnectionManager(object):
         connection_ok = compat.any(current_connection.connected for current_connection in submitted_connections)
         poller = gearman.io.get_connection_poller()
         if connection_ok:
-            self._register_connections_with_poller(submitted_connections, 
+            self._register_connections_with_poller(submitted_connections,
                     poller)
             connection_map = dict([(c.fileno(), c) for c in
                 submitted_connections if c.connected])
@@ -204,10 +204,21 @@ class GearmanConnectionManager(object):
             if time_remaining == 0.0:
                 break
 
+            # if we have writes to do, do those first
+            dead_writes = set()
+            for current_connection in submitted_connections:
+                if current_connection.writable():
+                    try:
+                        self.handle_write(current_connection)
+                    except ConnectionError:
+                        # this dead connection will be closed in handle_connection_activity later
+                        dead_writes.add(current_connection)
+
             # Do a single robust select and handle all connection activity
             read_connections, write_connections, dead_connections = self.poll_connections_once(poller, connection_map, timeout=time_remaining)
 
             # Handle reads and writes and close all of the dead connections
+            dead_connections |= dead_writes
             read_connections, write_connections, dead_connections = self.handle_connection_activity(read_connections, write_connections, dead_connections)
 
             any_activity = compat.any([read_connections, write_connections, dead_connections])
