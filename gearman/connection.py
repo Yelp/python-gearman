@@ -27,13 +27,31 @@ class GearmanConnection(object):
     """
     connect_cooldown_seconds = 1.0
 
-    def __init__(self, host=None, port=DEFAULT_GEARMAN_PORT, keyfile=None, certfile=None, ca_certs=None):
+    def __init__(self,
+                 host=None,
+                 port=DEFAULT_GEARMAN_PORT,
+                 keyfile=None,
+                 certfile=None,
+                 ca_certs=None,
+                 keepalive=False,
+                 keepintvl=None,
+                 keepcnt=None,
+                 keepidle=None):
         port = port or DEFAULT_GEARMAN_PORT
         self.gearman_host = host
         self.gearman_port = port
         self.keyfile = keyfile
         self.certfile = certfile
         self.ca_certs = ca_certs
+
+        # These options are described in more detail in the tcp(7) man page
+        # for the TCP_KEEPINTVL, TCP_KEEPCNT, and TCP_KEEPIDLE socket options.
+        # Default values can be found in /proc/sys/net/ipv4 in the tcp_keep* files.
+        # NOTE: May not work on all systems.
+        self.keepalive = keepalive  # turn KEEPALIVE on or off
+        self.keepintvl = keepintvl  # seconds b/w TCP keep-alive probes
+        self.keepcnt = keepcnt      # max probes to send before killing connection
+        self.keepidle = keepidle    # seconds of idle time before sending probes
 
         if host is None:
             raise ServerUnavailable("No host specified")
@@ -128,6 +146,16 @@ class GearmanConnection(object):
         current_socket.setblocking(0)
         current_socket.settimeout(0.0)
         current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, struct.pack('L', 1))
+
+        if self.keepalive:
+            current_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            if self.keepidle:
+                current_socket.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, int(self.keepidle))
+            if self.keepintvl:
+                current_socket.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, int(self.keepintvl))
+            if self.keepcnt:
+                current_socket.setsockopt(socket.SOL_TCP, socket.TCP_KEEPCNT, int(self.keepcnt))
+
         self.gearman_socket = current_socket
 
     def read_command(self):
