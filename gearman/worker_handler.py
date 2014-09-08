@@ -24,7 +24,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
     def initial_state(self, abilities=None, client_id=None):
         self.set_client_id(client_id)
-        self.set_abilities(abilities)
+        self.set_abilities(list(abilities))
 
         self._sleep()
 

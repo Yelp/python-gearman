@@ -115,7 +115,7 @@ class GearmanConnection(object):
                                                 ssl_version=ssl.PROTOCOL_TLSv1)
 
             client_socket.connect((self.gearman_host, self.gearman_port))
-        except socket.error, socket_exception:
+        except socket.error as socket_exception:
             self.throw_exception(exception=socket_exception)
 
         self.set_socket(client_socket)
@@ -172,7 +172,7 @@ class GearmanConnection(object):
                     continue
                 else:
                     self.throw_exception(exception=e)
-            except socket.error, socket_exception:
+            except socket.error as socket_exception:
                 self.throw_exception(exception=socket_exception)
 
             if len(recv_buffer) == 0:
@@ -247,7 +247,7 @@ class GearmanConnection(object):
                     continue
                 else:
                     self.throw_exception(exception=e)
-            except socket.error, socket_exception:
+            except socket.error as socket_exception:
                 self.throw_exception(exception=socket_exception)
 
             if bytes_sent == 0:

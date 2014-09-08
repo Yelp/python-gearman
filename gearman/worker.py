@@ -44,8 +44,8 @@ class GearmanWorker(GearmanConnectionManager):
         self.worker_abilities[task] = callback_function
         self._update_initial_state()
 
-        for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.handler_initial_state['abilities'])
+        for command_handler in self.handler_to_connection_map.keys():
+            command_handler.set_abilities(list(self.handler_initial_state['abilities']))
 
         return task
 
@@ -54,8 +54,8 @@ class GearmanWorker(GearmanConnectionManager):
         self.worker_abilities.pop(task, None)
         self._update_initial_state()
 
-        for command_handler in self.handler_to_connection_map.iterkeys():
-            command_handler.set_abilities(self.handler_initial_state['abilities'])
+        for command_handler in self.handler_to_connection_map.keys():
+            command_handler.set_abilities(list(self.handler_initial_state['abilities']))
 
         return task
 
@@ -64,7 +64,7 @@ class GearmanWorker(GearmanConnectionManager):
         self.worker_client_id = client_id
         self._update_initial_state()
 
-        for command_handler in self.handler_to_connection_map.iterkeys():
+        for command_handler in self.handler_to_connection_map.keys():
             command_handler.set_client_id(self.handler_initial_state['client_id'])
 
         return client_id
