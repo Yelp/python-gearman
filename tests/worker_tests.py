@@ -69,7 +69,8 @@ class WorkerTest(_GearmanAbstractWorkerTest):
         self.assertTrue('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
-        self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one', 'fake_callback_two'])
+        self.assertIn('fake_callback_one', self.command_handler._handler_abilities)
+        self.assertIn('fake_callback_two', self.command_handler._handler_abilities)
 
         # Unregister a callback and make sure the command_handler sees the same functions
         self.connection_manager.unregister_task('fake_callback_one')
