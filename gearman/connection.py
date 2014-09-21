@@ -56,7 +56,7 @@ class GearmanConnection(object):
         self._is_server_side = None
 
         # Reset all our raw data buffers
-        self._incoming_buffer = array.array('c')
+        self._incoming_buffer = array.array('b')
         self._outgoing_buffer = ''
 
         # Toss all commands we may have sent or received

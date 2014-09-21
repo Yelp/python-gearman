@@ -1,6 +1,14 @@
 """
 Gearman compatibility module
 """
+import sys
+
+PY3 = sys.version_info[0] >= 3
+
+if PY3:
+    bytes_type = bytes
+else:
+    bytes_type = str
 
 # Required for python2.4 backward compatibilty
 # Add a module attribute called "any" which is equivalent to "any"
