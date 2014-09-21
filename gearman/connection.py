@@ -57,7 +57,7 @@ class GearmanConnection(object):
 
         # Reset all our raw data buffers
         self._incoming_buffer = array.array('b')
-        self._outgoing_buffer = ''
+        self._outgoing_buffer = b''
 
         # Toss all commands we may have sent or received
         self._incoming_commands = collections.deque()
@@ -224,7 +224,7 @@ class GearmanConnection(object):
             packed_command = self._pack_command(cmd_type, cmd_args)
             packed_data.append(packed_command)
 
-        self._outgoing_buffer = ''.join(packed_data)
+        self._outgoing_buffer = b''.join(packed_data)
 
     def send_data_to_socket(self):
         """Send data from buffer -> socket

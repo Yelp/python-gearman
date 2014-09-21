@@ -23,7 +23,7 @@ class NoopEncoder(DataEncoder):
     """Provide common object dumps for all communications over gearman"""
     @classmethod
     def _enforce_byte_string(cls, given_object):
-        if type(given_object) != str:
+        if type(given_object) != compat.bytes_type:
             raise TypeError("Expecting byte string, got %r" % type(given_object))
 
     @classmethod

@@ -293,4 +293,4 @@ def pack_text_command(cmd_type, cmd_args):
     if cmd_line is None:
         raise ProtocolError('Did not receive arguments any valid arguments: %s' % cmd_args)
 
-    return str(cmd_line)
+    return compat.bytes_type(cmd_line)
