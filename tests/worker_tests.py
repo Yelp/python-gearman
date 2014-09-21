@@ -185,24 +185,24 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
         self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator='0', denominator='1')
 
         # Test GEARMAN_COMMAND_WORK_COMPLETE
-        self.command_handler.send_job_complete(current_job, 'completion data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data='completion data')
+        self.command_handler.send_job_complete(current_job, b'completion data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=b'completion data')
 
         # Test GEARMAN_COMMAND_WORK_FAIL
         self.command_handler.send_job_failure(current_job)
         self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
 
         # Test GEARMAN_COMMAND_WORK_EXCEPTION
-        self.command_handler.send_job_exception(current_job, 'exception data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data='exception data')
+        self.command_handler.send_job_exception(current_job, b'exception data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data=b'exception data')
 
         # Test GEARMAN_COMMAND_WORK_DATA
-        self.command_handler.send_job_data(current_job, 'job data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data='job data')
+        self.command_handler.send_job_data(current_job, b'job data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data=b'job data')
 
         # Test GEARMAN_COMMAND_WORK_WARNING
-        self.command_handler.send_job_warning(current_job, 'job warning')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data='job warning')
+        self.command_handler.send_job_warning(current_job, b'job warning')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data=b'job warning')
 
 class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
     """Test multiple state transitions within a GearmanWorkerCommandHandler
@@ -214,11 +214,11 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
 
     def setup_connection_manager(self):
         super(WorkerCommandHandlerStateMachineTest, self).setup_connection_manager()
-        self.connection_manager.register_task('__test_ability__', None)
+        self.connection_manager.register_task(b'__test_ability__', None)
 
     def setup_command_handler(self):
         super(_GearmanAbstractWorkerTest, self).setup_command_handler()
-        self.assert_sent_abilities(['__test_ability__'])
+        self.assert_sent_abilities([b'__test_ability__'])
         self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def test_wakeup_work(self):

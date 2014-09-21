@@ -284,7 +284,7 @@ class ProtocolTextCommandsTest(unittest.TestCase):
     # Begin packing tests #
     #######################
     def test_packing_single_line(self):
-        expected_string = 'Hello world'
+        expected_string = b'Hello world'
         cmd_type = protocol.GEARMAN_COMMAND_TEXT_COMMAND
         cmd_args = dict(raw_text=expected_string)
 

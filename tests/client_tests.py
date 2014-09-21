@@ -211,7 +211,7 @@ class ClientTest(_GearmanAbstractTest):
         def multiple_job_updates(rx_conns, wr_conns, ex_conns):
             # Only give a single status update and have the 3rd job handle timeout
             if self.update_requests:
-                self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=completed_request.job.handle, data='12345')
+                self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=completed_request.job.handle, data=b'12345')
                 self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=failed_request.job.handle)
                 self.update_requests = False
 
@@ -226,7 +226,7 @@ class ClientTest(_GearmanAbstractTest):
 
         self.assert_jobs_equal(finished_completed_request.job, completed_request.job)
         self.assertEqual(finished_completed_request.state, JOB_COMPLETE)
-        self.assertEqual(finished_completed_request.result, '12345')
+        self.assertEqual(finished_completed_request.result, b'12345')
         self.assertFalse(finished_completed_request.timed_out)
         #self.assertTrue(finished_completed_request.job.handle not in self.command_handler.handle_to_request_map)
 
@@ -394,7 +394,7 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         job_handle = current_request.job.handle
-        new_data = str(random.random())
+        new_data = str(random.random()).encode('ascii')
 
         # Test WORK_DATA
         self.command_handler.recv_command(GEARMAN_COMMAND_WORK_DATA, job_handle=job_handle, data=new_data)
@@ -416,7 +416,7 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         current_request = self.generate_job_request()
 
         job_handle = current_request.job.handle
-        new_data = str(random.random())
+        new_data = str(random.random()).encode('ascii')
         self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=job_handle, data=new_data)
 
         self.assertEqual(current_request.result, new_data)
