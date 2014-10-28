@@ -6,7 +6,7 @@ from gearman.client import GearmanClient
 from gearman.client_handler import GearmanClientCommandHandler
 
 from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
-from gearman.errors import ExceededConnectionAttempts, ServerUnavailable, InvalidClientState
+from gearman.errors import ExceededConnectionAttempts, ServerUnavailable, InvalidClientState, InvalidFlagsToSubmitJob
 from gearman.protocol import submit_cmd_for_background_priority, GEARMAN_COMMAND_STATUS_RES, GEARMAN_COMMAND_GET_STATUS, GEARMAN_COMMAND_JOB_CREATED, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_WARNING
 
@@ -144,7 +144,21 @@ class ClientTest(_GearmanAbstractTest):
         self.assertEquals(current_request.state, JOB_UNKNOWN)
         self.assertEquals(current_request.connection_attempts, current_request.max_connection_attempts)
 
-    def test_multiple_fg_job_submission(self):
+    def test_invalid_flags_to_submit_job(self):
+        submitted_job_count = 5
+        expected_job_list = [self.generate_job() for _ in xrange(submitted_job_count)]
+        def mark_jobs_created(rx_conns, wr_conns, ex_conns):
+            for current_job in expected_job_list:
+                self.command_handler.recv_command(GEARMAN_COMMAND_JOB_CREATED, job_handle=current_job.handle)
+
+            return rx_conns, wr_conns, ex_conns
+
+        self.connection_manager.handle_connection_activity = mark_jobs_created
+        job_dictionaries = [current_job.to_dict() for current_job in expected_job_list]
+
+        self.assertRaises(InvalidFlagsToSubmitJob, self.connection_manager.submit_multiple_jobs, job_dictionaries, background=False, wait_until_complete=False)
+
+    def test_multiple_bg_job_submission(self):
         submitted_job_count = 5
         expected_job_list = [self.generate_job() for _ in xrange(submitted_job_count)]
         def mark_jobs_created(rx_conns, wr_conns, ex_conns):
@@ -158,16 +172,16 @@ class ClientTest(_GearmanAbstractTest):
         job_dictionaries = [current_job.to_dict() for current_job in expected_job_list]
 
         # Test multiple job submission
-        job_requests = self.connection_manager.submit_multiple_jobs(job_dictionaries, wait_until_complete=False)
+        job_requests = self.connection_manager.submit_multiple_jobs(job_dictionaries, background=True, wait_until_complete=False)
         for current_request, expected_job in zip(job_requests, expected_job_list):
             current_job = current_request.job
             self.assert_jobs_equal(current_job, expected_job)
 
             self.assertEqual(current_request.priority, PRIORITY_NONE)
-            self.assertEqual(current_request.background, False)
+            self.assertEqual(current_request.background, True)
             self.assertEqual(current_request.state, JOB_CREATED)
 
-            self.assertFalse(current_request.complete)
+            self.assertTrue(current_request.complete)
 
     def test_single_bg_job_submission(self):
         expected_job = self.generate_job()
