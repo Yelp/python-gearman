@@ -24,3 +24,6 @@ class InvalidWorkerState(GearmanError):
 
 class InvalidAdminClientState(GearmanError):
     pass
+
+class InvalidFlagsToSubmitJob(GearmanError):
+    pass

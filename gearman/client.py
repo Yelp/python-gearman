@@ -10,7 +10,7 @@ import gearman.util
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.client_handler import GearmanClientCommandHandler
 from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH, JOB_UNKNOWN, JOB_PENDING
-from gearman.errors import ConnectionError, ExceededConnectionAttempts, ServerUnavailable
+from gearman.errors import ConnectionError, ExceededConnectionAttempts, InvalidFlagsToSubmitJob, ServerUnavailable
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -44,6 +44,10 @@ class GearmanClient(GearmanConnectionManager):
         {'task': task, 'data': data, 'unique': unique, 'priority': priority}
         """
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
+
+        # Check if the flags are properly set
+        if background == False and wait_until_complete == False:
+            raise InvalidFlagsToSubmitJob('Set background=True if wait_until_complete=False to send background jobs')
 
         # Convert all job dicts to job request objects
         requests_to_submit = [self._create_request_from_dictionary(job_info, background=background, max_retries=max_retries) for job_info in jobs_to_submit]

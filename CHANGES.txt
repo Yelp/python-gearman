@@ -1,3 +1,6 @@
+v2.0.3, 2014-10-28 -- Minor bug fix release
+ * GearmanClient - Raises exception if background=False and wait_until_complete=False when calling submit_jobs/submit_multiple_jobs
+
 v2.0.X, 2012-XX-XX -- Major bug fix release
  * GearmanWorker - Dispatch to the right function instead of looping
  * GearmanClient - Let the server handle the special '-' unique [GH-18]
