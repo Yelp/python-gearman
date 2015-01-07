@@ -78,7 +78,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_data(self, job_handle, data):
         # Queue a WORK_DATA update
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.data_updates.append(self.decode_data(data))
@@ -87,7 +91,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_warning(self, job_handle, data):
         # Queue a WORK_WARNING update
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.warning_updates.append(self.decode_data(data))
@@ -96,7 +104,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_status(self, job_handle, numerator, denominator):
         # Queue a WORK_STATUS update
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         # The protocol spec is ambiguous as to what type the numerator and denominator is...
@@ -113,7 +125,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_complete(self, job_handle, data):
         # Update the state of our request and store our returned result
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.result = self.decode_data(data)
@@ -123,7 +139,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_work_fail(self, job_handle):
         # Update the state of our request and mark this job as failed
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.state = JOB_FAILED
@@ -134,7 +154,11 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
         # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
         #
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
+        
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.exception = self.decode_data(data)
@@ -143,7 +167,10 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def recv_status_res(self, job_handle, known, running, numerator, denominator):
         # If we received a STATUS_RES update about this request, update our known status
-        current_request = self.handle_to_request_map[job_handle]
+        try:
+            current_request = self.handle_to_request_map[job_handle]
+        except KeyError:
+            return False
 
         job_known = bool(known == '1')
         # Make our status response Python friendly
