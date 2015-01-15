@@ -1,7 +1,6 @@
 import collections
 import time
 import logging
-import weakref
 
 from gearman.command_handler import GearmanCommandHandler
 from gearman.constants import JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
@@ -17,7 +16,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
         # When we first submit jobs, we don't have a handle assigned yet... these handles will be returned in the order of submission
         self.requests_awaiting_handles = collections.deque()
-        self.handle_to_request_map = weakref.WeakValueDictionary()
+        self.handle_to_request_map = dict()
 
     ##################################################################
     ##### Public interface methods to be called by GearmanClient #####
@@ -53,6 +52,10 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
     def _register_request(self, current_request):
         self.handle_to_request_map[current_request.job.handle] = current_request
+    
+    def _unregister_request(self, current_request):
+        # De-allocate this request for all jobs
+        return self.handle_to_request_map.pop(current_request.job.handle, None)
 
     ##################################################################
     ## Gearman command callbacks with kwargs defined by protocol.py ##
@@ -118,6 +121,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
 
         current_request.result = self.decode_data(data)
         current_request.state = JOB_COMPLETE
+        self._unregister_request(current_request)
 
         return True
 
@@ -127,6 +131,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         self._assert_request_state(current_request, JOB_CREATED)
 
         current_request.state = JOB_FAILED
+        self._unregister_request(current_request)
 
         return True
 
@@ -155,5 +160,9 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
             'denominator': int(denominator),
             'time_received': time.time()
         }
+        
+        # If the server doesn't know about this request, we no longer need to track it
+        if not job_known:
+            self._unregister_request(current_request)
 
         return True

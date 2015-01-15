@@ -61,7 +61,7 @@ class GearmanConnectionManager(object):
         host_list = host_list or []
         for element in host_list:
             # old style host:port pair
-            if isinstance(element, str):
+            if isinstance(element, basestring):
                 self.add_connection(element)
             elif isinstance(element, dict):
                 if not all (k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
