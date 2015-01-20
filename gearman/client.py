@@ -56,7 +56,7 @@ class GearmanClient(GearmanConnectionManager):
         * Blocks until our jobs are accepted (should be fast) OR times out
         * Optionally blocks until jobs are all complete
 
-        You MUST check the status of your requests after calling this function as "timed_out" or "state == JOB_UNKNOWN" maybe True
+        You MUST check the status of your requests after calling this function as "timed_out" or "state == gearman.client.JOB_UNKNOWN" maybe True
         """
         assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
         stopwatch = gearman.util.Stopwatch(poll_timeout)
