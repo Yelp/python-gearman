@@ -10,7 +10,7 @@ Function available to all examples::
             print "Job %s finished!  Result: %s - %s" % (job_request.job.unique, job_request.state, job_request.result)
         elif job_request.timed_out:
             print "Job %s timed out!" % job_request.unique
-        elif job_request.state == JOB_UNKNOWN:
+        elif job_request.state == gearman.client.JOB_UNKNOWN:
             print "Job %s connection failed!" % job_request.unique
 
 .. autoclass:: GearmanClient
@@ -69,7 +69,7 @@ Submitting jobs
         failed_requests = gm_client.submit_multiple_jobs(list_of_jobs, background=False)
 
         # Let's pretend our assigned requests' Gearman servers all failed
-        assert all(request.state == JOB_UNKNOWN for request in failed_requests), "All connections didn't fail!"
+        assert all(request.state == gearman.client.JOB_UNKNOWN for request in failed_requests), "All connections didn't fail!"
 
         # Let's pretend our assigned requests' don't fail but some simply timeout
         retried_connection_failed_requests = gm_client.submit_multiple_requests(failed_requests, wait_until_complete=True, poll_timeout=1.0)
