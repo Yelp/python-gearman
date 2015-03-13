@@ -13,3 +13,6 @@ MANIFEST
 dist
 build
 *.swo
+
+# Testing
+.tox
