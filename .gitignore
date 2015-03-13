@@ -12,3 +12,7 @@ gearman/._*
 MANIFEST
 dist
 build
+*.swo
+
+# Testing
+.tox
