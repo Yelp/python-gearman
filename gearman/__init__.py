@@ -2,7 +2,7 @@
 Gearman API - Client, worker, and admin client interfaces
 """
 
-__version__ = '2.0.2'
+__version__ = '2.0.3'
 
 from gearman.admin_client import GearmanAdminClient
 from gearman.client import GearmanClient
