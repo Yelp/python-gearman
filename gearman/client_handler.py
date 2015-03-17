@@ -5,7 +5,7 @@ import logging
 from gearman.command_handler import GearmanCommandHandler
 from gearman.constants import JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import InvalidClientState
-from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority
+from gearman.protocol import GEARMAN_COMMAND_GET_STATUS, submit_cmd_for_background_priority, get_command_name
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -63,6 +63,17 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
     def _assert_request_state(self, current_request, expected_state):
         if current_request.state != expected_state:
             raise InvalidClientState('Expected handle (%s) to be in state %r, got %r' % (current_request.job.handle, expected_state, current_request.state))
+
+    def recv_command(self, cmd_type, **cmd_args):
+        # KeyError occurs when we receive a job handle that is not in self.handle_to_request_map
+        # A possible reason is that the client timeout before it receives a JOB_CREATED when submitting a job.
+        # In this case, the request is no registered in the handle_to_request_map.`
+        # At some point later when the client receives a command that tries to access the map by an unknown job_handle,
+        # KeyError is raised. Need more investigation to find the actual reason.
+        try:
+            super(GearmanClientCommandHandler, self).recv_command(cmd_type, **cmd_args)
+        except KeyError as e:
+            gearman_logger.warning('Catched KeyError in %r %r : %r' % (get_command_name(cmd_type), cmd_args, e))
 
     def recv_job_created(self, job_handle):
         if not self.requests_awaiting_handles:

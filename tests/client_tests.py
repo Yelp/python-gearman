@@ -1,4 +1,5 @@
 import collections
+from mock import Mock
 import random
 import unittest
 
@@ -7,13 +8,15 @@ from gearman.client_handler import GearmanClientCommandHandler
 
 from gearman.constants import PRIORITY_NONE, PRIORITY_HIGH, PRIORITY_LOW, JOB_UNKNOWN, JOB_PENDING, JOB_CREATED, JOB_FAILED, JOB_COMPLETE
 from gearman.errors import ExceededConnectionAttempts, ServerUnavailable, InvalidClientState
-from gearman.protocol import submit_cmd_for_background_priority, GEARMAN_COMMAND_STATUS_RES, GEARMAN_COMMAND_GET_STATUS, GEARMAN_COMMAND_JOB_CREATED, \
-    GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_WARNING
+from gearman.protocol import submit_cmd_for_background_priority, GEARMAN_COMMAND_STATUS_RES, GEARMAN_COMMAND_GET_STATUS, GEARMAN_COMMAND_JOB_CREATED
+from gearman.protocol import GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_DATA, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_EXCEPTION
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
 
+
 class MockGearmanClient(GearmanClient, MockGearmanConnectionManager):
     pass
+
 
 class ClientTest(_GearmanAbstractTest):
     """Test the public client interface"""
@@ -445,6 +448,65 @@ class ClientCommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertTrue(current_request.status['running'])
         self.assertEqual(current_request.status['numerator'], 0)
         self.assertEqual(current_request.status['denominator'], 1)
+
+    def test_catch_keyerror(self):
+        '''Make sure we catch KeyError for all recv_* commands that access handle_to_request_map.'''
+
+        mock_handle = 'mock_handle'
+        assert mock_handle not in self.command_handler.handle_to_request_map
+
+        self.command_handler.recv_work_data = Mock(side_effect=KeyError())
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_DATA, job_handle=mock_handle, data=Mock())
+
+        self.command_handler.recv_work_warning = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=mock_handle, data=Mock())
+
+        self.command_handler.recv_work_status = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=mock_handle, numerator=Mock(), denominator=Mock())
+
+        self.command_handler.recv_work_complete = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=mock_handle, data=Mock())
+
+        self.command_handler.recv_work_fail = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=mock_handle)
+
+        self.command_handler.recv_work_exception = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=mock_handle, data=Mock())
+
+        self.command_handler.recv_status_res = Mock(side_effect=KeyError)
+        self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=mock_handle, known=Mock(), running=Mock(), numerator=Mock(), denominator=Mock())
+
+    def test_not_catch_other_exception(self):
+        '''Make sure we 'only' catch KeyError for all recv_* commands that access handle_to_request_map.'''
+
+        self.command_handler.recv_work_data = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_DATA, job_handle=Mock(), data=Mock())
+
+        self.command_handler.recv_work_warning = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=Mock(), data=Mock())
+
+        self.command_handler.recv_work_status = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=Mock(), numerator=Mock(), denominator=Mock())
+
+        self.command_handler.recv_work_complete = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=Mock(), data=Mock())
+
+        self.command_handler.recv_work_fail = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=Mock())
+
+        self.command_handler.recv_work_exception = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=Mock(), data=Mock())
+
+        self.command_handler.recv_status_res = Mock(side_effect=Exception)
+        with self.assertRaises(Exception):
+            self.command_handler.recv_command(GEARMAN_COMMAND_STATUS_RES, job_handle=Mock(), known=Mock(), running=Mock(), numerator=Mock(), denominator=Mock())
+
 
 if __name__ == '__main__':
     unittest.main()
