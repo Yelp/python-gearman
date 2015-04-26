@@ -182,7 +182,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.command_handler.send_job_status(current_job, 0, 1)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator='0', denominator='1')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=b'0', denominator=b'1')
 
         # Test GEARMAN_COMMAND_WORK_COMPLETE
         self.command_handler.send_job_complete(current_job, b'completion data')
