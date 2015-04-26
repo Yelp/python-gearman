@@ -6,8 +6,10 @@ import sys
 PY3 = sys.version_info[0] >= 3
 
 if PY3:
+    basestring_type = str
     bytes_type = bytes
 else:
+    basestring_type = basestring
     bytes_type = str
 
 # Required for python2.4 backward compatibilty
