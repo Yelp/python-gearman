@@ -4,6 +4,7 @@ from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import InvalidWorkerState
 from gearman.protocol import GEARMAN_COMMAND_PRE_SLEEP, GEARMAN_COMMAND_RESET_ABILITIES, GEARMAN_COMMAND_CAN_DO, GEARMAN_COMMAND_SET_CLIENT_ID, GEARMAN_COMMAND_GRAB_JOB_UNIQ, \
     GEARMAN_COMMAND_WORK_STATUS, GEARMAN_COMMAND_WORK_COMPLETE, GEARMAN_COMMAND_WORK_FAIL, GEARMAN_COMMAND_WORK_EXCEPTION, GEARMAN_COMMAND_WORK_WARNING, GEARMAN_COMMAND_WORK_DATA
+from gearman import compat
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -51,7 +52,9 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
     def send_job_status(self, current_job, numerator, denominator):
         assert type(numerator) in (int, float), 'Numerator must be a numeric value'
         assert type(denominator) in (int, float), 'Denominator must be a numeric value'
-        self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=str(numerator), denominator=str(denominator))
+        numerator_bytes = compat.text_type(numerator).encode('ascii')
+        denominator_bytes = compat.text_type(denominator).encode('ascii')
+        self.send_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=numerator_bytes, denominator=denominator_bytes)
 
     def send_job_complete(self, current_job, data):
         """Removes a job from the queue if its backgrounded"""
