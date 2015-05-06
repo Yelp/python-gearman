@@ -293,4 +293,6 @@ def pack_text_command(cmd_type, cmd_args):
     if cmd_line is None:
         raise ProtocolError('Did not receive arguments any valid arguments: %s' % cmd_args)
 
+    if isinstance(cmd_line, compat.bytes_type):
+        return cmd_line
     return cmd_line.encode('ascii')
