@@ -4,8 +4,18 @@ from gearman.admin_client import GearmanAdminClient, ECHO_STRING
 from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 
 from gearman.errors import InvalidAdminClientState, ProtocolError
-from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ, GEARMAN_COMMAND_TEXT_COMMAND, \
-    GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN, GEARMAN_SERVER_COMMAND_GETPID
+from gearman.protocol import (
+    GEARMAN_COMMAND_ECHO_RES,
+    GEARMAN_COMMAND_ECHO_REQ,
+    GEARMAN_COMMAND_TEXT_COMMAND,
+    GEARMAN_SERVER_COMMAND_STATUS,
+    GEARMAN_SERVER_COMMAND_VERSION,
+    GEARMAN_SERVER_COMMAND_WORKERS,
+    GEARMAN_SERVER_COMMAND_MAXQUEUE,
+    GEARMAN_SERVER_COMMAND_SHUTDOWN,
+    GEARMAN_SERVER_COMMAND_GETPID,
+    GEARMAN_SERVER_COMMAND_SHOW_JOBS,
+)
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
 
@@ -129,6 +139,20 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.recv_server_response('OK')
         server_response = self.pop_response(GEARMAN_SERVER_COMMAND_GETPID)
         self.assertEqual(server_response, 'OK')
+
+    def test_showjobs(self):
+        self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
+
+        self.recv_server_response('handle\t1\t1\t1')
+        self.recv_server_response('.')
+
+        server_response = self.pop_response(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
+        self.assertEqual(server_response[0], {
+            'handle': 'handle',
+            'queued': 1,
+            'canceled': 1,
+            'enabled': 1,
+        })
 
     def test_shutdown(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_SHUTDOWN)

@@ -175,14 +175,14 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         """Slowly assemble a show jobs message line by line"""
         # If we received a '.', we've finished parsing this status message
         # Pack up our output and reset our response queue
-        if raw_text == b'.':
+        if raw_text == '.':
             output_response = tuple(self._status_response)
             self._recv_responses.append(output_response)
             self._status_response = []
             return False
 
         # If we didn't get a final response, split our line and interpret all the data
-        split_tokens = raw_text.split(b'\t')
+        split_tokens = raw_text.split('\t')
         if len(split_tokens) != self.JOB_FIELDS:
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self.JOB_FIELDS, split_tokens))
 
