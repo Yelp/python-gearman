@@ -15,6 +15,7 @@ from gearman.protocol import (
     GEARMAN_SERVER_COMMAND_SHUTDOWN,
     GEARMAN_SERVER_COMMAND_GETPID,
     GEARMAN_SERVER_COMMAND_SHOW_JOBS,
+    GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS,
 )
 
 from tests._core_testing import _GearmanAbstractTest, MockGearmanConnectionManager, MockGearmanConnection
@@ -152,6 +153,17 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
             'queued': 1,
             'canceled': 1,
             'enabled': 1,
+        })
+
+    def test_show_unique_jobs(self):
+        self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
+
+        self.recv_server_response('handle1,handle2')
+        self.recv_server_response('.')
+
+        server_response = self.pop_response(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
+        self.assertEqual(server_response[0], {
+            'unique': 'handle1,handle2',
         })
 
     def test_shutdown(self):
