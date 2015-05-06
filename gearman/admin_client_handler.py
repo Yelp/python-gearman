@@ -100,14 +100,14 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         """Slowly assemble a server status message line by line"""
         # If we received a '.', we've finished parsing this status message
         # Pack up our output and reset our response queue
-        if raw_text == '.':
+        if raw_text == b'.':
             output_response = tuple(self._status_response)
             self._recv_responses.append(output_response)
             self._status_response = []
             return False
 
         # If we didn't get a final response, split our line and interpret all the data
-        split_tokens = raw_text.split('\t')
+        split_tokens = raw_text.split(b'\t')
         if len(split_tokens) != self.STATUS_FIELDS:
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self.STATUS_FIELDS, split_tokens))
 
@@ -131,17 +131,17 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         """Slowly assemble a server workers message line by line"""
         # If we received a '.', we've finished parsing this workers message
         # Pack up our output and reset our response queue
-        if raw_text == '.':
+        if raw_text == b'.':
             output_response = tuple(self._workers_response)
             self._recv_responses.append(output_response)
             self._workers_response = []
             return False
 
-        split_tokens = raw_text.split(' ')
+        split_tokens = raw_text.split(b' ')
         if len(split_tokens) < self.WORKERS_FIELDS:
             raise ProtocolError('Received %d tokens, expected >= 4 tokens: %r' % (len(split_tokens), split_tokens))
 
-        if split_tokens[3] != ':':
+        if split_tokens[3] != b':':
             raise ProtocolError('Malformed worker response: %r' % (split_tokens, ))
 
         # Label our fields and make the results Python friendly
@@ -155,8 +155,8 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
 
     def recv_server_maxqueue(self, raw_text):
         """Maxqueue response is a simple passthrough"""
-        if raw_text != 'OK':
-            raise ProtocolError("Expected 'OK', received: %s" % raw_text)
+        if raw_text != b'OK':
+            raise ProtocolError("Expected 'OK', received: %s" % raw_text.decode('ascii'))
 
         self._recv_responses.append(raw_text)
         return False
@@ -175,14 +175,14 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         """Slowly assemble a show jobs message line by line"""
         # If we received a '.', we've finished parsing this status message
         # Pack up our output and reset our response queue
-        if raw_text == '.':
+        if raw_text == b'.':
             output_response = tuple(self._status_response)
             self._recv_responses.append(output_response)
             self._status_response = []
             return False
 
         # If we didn't get a final response, split our line and interpret all the data
-        split_tokens = raw_text.split('\t')
+        split_tokens = raw_text.split(b'\t')
         if len(split_tokens) != self.JOB_FIELDS:
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self.JOB_FIELDS, split_tokens))
 
@@ -206,14 +206,14 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         """Slowly assemble a server show unique jobs message line by line"""
         # If we received a '.', we've finished parsing this status message
         # Pack up our output and reset our response queue
-        if raw_text == '.':
+        if raw_text == b'.':
             output_response = tuple(self._status_response)
             self._recv_responses.append(output_response)
             self._status_response = []
             return False
 
         # If we didn't get a final response, split our line and interpret all the data
-        split_tokens = raw_text.split('\t')
+        split_tokens = raw_text.split(b'\t')
         if len(split_tokens) != self.UNIQUE_JOB_FIELDS:
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self.UNIQUE_JOB_FIELDS, split_tokens))
 
