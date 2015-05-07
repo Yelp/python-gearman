@@ -6,6 +6,7 @@ import ssl
 import struct
 import time
 
+from gearman import compat
 from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
 from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
 from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
@@ -40,7 +41,7 @@ class GearmanConnection(object):
 
         # All 3 files must be given before SSL can be used
         self.use_ssl = False
-        if all([self.keyfile, self.certfile, self.ca_certs]):
+        if compat.all([self.keyfile, self.certfile, self.ca_certs]):
             self.use_ssl = True
 
         self._reset_connection()
