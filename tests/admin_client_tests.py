@@ -155,6 +155,11 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
             'enabled': 1,
         })
 
+    def test_show_jobs_invalid(self):
+        self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
+
+        self.assertRaises(ProtocolError, self.recv_server_response, 'invalid\tresponse')
+
     def test_show_unique_jobs(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
 
@@ -165,6 +170,11 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
         self.assertEqual(server_response[0], {
             'unique': 'handle1,handle2',
         })
+
+    def test_show_unique_jobs_invalid(self):
+        self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_UNIQUE_JOBS)
+
+        self.assertRaises(ProtocolError, self.recv_server_response, 'invalid\tresponse')
 
     def test_shutdown(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_SHUTDOWN)
