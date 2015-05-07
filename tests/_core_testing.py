@@ -63,11 +63,11 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.setup_connection()
         self.setup_command_handler()
 
-    def setup_connection_manager(self):
+    def setup_connection_manager(self, *args, **kwargs):
         testing_attributes = {'command_handler_class': self.command_handler_class, 'connection_class': self.connection_class}
         testing_client_class = type('MockGearmanTestingClient', (self.connection_manager_class, ), testing_attributes)
 
-        self.connection_manager = testing_client_class()
+        self.connection_manager = testing_client_class(*args, **kwargs)
 
     def setup_connection(self):
         self.connection = self.connection_class()
