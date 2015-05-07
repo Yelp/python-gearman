@@ -198,7 +198,7 @@ class GearmanConnection(object):
             cmd_type = None
             cmd_args = None
             cmd_len = 0
-        elif given_buffer[0] == NULL_CHAR:
+        elif given_buffer[0] == NULL_CHAR[0]:
             # We'll be expecting a response if we know we're a client side command
             is_response = bool(self._is_client_side)
             cmd_type, cmd_args, cmd_len = parse_binary_command(given_buffer, is_response=is_response)
