@@ -64,7 +64,7 @@ class GearmanConnectionManager(object):
             if isinstance(element, compat.basestring_type):
                 self.add_connection(element)
             elif isinstance(element, dict):
-                if not all (k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
+                if not compat.all(k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
                     raise GearmanError("Incomplete SSL connection definition")
                 self.add_ssl_connection(element['host'], element['port'],
                                         element['keyfile'], element['certfile'],
