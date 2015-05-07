@@ -108,7 +108,7 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
     def test_parsing_single_arg_with_extra_data(self):
         echoed_string = b'abcd'
         excess_bytes = 5
-        excess_data = echoed_string + (protocol.NULL_CHAR * excess_bytes)
+        excess_data = echoed_string + (protocol.NULL_BYTE * excess_bytes)
         excess_echo_command_buffer = struct.pack('!4sII9s', protocol.MAGIC_RES_STRING, protocol.GEARMAN_COMMAND_ECHO_RES, 4, excess_data)
         excess_echo_command_buffer = array.array("b", excess_echo_command_buffer)
 
@@ -118,9 +118,9 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
         self.assertEqual(cmd_len, len(excess_echo_command_buffer) - excess_bytes)
 
     def test_parsing_multiple_args(self):
-        # Tests ordered argument processing and proper NULL_CHAR splitting
-        expected_data = protocol.NULL_CHAR * 4
-        binary_payload = protocol.NULL_CHAR.join([b'test', b'function', b'identifier', expected_data])
+        # Tests ordered argument processing and proper NULL_BYTE splitting
+        expected_data = protocol.NULL_BYTE * 4
+        binary_payload = protocol.NULL_BYTE.join([b'test', b'function', b'identifier', expected_data])
         payload_size = len(binary_payload)
 
         uniq_command_buffer = struct.pack('!4sII%ds' % payload_size, protocol.MAGIC_RES_STRING, protocol.GEARMAN_COMMAND_JOB_ASSIGN_UNIQ, payload_size, binary_payload)
@@ -218,7 +218,7 @@ class ProtocolBinaryCommandsTest(unittest.TestCase):
 
         ordered_parameters = [cmd_args['task'], cmd_args['unique'], cmd_args['data']]
 
-        expected_payload = protocol.NULL_CHAR.join(ordered_parameters)
+        expected_payload = protocol.NULL_BYTE.join(ordered_parameters)
         expected_payload_size = len(expected_payload)
         expected_format = '!4sII%ds' % expected_payload_size
         expected_command_buffer = struct.pack(expected_format, protocol.MAGIC_REQ_STRING, cmd_type, expected_payload_size, expected_payload)
