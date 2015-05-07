@@ -141,7 +141,7 @@ class CommandHandlerStateMachineTest(_GearmanAbstractTest):
         server_response = self.pop_response(GEARMAN_SERVER_COMMAND_GETPID)
         self.assertEqual(server_response, 'OK')
 
-    def test_showjobs(self):
+    def test_show_jobs(self):
         self.send_server_command(GEARMAN_SERVER_COMMAND_SHOW_JOBS)
 
         self.recv_server_response('handle\t1\t1\t1')
