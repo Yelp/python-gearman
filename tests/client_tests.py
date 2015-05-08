@@ -33,16 +33,19 @@ class ClientTest(_GearmanAbstractTest):
         self.connection_manager.add_connection(('127.0.0.1', 4730))
         self.assertEqual(self.connection_manager.connection_list[0].gearman_host, '127.0.0.1')
         self.assertEqual(self.connection_manager.connection_list[0].gearman_port, 4730)
+        self.assertEqual(self.connection_manager.connection_list[0].get_address(), ('127.0.0.1', 4730))
 
     def test_create_client_with_hosts_string(self):
         self.setup_connection_manager(['127.0.0.1:4730'])
         self.assertEqual(self.connection_manager.connection_list[0].gearman_host, '127.0.0.1')
         self.assertEqual(self.connection_manager.connection_list[0].gearman_port, 4730)
+        self.assertEqual(self.connection_manager.connection_list[0].get_address(), ('127.0.0.1', 4730))
 
     def test_create_client_with_hosts_string_with_default_port(self):
         self.setup_connection_manager(['127.0.0.1'])
         self.assertEqual(self.connection_manager.connection_list[0].gearman_host, '127.0.0.1')
         self.assertEqual(self.connection_manager.connection_list[0].gearman_port, 4730)
+        self.assertEqual(self.connection_manager.connection_list[0].get_address(), ('127.0.0.1', 4730))
 
     def generate_job_request(self, submitted=True, accepted=True):
         current_request = super(ClientTest, self).generate_job_request()
