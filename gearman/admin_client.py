@@ -13,7 +13,7 @@ from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ,
 
 gearman_logger = logging.getLogger(__name__)
 
-ECHO_STRING = "ping? pong!"
+ECHO_STRING = b"ping? pong!"
 DEFAULT_ADMIN_CLIENT_TIMEOUT = 10.0
 
 class GearmanAdminClient(GearmanConnectionManager):

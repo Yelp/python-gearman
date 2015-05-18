@@ -23,7 +23,7 @@ class NoopEncoder(DataEncoder):
     """Provide common object dumps for all communications over gearman"""
     @classmethod
     def _enforce_byte_string(cls, given_object):
-        if type(given_object) != str:
+        if type(given_object) != compat.bytes_type:
             raise TypeError("Expecting byte string, got %r" % type(given_object))
 
     @classmethod
@@ -61,10 +61,10 @@ class GearmanConnectionManager(object):
         host_list = host_list or []
         for element in host_list:
             # old style host:port pair
-            if isinstance(element, str):
+            if isinstance(element, compat.basestring_type):
                 self.add_connection(element)
             elif isinstance(element, dict):
-                if not all (k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
+                if not compat.all(k in element for k in ('host', 'port', 'keyfile', 'certfile', 'ca_certs')):
                     raise GearmanError("Incomplete SSL connection definition")
                 self.add_ssl_connection(element['host'], element['port'],
                                         element['keyfile'], element['certfile'],

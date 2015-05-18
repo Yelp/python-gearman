@@ -6,9 +6,10 @@ import ssl
 import struct
 import time
 
+from gearman import compat
 from gearman.errors import ConnectionError, ProtocolError, ServerUnavailable
 from gearman.constants import DEFAULT_GEARMAN_PORT, _DEBUG_MODE_
-from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_CHAR, \
+from gearman.protocol import GEARMAN_PARAMS_FOR_COMMAND, GEARMAN_COMMAND_TEXT_COMMAND, NULL_BYTE, \
     get_command_name, pack_binary_command, parse_binary_command, parse_text_command, pack_text_command
 
 gearman_logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class GearmanConnection(object):
 
         # All 3 files must be given before SSL can be used
         self.use_ssl = False
-        if all([self.keyfile, self.certfile, self.ca_certs]):
+        if compat.all([self.keyfile, self.certfile, self.ca_certs]):
             self.use_ssl = True
 
         self._reset_connection()
@@ -56,8 +57,8 @@ class GearmanConnection(object):
         self._is_server_side = None
 
         # Reset all our raw data buffers
-        self._incoming_buffer = array.array('c')
-        self._outgoing_buffer = ''
+        self._incoming_buffer = array.array('b')
+        self._outgoing_buffer = b''
 
         # Toss all commands we may have sent or received
         self._incoming_commands = collections.deque()
@@ -115,7 +116,7 @@ class GearmanConnection(object):
                                                 ssl_version=ssl.PROTOCOL_TLSv1)
 
             client_socket.connect((self.gearman_host, self.gearman_port))
-        except socket.error, socket_exception:
+        except socket.error as socket_exception:
             self.throw_exception(exception=socket_exception)
 
         self.set_socket(client_socket)
@@ -172,7 +173,7 @@ class GearmanConnection(object):
                     continue
                 else:
                     self.throw_exception(exception=e)
-            except socket.error, socket_exception:
+            except socket.error as socket_exception:
                 self.throw_exception(exception=socket_exception)
 
             if len(recv_buffer) == 0:
@@ -197,7 +198,7 @@ class GearmanConnection(object):
             cmd_type = None
             cmd_args = None
             cmd_len = 0
-        elif given_buffer[0] == NULL_CHAR:
+        elif given_buffer[0] == NULL_BYTE[0]:
             # We'll be expecting a response if we know we're a client side command
             is_response = bool(self._is_client_side)
             cmd_type, cmd_args, cmd_len = parse_binary_command(given_buffer, is_response=is_response)
@@ -224,7 +225,7 @@ class GearmanConnection(object):
             packed_command = self._pack_command(cmd_type, cmd_args)
             packed_data.append(packed_command)
 
-        self._outgoing_buffer = ''.join(packed_data)
+        self._outgoing_buffer = b''.join(packed_data)
 
     def send_data_to_socket(self):
         """Send data from buffer -> socket
@@ -247,7 +248,7 @@ class GearmanConnection(object):
                     continue
                 else:
                     self.throw_exception(exception=e)
-            except socket.error, socket_exception:
+            except socket.error as socket_exception:
                 self.throw_exception(exception=socket_exception)
 
             if bytes_sent == 0:

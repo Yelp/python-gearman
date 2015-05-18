@@ -63,11 +63,11 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.setup_connection()
         self.setup_command_handler()
 
-    def setup_connection_manager(self):
+    def setup_connection_manager(self, *args, **kwargs):
         testing_attributes = {'command_handler_class': self.command_handler_class, 'connection_class': self.connection_class}
         testing_client_class = type('MockGearmanTestingClient', (self.connection_manager_class, ), testing_attributes)
 
-        self.connection_manager = testing_client_class()
+        self.connection_manager = testing_client_class(*args, **kwargs)
 
     def setup_connection(self):
         self.connection = self.connection_class()
@@ -78,7 +78,11 @@ class _GearmanAbstractTest(unittest.TestCase):
         self.command_handler = self.connection_manager.connection_to_handler_map[self.connection]
 
     def generate_job(self):
-        return self.job_class(self.connection, handle=str(random.random()), task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        return self.job_class(self.connection,
+                              handle=str(random.random()).encode('ascii'),
+                              task='__test_ability__'.encode('ascii'),
+                              unique=str(random.random()).encode('ascii'),
+                              data=str(random.random()).encode('ascii'))
 
     def generate_job_dict(self):
         current_job = self.generate_job()
@@ -86,7 +90,11 @@ class _GearmanAbstractTest(unittest.TestCase):
 
     def generate_job_request(self, priority=PRIORITY_NONE, background=False):
         job_handle = str(random.random())
-        current_job = self.job_class(connection=self.connection, handle=job_handle, task='__test_ability__', unique=str(random.random()), data=str(random.random()))
+        current_job = self.job_class(connection=self.connection,
+                                     handle=job_handle,
+                                     task='__test_ability__'.encode('ascii'),
+                                     unique=str(random.random()).encode('ascii'),
+                                     data=str(random.random()).encode('ascii'))
         current_request = self.job_request_class(current_job, initial_priority=priority, background=background)
 
         self.assertEqual(current_request.state, JOB_UNKNOWN)

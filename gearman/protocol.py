@@ -3,9 +3,9 @@ from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH
 from gearman.errors import ProtocolError
 from gearman import compat
 # Protocol specific constants
-NULL_CHAR = '\x00'
-MAGIC_RES_STRING = '%sRES' % NULL_CHAR
-MAGIC_REQ_STRING = '%sREQ' % NULL_CHAR
+NULL_BYTE = b'\x00'
+MAGIC_RES_STRING = NULL_BYTE + b'RES'
+MAGIC_REQ_STRING = NULL_BYTE + b'REQ'
 
 COMMAND_HEADER_SIZE = 12
 
@@ -207,8 +207,11 @@ def parse_binary_command(in_buffer, is_response=True):
     split_arguments = []
 
     if len(expected_cmd_params) > 0:
-        binary_payload = binary_payload.tostring()
-        split_arguments = binary_payload.split(NULL_CHAR, len(expected_cmd_params) - 1)
+        if hasattr(binary_payload, 'tobytes'):
+            binary_payload = binary_payload.tobytes()
+        else:
+            binary_payload = binary_payload.tostring()
+        split_arguments = binary_payload.split(NULL_BYTE, len(expected_cmd_params) - 1)
     elif binary_payload:
         raise ProtocolError('Expected no binary payload: %s' % get_command_name(cmd_type))
 
@@ -241,18 +244,17 @@ def pack_binary_command(cmd_type, cmd_args, is_response=False):
     else:
         magic = MAGIC_REQ_STRING
 
-    # !NOTE! str should be replaced with bytes in Python 3.x
-    # We will iterate in ORDER and str all our command arguments
-    if compat.any(type(param_value) != str for param_value in cmd_args.itervalues()):
+    # We will iterate in ORDER and check all our command arguments are bytes
+    if compat.any(type(param_value) != compat.bytes_type for param_value in cmd_args.values()):
         raise ProtocolError('Received non-binary arguments: %r' % cmd_args)
 
     data_items = [cmd_args[param] for param in expected_cmd_params]
 
     # Now check that all but the last argument are free of \0 as per the protocol spec.
-    if compat.any('\0' in argument for argument in data_items[:-1]):
+    if compat.any(b'\0' in argument for argument in data_items[:-1]):
         raise ProtocolError('Received arguments with NULL byte in non-final argument')
 
-    binary_payload = NULL_CHAR.join(data_items)
+    binary_payload = NULL_BYTE.join(data_items)
 
     # Pack the header in the !4sII format then append the binary payload
     payload_size = len(binary_payload)
@@ -264,11 +266,15 @@ def parse_text_command(in_buffer):
     cmd_type = None
     cmd_args = None
     cmd_len = 0
-    if '\n' not in in_buffer:
+    if ord(b'\n') not in in_buffer:
         return cmd_type, cmd_args, cmd_len
 
-    text_command, in_buffer = in_buffer.tostring().split('\n', 1)
-    if NULL_CHAR in text_command:
+    if hasattr(in_buffer, 'tobytes'):
+        text_command, in_buffer = in_buffer.tobytes().split(b'\n', 1)
+    else:
+        text_command, in_buffer = in_buffer.tostring().split(b'\n', 1)
+
+    if NULL_BYTE in text_command:
         raise ProtocolError('Received unexpected character: %s' % text_command)
 
     # Fake gearman command "TEXT_COMMAND" used to process server admin client responses
@@ -287,4 +293,6 @@ def pack_text_command(cmd_type, cmd_args):
     if cmd_line is None:
         raise ProtocolError('Did not receive arguments any valid arguments: %s' % cmd_args)
 
-    return str(cmd_line)
+    if isinstance(cmd_line, compat.bytes_type):
+        return cmd_line
+    return cmd_line.encode('ascii')

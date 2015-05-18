@@ -48,7 +48,7 @@ class GearmanClientCommandHandler(GearmanCommandHandler):
         for pending_request in self.requests_awaiting_handles:
             pending_request.state = JOB_UNKNOWN
 
-        for inflight_request in self.handle_to_request_map.itervalues():
+        for inflight_request in self.handle_to_request_map.values():
             inflight_request.state = JOB_UNKNOWN
 
     def _register_request(self, current_request):

@@ -58,23 +58,24 @@ class WorkerTest(_GearmanAbstractWorkerTest):
 
         # Register a single callback
         self.connection_manager.register_task('fake_callback_one', fake_callback_one)
-        self.failUnless('fake_callback_one' in self.connection_manager.worker_abilities)
-        self.failIf('fake_callback_two' in self.connection_manager.worker_abilities)
+        self.assertTrue('fake_callback_one' in self.connection_manager.worker_abilities)
+        self.assertFalse('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
         self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one'])
 
         # Register another callback and make sure the command_handler sees the same functions
         self.connection_manager.register_task('fake_callback_two', fake_callback_two)
-        self.failUnless('fake_callback_one' in self.connection_manager.worker_abilities)
-        self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
+        self.assertTrue('fake_callback_one' in self.connection_manager.worker_abilities)
+        self.assertTrue('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_one'], fake_callback_one)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
-        self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_one', 'fake_callback_two'])
+        self.assertIn('fake_callback_one', self.command_handler._handler_abilities)
+        self.assertIn('fake_callback_two', self.command_handler._handler_abilities)
 
         # Unregister a callback and make sure the command_handler sees the same functions
         self.connection_manager.unregister_task('fake_callback_one')
-        self.failIf('fake_callback_one' in self.connection_manager.worker_abilities)
-        self.failUnless('fake_callback_two' in self.connection_manager.worker_abilities)
+        self.assertFalse('fake_callback_one' in self.connection_manager.worker_abilities)
+        self.assertTrue('fake_callback_two' in self.connection_manager.worker_abilities)
         self.assertEqual(self.connection_manager.worker_abilities['fake_callback_two'], fake_callback_two)
         self.assertEqual(self.command_handler._handler_abilities, ['fake_callback_two'])
 
@@ -149,7 +150,7 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
         self.connection_manager.establish_connection(self.connection)
 
         # When we attempt a new connection, make sure we get a new command handler
-        self.assertNotEquals(self.command_handler, self.connection_manager.connection_to_handler_map[self.connection])
+        self.assertNotEqual(self.command_handler, self.connection_manager.connection_to_handler_map[self.connection])
 
         self.assert_sent_client_id(expected_client_id)
         self.assert_sent_abilities(expected_abilities)
@@ -181,27 +182,27 @@ class WorkerCommandHandlerInterfaceTest(_GearmanAbstractWorkerTest):
 
         # Test GEARMAN_COMMAND_WORK_STATUS
         self.command_handler.send_job_status(current_job, 0, 1)
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator='0', denominator='1')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_STATUS, job_handle=current_job.handle, numerator=b'0', denominator=b'1')
 
         # Test GEARMAN_COMMAND_WORK_COMPLETE
-        self.command_handler.send_job_complete(current_job, 'completion data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data='completion data')
+        self.command_handler.send_job_complete(current_job, b'completion data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_COMPLETE, job_handle=current_job.handle, data=b'completion data')
 
         # Test GEARMAN_COMMAND_WORK_FAIL
         self.command_handler.send_job_failure(current_job)
         self.assert_sent_command(GEARMAN_COMMAND_WORK_FAIL, job_handle=current_job.handle)
 
         # Test GEARMAN_COMMAND_WORK_EXCEPTION
-        self.command_handler.send_job_exception(current_job, 'exception data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data='exception data')
+        self.command_handler.send_job_exception(current_job, b'exception data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_EXCEPTION, job_handle=current_job.handle, data=b'exception data')
 
         # Test GEARMAN_COMMAND_WORK_DATA
-        self.command_handler.send_job_data(current_job, 'job data')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data='job data')
+        self.command_handler.send_job_data(current_job, b'job data')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_DATA, job_handle=current_job.handle, data=b'job data')
 
         # Test GEARMAN_COMMAND_WORK_WARNING
-        self.command_handler.send_job_warning(current_job, 'job warning')
-        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data='job warning')
+        self.command_handler.send_job_warning(current_job, b'job warning')
+        self.assert_sent_command(GEARMAN_COMMAND_WORK_WARNING, job_handle=current_job.handle, data=b'job warning')
 
 class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
     """Test multiple state transitions within a GearmanWorkerCommandHandler
@@ -213,11 +214,11 @@ class WorkerCommandHandlerStateMachineTest(_GearmanAbstractWorkerTest):
 
     def setup_connection_manager(self):
         super(WorkerCommandHandlerStateMachineTest, self).setup_connection_manager()
-        self.connection_manager.register_task('__test_ability__', None)
+        self.connection_manager.register_task(b'__test_ability__', None)
 
     def setup_command_handler(self):
         super(_GearmanAbstractWorkerTest, self).setup_command_handler()
-        self.assert_sent_abilities(['__test_ability__'])
+        self.assert_sent_abilities([b'__test_ability__'])
         self.assert_sent_command(GEARMAN_COMMAND_PRE_SLEEP)
 
     def test_wakeup_work(self):

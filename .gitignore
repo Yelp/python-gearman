@@ -13,3 +13,11 @@ MANIFEST
 dist
 build
 *.swo
+
+# Packaging
+*.egg-info/*
+
+# Testing
+.tox
+.coverage
+htmlcov/*

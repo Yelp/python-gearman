@@ -218,7 +218,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
             raise ProtocolError('Received %d tokens, expected %d tokens: %r' % (len(split_tokens), self.UNIQUE_JOB_FIELDS, split_tokens))
 
         # Label our fields and make the results Python friendly
-        unique = split_tokens
+        unique = split_tokens[0]
 
         job_dict = {}
         job_dict['unique'] = unique
