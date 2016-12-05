@@ -32,16 +32,22 @@ class GearmanClient(GearmanConnectionManager):
         # Ignores the fact if a request has been bound to a connection or not
         self.request_to_rotating_connection_queue = weakref.WeakKeyDictionary(compat.defaultdict(collections.deque))
 
-    def submit_job(self, task, data, unique=None, priority=PRIORITY_NONE, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
+    def submit_job(self, task, data, unique=None, priority=PRIORITY_NONE, when_to_run=None, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
         """Submit a single job to any gearman server"""
-        job_info = dict(task=task, data=data, unique=unique, priority=priority)
+        assert (when_to_run is None or
+                (when_to_run and
+                 priority == PRIORITY_NONE and
+                 not background)
+                ), "priority and background cannot be set with when_to_run"
+
+        job_info = dict(task=task, data=data, unique=unique, priority=priority, when_to_run=when_to_run)
         completed_job_list = self.submit_multiple_jobs([job_info], background=background, wait_until_complete=wait_until_complete, max_retries=max_retries, poll_timeout=poll_timeout)
         return gearman.util.unlist(completed_job_list)
 
     def submit_multiple_jobs(self, jobs_to_submit, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
         """Takes a list of jobs_to_submit with dicts of
 
-        {'task': task, 'data': data, 'unique': unique, 'priority': priority}
+        {'task': task, 'data': data, 'unique': unique, 'priority': priority, 'when_to_run': when_to_run}
         """
         assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
 
@@ -165,18 +171,26 @@ class GearmanClient(GearmanConnectionManager):
         return job_requests
 
     def _create_request_from_dictionary(self, job_info, background=False, max_retries=0):
-        """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
+        """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'when_to_run': when_to_run, 'background': background}"""
         # Make sure we have a unique identifier for ALL our tasks
         job_unique = job_info.get('unique')
         if not job_unique:
             job_unique = os.urandom(self.random_unique_bytes).encode('hex')
 
-        current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
+        run_later = False
+        if job_info.get('when_to_run'):
+            job_info['when_to_run'] = str(job_info.get('when_to_run'))
+            run_later = True
+            # run_later jobs always are in the background, so set to True
+            background = True
+            job_info['background'] = background
+
+        current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, when_to_run=job_info.get('when_to_run'), data=job_info['data'])
 
         initial_priority = job_info.get('priority', PRIORITY_NONE)
 
         max_attempts = max_retries + 1
-        current_request = self.job_request_class(current_job, initial_priority=initial_priority, background=background, max_attempts=max_attempts)
+        current_request = self.job_request_class(current_job, initial_priority=initial_priority, background=background, run_later=run_later, max_attempts=max_attempts)
         return current_request
 
     def establish_request_connection(self, current_request):
